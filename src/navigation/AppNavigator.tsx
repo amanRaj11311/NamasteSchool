@@ -56,6 +56,11 @@ import ExpensesScreen from '../screens/Expense Management/ExpenseList';
 import ExpenseCategoriesScreen from '../screens/Expense Management/ExpenseCategories';
 import ExpenseReportsScreen from '../screens/Expense Management/ExpensesReport';
 import GalleryEventsScreen from '../screens/GalleryScreen';
+import CertificatesScreen from '../screens/Certificate';
+import LibraryCatalogScreen from '../screens/Libarary Management/LibraryCatalogScreen';
+import LibraryIssueScreen from '../screens/Libarary Management/LibraryIssuesScreen';
+import LibraryReturnsScreen from '../screens/Libarary Management/LibraryReportScreen';
+import LibraryReportsScreen from '../screens/Libarary Management/LibraryReturnScreen';
 
 const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -100,12 +105,49 @@ const MENU_STRUCTURE: MenuSection[] = [
       { routeName: "Subjects", label: "Subjects", icon: "book", component: SubjectsScreen, module: "subjects" },
       { routeName: "Students", label: "Students Directory", icon: "users", component: AddStudentScreen, module: "students" },
       {routeName: "Gallery", label: "Gallery & Events", icon: "layers", component: GalleryEventsScreen, module: "classlevels"},
+      {routeName: "Certificates", label: "Certificates", icon: "award", component: CertificatesScreen, module: "classlevels"},
+
       {
         label: "Staff Management", icon: "user-check", module: "staff_group",
         children: [
           { routeName: "Staff", label: "Staff Directory", icon: "users", component: StaffScreen, module: "staff" },
           { routeName: "Staff Attendance", label: "Attendance", icon: "clock", component: AttendanceScreen, module: "attendance" },
           { routeName: "Staff Timetable", label: "Time Table", icon: "calendar", component: TimetableScreen, module: "timetable" },
+        ]
+      },
+      {
+        label: "Library Manager", 
+        icon: "book", 
+        module: "library_group", 
+        children: [
+          { 
+            routeName: "LibraryCatalog", 
+            label: "Book Catalog", 
+            icon: "list", 
+            component: LibraryCatalogScreen, 
+            module: "library" 
+          },
+          { 
+            routeName: "LibraryIssue", 
+            label: "Issue Book", 
+            icon: "external-link", 
+            component: LibraryIssueScreen, 
+            module: "libraryIssue" 
+          },
+          { 
+            routeName: "LibraryReturns", 
+            label: "Returns & Fines", 
+            icon: "rotate-ccw", 
+            component: LibraryReturnsScreen, 
+            module: "libraryIssue" 
+          },
+          { 
+            routeName: "LibraryReports", 
+            label: "Analytics & Reports", 
+            icon: "pie-chart", 
+            component: LibraryReportsScreen, 
+            module: "library" 
+          }
         ]
       },
       {
@@ -518,128 +560,176 @@ function CustomDrawerContent(props: any) {
 }
 
 // ---------------------------------------------------------------------
+// 3b. No-modules-assigned screen
+//
+// Previously, when a logged-in user (e.g. a Student role with an empty
+// permissions array) resolved to zero visible routes, the app fell through
+// to the SAME "Loading accessible modules..." spinner used while data was
+// still being fetched — so the user was stuck on a screen that looked like
+// perpetual loading, with no indication that this was actually a
+// permissions problem, not a slow network.
+//
+// This screen replaces that dead end: it only shows once permission
+// resolution has actually finished and truly come up empty, explains why,
+// and gives the user a way out (logout) instead of a spinner that never
+// resolves.
+// ---------------------------------------------------------------------
+function NoModulesAssignedScreen({ navigation }: { navigation: any }) {
+  return (
+    <SafeAreaView style={styles.noAccessContainer}>
+      <View style={styles.noAccessIconCircle}>
+        <Feather name="shield-off" size={32} color="#ef4444" />
+      </View>
+      <Text style={styles.noAccessTitle}>No Modules Assigned</Text>
+      <Text style={styles.noAccessMessage}>
+        Your account doesn't have access to any modules yet. Please contact
+        your school administrator to assign the required permissions to
+        your role.
+      </Text>
+      <TouchableOpacity
+        style={styles.noAccessLogoutBtn}
+        onPress={() => handleGlobalLogout(navigation)}
+      >
+        <Feather name="log-out" size={16} color="#ffffff" style={{ marginRight: 8 }} />
+        <Text style={styles.noAccessLogoutText}>Logout</Text>
+      </TouchableOpacity>
+    </SafeAreaView>
+  );
+}
+
+// ---------------------------------------------------------------------
 // 4. Drawer Root (Evaluates RBAC dynamically)
 // ---------------------------------------------------------------------
 function DrawerRoot() {
+  const navigation = useNavigation<any>();
+
+  // menuLoading distinguishes "still resolving permissions" from
+  // "resolved, and it's genuinely empty" — the old code used
+  // `!filteredMenu || visibleRoutes.length === 0` for both cases, which is
+  // why an empty-permissions user never left the loading spinner.
+  const [menuLoading, setMenuLoading] = useState(true);
   const [filteredMenu, setFilteredMenu] = useState<MenuSection[] | null>(null);
   const [visibleRoutes, setVisibleRoutes] = useState<MenuItem[]>([]);
 
- useEffect(() => {
-  const loadMenu = async () => {
-    try {
-      const [permsRaw, superAdminRaw] = await Promise.all([
-        AsyncStorage.getItem("userPermissions"),
-        AsyncStorage.getItem("isSuperAdmin"),
-      ]);
-
-      let permissions: Permission[] = [];
-
+  useEffect(() => {
+    const loadMenu = async () => {
       try {
-        permissions = permsRaw ? JSON.parse(permsRaw) : [];
-      } catch (error) {
-        console.error("Failed to parse user permissions:", error);
-        permissions = [];
-      }
+        const [permsRaw, superAdminRaw] = await Promise.all([
+          AsyncStorage.getItem("userPermissions"),
+          AsyncStorage.getItem("isSuperAdmin"),
+        ]);
 
-      const isSuperAdmin = superAdminRaw === "true";
+        let permissions: Permission[] = [];
 
-      const filterMenuItems = (items: MenuItem[]): MenuItem[] => {
-        return items
-          .map((item) => {
-            // If the item has children, recursively filter them
-            if (item.children && item.children.length > 0) {
-              const validChildren = filterMenuItems(item.children);
+        try {
+          permissions = permsRaw ? JSON.parse(permsRaw) : [];
+        } catch (error) {
+          console.error("Failed to parse user permissions:", error);
+          permissions = [];
+        }
 
-              if (validChildren.length === 0) {
-                return null;
+        const isSuperAdmin = superAdminRaw === "true";
+
+        const filterMenuItems = (items: MenuItem[]): MenuItem[] => {
+          return items
+            .map((item) => {
+              // If the item has children, recursively filter them
+              if (item.children && item.children.length > 0) {
+                const validChildren = filterMenuItems(item.children);
+
+                if (validChildren.length === 0) {
+                  return null;
+                }
+
+                return {
+                  ...item,
+                  children: validChildren,
+                };
               }
 
-              return {
-                ...item,
-                children: validChildren,
-              };
-            }
+              // Only actual screens with routeName + component are valid routes
+              if (
+                item.routeName &&
+                item.component &&
+                hasReadPermission(
+                  permissions,
+                  isSuperAdmin,
+                  item.module
+                )
+              ) {
+                return item;
+              }
 
-            // Only actual screens with routeName + component are valid routes
-            if (
-              item.routeName &&
-              item.component &&
-              hasReadPermission(
-                permissions,
-                isSuperAdmin,
-                item.module
-              )
-            ) {
-              return item;
-            }
+              return null;
+            })
+            .filter(Boolean) as MenuItem[];
+        };
 
-            return null;
+        const finalMenu: MenuSection[] = MENU_STRUCTURE
+          .map((section) => {
+            const validItems = filterMenuItems(section.items);
+
+            return {
+              section: section.section,
+              items: validItems,
+            };
           })
-          .filter(Boolean) as MenuItem[];
-      };
+          .filter((section) => section.items.length > 0);
 
-      const finalMenu: MenuSection[] = MENU_STRUCTURE
-        .map((section) => {
-          const validItems = filterMenuItems(section.items);
+        // Get only valid leaf routes (works at any nesting depth)
+        const getVisibleRoutes = (items: MenuItem[]): MenuItem[] => {
+          const routes: MenuItem[] = [];
 
-          return {
-            section: section.section,
-            items: validItems,
-          };
-        })
-        .filter((section) => section.items.length > 0);
+          items.forEach((item) => {
+            if (item.children && item.children.length > 0) {
+              routes.push(...getVisibleRoutes(item.children));
+            } else if (item.routeName && item.component) {
+              routes.push(item);
+            }
+          });
 
-      // Get only valid leaf routes (works at any nesting depth)
-      const getVisibleRoutes = (items: MenuItem[]): MenuItem[] => {
-        const routes: MenuItem[] = [];
+          return routes;
+        };
 
-        items.forEach((item) => {
-          if (item.children && item.children.length > 0) {
-            routes.push(...getVisibleRoutes(item.children));
-          } else if (item.routeName && item.component) {
-            routes.push(item);
-          }
-        });
+        const routes = finalMenu.flatMap((section) =>
+          getVisibleRoutes(section.items)
+        );
 
-        return routes;
-      };
+        if (routes.length === 0) {
+          console.warn("No accessible routes found for this user's permissions");
+        }
 
-      const routes = finalMenu.flatMap((section) =>
-        getVisibleRoutes(section.items)
-      );
-
-      // Safety fallback
-      if (routes.length === 0) {
-        console.warn("No accessible routes found");
-
+        setFilteredMenu(finalMenu);
+        setVisibleRoutes(routes);
+      } catch (error) {
+        console.error("Error loading navigation menu:", error);
         setFilteredMenu([]);
         setVisibleRoutes([]);
-        return;
+      } finally {
+        // Always stop "loading" once resolution finishes — whether or not
+        // any routes came out of it. An empty result is a valid, final
+        // state, not a reason to keep spinning.
+        setMenuLoading(false);
       }
+    };
 
-      setFilteredMenu(finalMenu);
-      setVisibleRoutes(routes);
+    loadMenu();
+  }, []);
 
-    } catch (error) {
-      console.error("Error loading navigation menu:", error);
-      setFilteredMenu([]);
-      setVisibleRoutes([]);
-    }
-  };
-
-  loadMenu();
-}, []);
+  if (menuLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#ef4444" />
+        <Text style={{ marginTop: 12, color: "#6B7280" }}>
+          Loading accessible modules...
+        </Text>
+      </View>
+    );
+  }
 
   if (!filteredMenu || visibleRoutes.length === 0) {
-  return (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color="#ef4444" />
-      <Text style={{ marginTop: 12, color: "#6B7280" }}>
-        Loading accessible modules...
-      </Text>
-    </View>
-  );
-}
+    return <NoModulesAssignedScreen navigation={navigation} />;
+  }
 
   return (
     <Drawer.Navigator
@@ -682,6 +772,14 @@ export default function AppNavigator({ initialRoute }: { initialRoute: string })
 const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F4F7F9" },
   drawerContainer: { flex: 1, backgroundColor: '#ffffff' },
+
+  // --- No modules assigned ---
+  noAccessContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F4F7F9", paddingHorizontal: 32 },
+  noAccessIconCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 20 },
+  noAccessTitle: { fontSize: 20, fontWeight: "800", color: "#111827", marginBottom: 10, textAlign: "center" },
+  noAccessMessage: { fontSize: 14, color: "#6B7280", textAlign: "center", lineHeight: 21, marginBottom: 28 },
+  noAccessLogoutBtn: { flexDirection: "row", alignItems: "center", backgroundColor: "#ef4444", paddingHorizontal: 22, paddingVertical: 12, borderRadius: 24 },
+  noAccessLogoutText: { color: "#ffffff", fontWeight: "700", fontSize: 14 },
   
   // --- Native App Bar Avatar ---
   headerAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#ef4444', justifyContent: 'center', alignItems: 'center' },
