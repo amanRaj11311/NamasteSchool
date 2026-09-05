@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Pressable,
   useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -82,6 +83,7 @@ export default function ClassesScreen() {
   const navigation = useNavigation<any>();
   const { width } = useWindowDimensions();
   const compact = width < 380;
+  const isTablet = width >= 700;
 
   // Data States
   const [classes, setClasses] = useState<ClassObj[]>([]);
@@ -89,6 +91,7 @@ export default function ClassesScreen() {
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -138,6 +141,7 @@ export default function ClassesScreen() {
       if (staffRes.data?.success) setStaffList(staffRes.data.data || []);
     } catch (error) {
       console.error(error);
+      if (!isRefresh) Alert.alert('Error', 'Could not load classes. Pull down to try again.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -163,11 +167,15 @@ export default function ClassesScreen() {
   ).size;
 
   // --- Filtering ---
-  const filteredClasses = classes.filter(
-    (c) =>
-      c.className.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.division && c.division.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (c.syllabus && c.syllabus.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredClasses = useMemo(
+    () =>
+      classes.filter(
+        (c) =>
+          c.className.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+          (c.division && c.division.toLowerCase().includes(searchQuery.trim().toLowerCase())) ||
+          (c.syllabus && c.syllabus.toLowerCase().includes(searchQuery.trim().toLowerCase()))
+      ),
+    [classes, searchQuery]
   );
 
   // --- Actions ---
@@ -195,7 +203,13 @@ export default function ClassesScreen() {
     setFormVisible(true);
   };
 
-  const handleDelete = (id: string) => {
+  const closeForm = () => {
+    setActiveDropdown(null);
+    setFormVisible(false);
+  };
+
+  const handleDelete = (id?: string) => {
+    if (!id) return;
     Alert.alert('Delete Class', 'Are you sure you want to delete this class? This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -224,6 +238,7 @@ export default function ClassesScreen() {
     }
 
     try {
+      setSaving(true);
       if (editingId) {
         await axios.put(`${API_BASE}/classes/${editingId}`, formData, { headers: { Authorization: `Bearer ${authToken}` } });
         Alert.alert('Success', 'Class updated successfully.');
@@ -231,10 +246,12 @@ export default function ClassesScreen() {
         await axios.post(`${API_BASE}/classes`, formData, { headers: { Authorization: `Bearer ${authToken}` } });
         Alert.alert('Success', 'Class created successfully.');
       }
-      setFormVisible(false);
+      closeForm();
       fetchData(authToken, true);
     } catch (e: any) {
       Alert.alert('Error', e.response?.data?.message || 'Failed to save class.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -253,16 +270,19 @@ export default function ClassesScreen() {
     setActiveDropdown(null);
   };
 
+  // Floating (absolute) dropdown so it overlays content instead of pushing
+  // the layout around and fighting the parent ScrollView for touches.
   const renderInlineDropdown = (fieldKey: string, label: string, options: { label: string; value: string }[]) => {
     const isOpen = activeDropdown === fieldKey;
     const currentValue = formData[fieldKey as keyof typeof formData];
     const selectedObj = options.find((o) => o.value === currentValue);
+    const hasError = !!errors[fieldKey as keyof typeof errors];
 
     return (
-      <View style={styles.inputWrapper}>
+      <View style={[styles.inputWrapper, isOpen && { zIndex: 50 }]}>
         <Text style={styles.inputLabel}>{label}</Text>
         <TouchableOpacity
-          style={[styles.dropdownHeader, isOpen && styles.dropdownHeaderActive, errors[fieldKey as keyof typeof errors] && styles.inputError]}
+          style={[styles.dropdownHeader, isOpen && styles.dropdownHeaderActive, hasError && styles.inputError]}
           onPress={() => toggleDropdown(fieldKey)}
           activeOpacity={0.75}
         >
@@ -274,43 +294,67 @@ export default function ClassesScreen() {
 
         {isOpen && (
           <View style={styles.dropdownListContainer}>
-            <ScrollView nestedScrollEnabled style={styles.dropdownScroll} showsVerticalScrollIndicator={false}>
-              {options.map((opt, index) => (
-                <TouchableOpacity
-                  key={opt.value}
-                  style={[styles.dropdownItem, index !== options.length - 1 && styles.dropdownItemBorder, currentValue === opt.value && styles.dropdownItemActive]}
-                  onPress={() => {
-                    if (fieldKey === 'schoolId') handleSchoolSelect(opt.value);
-                    else {
-                      setFormData({ ...formData, [fieldKey]: opt.value });
-                      setActiveDropdown(null);
-                    }
-                  }}
-                >
-                  <Text style={[styles.dropdownItemText, currentValue === opt.value && styles.dropdownItemTextActive]}>{opt.label}</Text>
-                  {currentValue === opt.value && <Feather name="check" size={16} color={COLORS.primary} />}
-                </TouchableOpacity>
-              ))}
+            <ScrollView nestedScrollEnabled style={styles.dropdownScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {options.length === 0 ? (
+                <View style={styles.dropdownEmpty}>
+                  <Text style={styles.dropdownEmptyText}>No options available</Text>
+                </View>
+              ) : (
+                options.map((opt, index) => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[
+                      styles.dropdownItem,
+                      index !== options.length - 1 && styles.dropdownItemBorder,
+                      currentValue === opt.value && styles.dropdownItemActive,
+                    ]}
+                    onPress={() => {
+                      if (fieldKey === 'schoolId') handleSchoolSelect(opt.value);
+                      else {
+                        setFormData({ ...formData, [fieldKey]: opt.value });
+                        setActiveDropdown(null);
+                      }
+                    }}
+                  >
+                    <Text style={[styles.dropdownItemText, currentValue === opt.value && styles.dropdownItemTextActive]} numberOfLines={1}>
+                      {opt.label}
+                    </Text>
+                    {currentValue === opt.value && <Feather name="check" size={16} color={COLORS.primary} />}
+                  </TouchableOpacity>
+                ))
+              )}
             </ScrollView>
           </View>
         )}
-        {errors[fieldKey as keyof typeof errors] && <Text style={styles.errorText}>{errors[fieldKey as keyof typeof errors]}</Text>}
+        {hasError && <Text style={styles.errorText}>{errors[fieldKey as keyof typeof errors]}</Text>}
       </View>
     );
   };
 
-  const teacherOptions = [
-    { label: 'Unassigned', value: '' },
-    ...staffList.filter((s) => s.staffType === 'Teacher').map((s) => ({ label: `${s.name} (${s.staffId})`, value: s._id })),
+  const teacherOptions = useMemo(
+    () => [
+      { label: 'Unassigned', value: '' },
+      ...staffList
+        .filter((s) => (s.staffType || '').toLowerCase() === 'teacher')
+        .map((s) => ({ label: `${s.name} (${s.staffId})`, value: s._id })),
+    ],
+    [staffList]
+  );
+
+  const evaluationOptions = [
+    { label: 'Marks', value: 'Marks' },
+    { label: 'Grades', value: 'Grades' },
+    { label: 'Both', value: 'Both' },
   ];
 
   // --- Render Card ---
   const renderCard = ({ item }: { item: ClassObj }) => {
-    const teacherName = item.classTeacher?.name || 'Unassigned';
-    const teacherId = item.classTeacher?.staffId || '';
+    const teacherIsPopulated = typeof item.classTeacher === 'object' && item.classTeacher;
+    const teacherName = teacherIsPopulated ? item.classTeacher.name : item.classTeacher ? 'Assigned' : 'Unassigned';
+    const teacherId = teacherIsPopulated ? item.classTeacher.staffId : '';
 
     return (
-      <View style={styles.card}>
+      <View style={[styles.card, isTablet && styles.cardTablet]}>
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderLeft}>
             <View style={styles.primaryBadge}>
@@ -332,7 +376,7 @@ export default function ClassesScreen() {
 
         <View style={styles.teacherSection}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{teacherName.charAt(0)}</Text>
+            <Text style={styles.avatarText}>{(teacherName || 'U').charAt(0).toUpperCase()}</Text>
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.metaLabel}>CLASS TEACHER</Text>
@@ -394,6 +438,7 @@ export default function ClassesScreen() {
             {hasPermission('read') && (
               <TouchableOpacity
                 style={styles.iconBtnPrimary}
+                accessibilityLabel="View class details"
                 onPress={() => {
                   setViewingClass(item);
                   setViewVisible(true);
@@ -403,12 +448,12 @@ export default function ClassesScreen() {
               </TouchableOpacity>
             )}
             {hasPermission('update') && (
-              <TouchableOpacity style={styles.iconBtnEdit} onPress={() => openEditForm(item)}>
+              <TouchableOpacity style={styles.iconBtnEdit} accessibilityLabel="Edit class" onPress={() => openEditForm(item)}>
                 <Feather name="edit-2" size={16} color={COLORS.success} />
               </TouchableOpacity>
             )}
             {hasPermission('delete') && (
-              <TouchableOpacity style={styles.iconBtnDelete} onPress={() => handleDelete(item._id || item.id!)}>
+              <TouchableOpacity style={styles.iconBtnDelete} accessibilityLabel="Delete class" onPress={() => handleDelete(item._id || item.id)}>
                 <Feather name="trash-2" size={16} color={COLORS.primary} />
               </TouchableOpacity>
             )}
@@ -437,28 +482,28 @@ export default function ClassesScreen() {
 
       {/* Overview Cards (Scrollable horizontally) */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.overviewScroll}>
-        <View style={styles.overviewCard}>
+        <View style={[styles.overviewCard, isTablet && styles.overviewCardTablet]}>
           <View style={[styles.overviewIconWrap, { backgroundColor: COLORS.secondarySoft }]}>
             <Feather name="grid" size={14} color={COLORS.secondary} />
           </View>
           <Text style={styles.overviewLabel}>TOTAL CLASSES</Text>
           <Text style={styles.overviewValue}>{totalClasses}</Text>
         </View>
-        <View style={styles.overviewCard}>
+        <View style={[styles.overviewCard, isTablet && styles.overviewCardTablet]}>
           <View style={[styles.overviewIconWrap, { backgroundColor: COLORS.primarySoft }]}>
             <Feather name="layers" size={14} color={COLORS.primary} />
           </View>
           <Text style={styles.overviewLabel}>DIVISIONS</Text>
           <Text style={styles.overviewValue}>{totalDivisions}</Text>
         </View>
-        <View style={styles.overviewCard}>
+        <View style={[styles.overviewCard, isTablet && styles.overviewCardTablet]}>
           <View style={[styles.overviewIconWrap, { backgroundColor: COLORS.successSoft }]}>
             <Feather name="user-check" size={14} color={COLORS.success} />
           </View>
           <Text style={styles.overviewLabel}>ASSIGNED TEACHERS</Text>
           <Text style={styles.overviewValue}>{assignedTeachers}</Text>
         </View>
-        <View style={styles.overviewCard}>
+        <View style={[styles.overviewCard, isTablet && styles.overviewCardTablet]}>
           <View style={[styles.overviewIconWrap, { backgroundColor: COLORS.warningSoft }]}>
             <Feather name="zap" size={14} color={COLORS.warning} />
           </View>
@@ -468,7 +513,7 @@ export default function ClassesScreen() {
       </ScrollView>
 
       {/* Action Bar */}
-      <View style={[styles.actionBar, compact && { flexDirection: 'column', alignItems: 'stretch' }]}>
+      <View style={[styles.actionBar, compact && styles.actionBarCompact]}>
         <View style={styles.searchContainer}>
           <Feather name="search" size={16} color={COLORS.faint} />
           <TextInput
@@ -477,17 +522,25 @@ export default function ClassesScreen() {
             placeholderTextColor={COLORS.faint}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            returnKeyType="search"
           />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Clear search">
+              <Feather name="x-circle" size={16} color={COLORS.faint} />
+            </TouchableOpacity>
+          )}
         </View>
         {hasPermission('create') && (
-          <TouchableOpacity style={[styles.addBtn, compact && { marginTop: SPACING.sm }]} onPress={openAddForm} activeOpacity={0.9}>
+          <TouchableOpacity style={[styles.addBtn, compact && styles.addBtnCompact]} onPress={openAddForm} activeOpacity={0.9}>
             <Feather name="plus" size={16} color="#fff" />
             <Text style={styles.addBtnText}>Add New Class</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      <Text style={styles.showingText}>Showing {filteredClasses.length} active class records</Text>
+      <Text style={styles.showingText}>
+        Showing {filteredClasses.length} of {totalClasses} class records
+      </Text>
 
       {/* Class List */}
       {loading ? (
@@ -500,6 +553,9 @@ export default function ClassesScreen() {
           data={filteredClasses}
           keyExtractor={(item, idx) => item._id || item.id || idx.toString()}
           renderItem={renderCard}
+          numColumns={isTablet ? 2 : 1}
+          key={isTablet ? 'tablet' : 'phone'}
+          columnWrapperStyle={isTablet ? styles.columnWrapper : undefined}
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} tintColor={COLORS.primary} />}
           ListEmptyComponent={
@@ -509,15 +565,20 @@ export default function ClassesScreen() {
               </View>
               <Text style={styles.emptyTitle}>No classes found</Text>
               <Text style={styles.emptySub}>Try a different search, or add your first class.</Text>
+              {searchQuery.length > 0 && (
+                <TouchableOpacity style={styles.emptyClearBtn} onPress={() => setSearchQuery('')}>
+                  <Text style={styles.emptyClearBtnText}>Clear search</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
         />
       )}
 
       {/* --- ADD/EDIT FORM MODAL --- */}
-      <Modal visible={isFormVisible} transparent animationType="fade" onRequestClose={() => setFormVisible(false)}>
+      <Modal visible={isFormVisible} transparent animationType="fade" onRequestClose={closeForm}>
         <View style={styles.formOverlay}>
-          <View style={styles.formModalContainer}>
+          <View style={[styles.formModalContainer, isTablet && styles.formModalContainerTablet]}>
             <View style={styles.formHeader}>
               <View style={styles.formHeaderLeft}>
                 <View style={styles.formHeaderIconWrap}>
@@ -525,13 +586,18 @@ export default function ClassesScreen() {
                 </View>
                 <Text style={styles.formTitle}>{editingId ? 'Edit Class Details' : 'Add New Class'}</Text>
               </View>
-              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <TouchableOpacity onPress={closeForm} style={styles.closeBtnIcon} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Feather name="x" size={20} color={COLORS.body} />
               </TouchableOpacity>
             </View>
 
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
               <ScrollView contentContainerStyle={styles.formScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                {/* Backdrop to close any open dropdown when tapping elsewhere in the form */}
+                {activeDropdown && (
+                  <Pressable style={styles.dropdownBackdrop} onPress={() => setActiveDropdown(null)} />
+                )}
+
                 <View style={styles.formCard}>
                   <Text style={styles.sectionTitle}>Class Details</Text>
                   <Text style={styles.sectionSub}>Only Class Name and School Branch are mandatory</Text>
@@ -549,8 +615,8 @@ export default function ClassesScreen() {
                     schools.map((s) => ({ label: s.name, value: s._id }))
                   )}
 
-                  <View style={styles.row}>
-                    <View style={[styles.inputWrapper, { flex: 1, marginRight: SPACING.md }]}>
+                  <View style={[styles.row, compact && styles.rowCompact]}>
+                    <View style={[styles.inputWrapper, compact ? styles.rowCompactItem : { flex: 1, marginRight: SPACING.md }]}>
                       <Text style={styles.inputLabel}>
                         Class Name <Text style={styles.asterisk}>*</Text>
                       </Text>
@@ -567,7 +633,7 @@ export default function ClassesScreen() {
                       {errors.className && <Text style={styles.errorText}>{errors.className}</Text>}
                     </View>
 
-                    <View style={[styles.inputWrapper, { flex: 1 }]}>
+                    <View style={[styles.inputWrapper, compact ? styles.rowCompactItem : { flex: 1 }]}>
                       <Text style={styles.inputLabel}>Division (Optional)</Text>
                       <TextInput
                         style={styles.input}
@@ -575,16 +641,18 @@ export default function ClassesScreen() {
                         placeholderTextColor={COLORS.faint}
                         value={formData.division}
                         onChangeText={(t) => setFormData({ ...formData, division: t })}
+                        autoCapitalize="characters"
                       />
                     </View>
                   </View>
 
                   {renderInlineDropdown('classTeacher', 'Class Teacher (Optional)', teacherOptions)}
+                  {renderInlineDropdown('evaluationType', 'Evaluation Mode (Optional)', evaluationOptions)}
 
                   <View style={styles.inputWrapper}>
                     <Text style={styles.inputLabel}>Class Description & Notes (Optional)</Text>
                     <TextInput
-                      style={[styles.input, { height: 84, paddingTop: 12, textAlignVertical: 'top' }]}
+                      style={[styles.input, styles.textArea]}
                       placeholder="Enter optional description or notes..."
                       placeholderTextColor={COLORS.faint}
                       multiline
@@ -594,9 +662,20 @@ export default function ClassesScreen() {
                   </View>
                 </View>
 
-                <TouchableOpacity style={styles.saveBtnFull} onPress={handleSave} activeOpacity={0.9}>
-                  <Feather name="check" size={16} color="#fff" style={{ marginRight: 8 }} />
-                  <Text style={styles.saveBtnFullText}>{editingId ? 'Save Changes' : 'Submit Class'}</Text>
+                <TouchableOpacity
+                  style={[styles.saveBtnFull, saving && styles.saveBtnFullDisabled]}
+                  onPress={handleSave}
+                  activeOpacity={0.9}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Feather name="check" size={16} color="#fff" style={{ marginRight: 8 }} />
+                      <Text style={styles.saveBtnFullText}>{editingId ? 'Save Changes' : 'Submit Class'}</Text>
+                    </>
+                  )}
                 </TouchableOpacity>
               </ScrollView>
             </KeyboardAvoidingView>
@@ -607,7 +686,7 @@ export default function ClassesScreen() {
       {/* --- VIEW FULL SPECIFICATION MODAL --- */}
       <Modal visible={isViewVisible} transparent animationType="fade" onRequestClose={() => setViewVisible(false)}>
         <View style={styles.overlay}>
-          <View style={styles.viewModalContainer}>
+          <View style={[styles.viewModalContainer, isTablet && styles.formModalContainerTablet]}>
             <View style={styles.viewHeaderRed}>
               <Text style={styles.viewTitle}>Class Full Specification</Text>
               <TouchableOpacity onPress={() => setViewVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -628,7 +707,7 @@ export default function ClassesScreen() {
                 ) : null}
                 <View style={[styles.syllabusBadge, { marginLeft: 'auto' }]}>
                   <Feather name="book-open" size={12} color={COLORS.secondary} />
-                  <Text style={styles.syllabusBadgeText}>Syllabus: {viewingClass?.syllabus}</Text>
+                  <Text style={styles.syllabusBadgeText}>Syllabus: {viewingClass?.syllabus || 'N/A'}</Text>
                 </View>
               </View>
 
@@ -662,14 +741,14 @@ export default function ClassesScreen() {
                 </View>
               </View>
 
-              <View style={styles.row}>
-                <View style={{ flex: 1, marginRight: SPACING.sm }}>
+              <View style={[styles.row, compact && styles.rowCompact]}>
+                <View style={compact ? styles.rowCompactItem : { flex: 1, marginRight: SPACING.sm }}>
                   <Text style={styles.sectionHeaderRed}>TEACHER</Text>
                   <View style={styles.viewDetailsBox}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <View style={[styles.avatar, { width: 40, height: 40, borderRadius: 20 }]}>
                         <Text style={styles.avatarText}>
-                          {typeof viewingClass?.classTeacher === 'object' ? viewingClass?.classTeacher?.name?.charAt(0) : 'U'}
+                          {typeof viewingClass?.classTeacher === 'object' ? viewingClass?.classTeacher?.name?.charAt(0)?.toUpperCase() : 'U'}
                         </Text>
                       </View>
                       <View style={{ marginLeft: SPACING.sm, flex: 1, minWidth: 0 }}>
@@ -681,7 +760,7 @@ export default function ClassesScreen() {
                     </View>
                   </View>
                 </View>
-                <View style={{ flex: 1, marginLeft: SPACING.sm }}>
+                <View style={compact ? styles.rowCompactItem : { flex: 1, marginLeft: SPACING.sm }}>
                   <Text style={styles.sectionHeaderRed}>EVALUATION</Text>
                   <View style={styles.viewDetailsBox}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
@@ -742,12 +821,14 @@ const styles = StyleSheet.create({
     minWidth: isSmallDevice ? 120 : 140,
     ...SHADOW.card,
   },
+  overviewCardTablet: { minWidth: 170, paddingVertical: SPACING.lg },
   overviewIconWrap: { width: 26, height: 26, borderRadius: RADIUS.xs, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.sm },
   overviewLabel: { fontSize: FONT.micro, fontWeight: '800', color: COLORS.muted, letterSpacing: 0.5, marginBottom: 6 },
   overviewValue: { fontSize: 26, fontWeight: '800', color: COLORS.ink },
   overviewValueText: { fontSize: FONT.h3, fontWeight: '700', color: COLORS.success, marginTop: 2 },
 
   actionBar: { flexDirection: 'row', paddingHorizontal: SPACING.lg, alignItems: 'center', gap: SPACING.md, zIndex: 10 },
+  actionBarCompact: { flexDirection: 'column', alignItems: 'stretch' },
   searchContainer: {
     flex: 1,
     flexDirection: 'row',
@@ -758,9 +839,10 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.sm,
     paddingHorizontal: SPACING.md,
     height: TOUCH_TARGET,
+    gap: SPACING.sm,
     ...SHADOW.card,
   },
-  searchInput: { flex: 1, marginLeft: SPACING.sm, fontSize: FONT.body, color: COLORS.ink },
+  searchInput: { flex: 1, fontSize: FONT.body, color: COLORS.ink },
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -772,12 +854,15 @@ const styles = StyleSheet.create({
     gap: SPACING.xs,
     ...SHADOW.button,
   },
+  addBtnCompact: { marginTop: SPACING.sm },
   addBtnText: { color: '#fff', fontSize: FONT.small, fontWeight: '700' },
   showingText: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, fontSize: FONT.tiny, color: COLORS.muted, fontWeight: '500', textAlign: 'right' },
 
   listContent: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xl, paddingTop: SPACING.sm },
+  columnWrapper: { gap: SPACING.lg },
   card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.lg, borderWidth: 1, borderColor: COLORS.borderSoft, ...SHADOW.card },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg, gap: SPACING.sm },
+  cardTablet: { flex: 1, maxWidth: '49%' },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg, gap: SPACING.sm, flexWrap: 'wrap' },
   cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', flex: 1, gap: SPACING.sm },
   primaryBadge: { backgroundColor: COLORS.primary, paddingHorizontal: 14, paddingVertical: 6, borderRadius: RADIUS.pill },
   primaryBadgeText: { color: '#fff', fontSize: FONT.small, fontWeight: '800' },
@@ -825,10 +910,13 @@ const styles = StyleSheet.create({
   emptyIconWrap: { width: 60, height: 60, borderRadius: 30, backgroundColor: COLORS.surface, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.borderSoft },
   emptyTitle: { fontSize: FONT.h3, fontWeight: '800', color: COLORS.ink },
   emptySub: { fontSize: FONT.small, color: COLORS.muted, marginTop: 4, textAlign: 'center' },
+  emptyClearBtn: { marginTop: SPACING.lg, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: RADIUS.pill, backgroundColor: COLORS.primarySoft },
+  emptyClearBtnText: { color: COLORS.primary, fontWeight: '700', fontSize: FONT.small },
 
   // Form Modal
   formOverlay: { flex: 1, backgroundColor: COLORS.overlay, justifyContent: 'center', alignItems: 'center', padding: SPACING.lg },
   formModalContainer: { width: '100%', maxWidth: 650, height: '85%', backgroundColor: COLORS.background, borderRadius: RADIUS.xl, overflow: 'hidden', ...SHADOW.raised },
+  formModalContainerTablet: { maxWidth: 720, height: '80%' },
   formHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -844,6 +932,7 @@ const styles = StyleSheet.create({
   formTitle: { fontSize: FONT.h2, fontWeight: '800', color: COLORS.ink },
   closeBtnIcon: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.borderSoft, borderRadius: 18 },
   formScroll: { padding: SPACING.lg, paddingBottom: SPACING.xxl },
+  dropdownBackdrop: { ...StyleSheet.absoluteFillObject, zIndex: 5 },
   formCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.xl, marginBottom: SPACING.lg, borderWidth: 1, borderColor: COLORS.border, ...SHADOW.card },
   sectionTitle: { fontSize: FONT.h2, fontWeight: '800', color: COLORS.ink },
   sectionSub: { fontSize: FONT.small, color: COLORS.muted, marginBottom: SPACING.lg, marginTop: 2 },
@@ -851,27 +940,49 @@ const styles = StyleSheet.create({
   autoSyllabusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.successSoft, padding: SPACING.md, borderRadius: RADIUS.sm, marginBottom: SPACING.lg, borderWidth: 1, borderColor: COLORS.successSoftBorder, gap: SPACING.sm },
   autoSyllabusText: { color: '#065F46', fontSize: FONT.small, fontWeight: '700' },
 
-  inputWrapper: { marginBottom: SPACING.lg },
+  inputWrapper: { marginBottom: SPACING.lg, position: 'relative' },
   inputLabel: { fontSize: FONT.small, fontWeight: '700', color: COLORS.body, marginBottom: 6, marginLeft: 2 },
   asterisk: { color: COLORS.primary },
   input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingHorizontal: SPACING.md, height: TOUCH_TARGET + 4, backgroundColor: COLORS.background, fontSize: FONT.body, color: COLORS.ink },
+  textArea: { height: 84, paddingTop: 12, textAlignVertical: 'top' },
   inputError: { borderColor: COLORS.primary, backgroundColor: COLORS.primarySoft },
   errorText: { color: COLORS.primary, fontSize: FONT.tiny, marginTop: 4, fontWeight: '500' },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
+  rowCompact: { flexDirection: 'column' },
+  rowCompactItem: { width: '100%' },
 
   dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingHorizontal: SPACING.md, height: TOUCH_TARGET + 4, backgroundColor: COLORS.background },
   dropdownHeaderActive: { borderColor: COLORS.primary },
   dropdownSelectedText: { color: COLORS.ink, fontSize: FONT.body, fontWeight: '500' },
   dropdownPlaceholder: { color: COLORS.faint, fontSize: FONT.body },
-  dropdownListContainer: { marginTop: 4, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, backgroundColor: COLORS.surface, overflow: 'hidden', ...SHADOW.card },
-  dropdownScroll: { maxHeight: 180 },
-  dropdownItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: SPACING.md, paddingHorizontal: SPACING.md },
+  // Floats above surrounding fields instead of pushing the layout down,
+  // which is what caused the overlap / stuck-touch glitches before.
+  dropdownListContainer: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.surface,
+    overflow: 'hidden',
+    zIndex: 100,
+    elevation: 12,
+    ...SHADOW.raised,
+  },
+  dropdownScroll: { maxHeight: 220 },
+  dropdownItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: SPACING.md, paddingHorizontal: SPACING.md },
   dropdownItemBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.borderSoft },
   dropdownItemActive: { backgroundColor: COLORS.primarySoft },
-  dropdownItemText: { fontSize: FONT.body, color: COLORS.body, fontWeight: '500' },
+  dropdownItemText: { fontSize: FONT.body, color: COLORS.body, fontWeight: '500', flexShrink: 1, marginRight: SPACING.sm },
   dropdownItemTextActive: { color: COLORS.primary, fontWeight: '700' },
+  dropdownEmpty: { padding: SPACING.lg, alignItems: 'center' },
+  dropdownEmptyText: { color: COLORS.faint, fontSize: FONT.small },
 
   saveBtnFull: { flexDirection: 'row', backgroundColor: COLORS.primary, height: 56, borderRadius: RADIUS.md, justifyContent: 'center', alignItems: 'center', marginTop: SPACING.xs, ...SHADOW.button },
+  saveBtnFullDisabled: { opacity: 0.7 },
   saveBtnFullText: { color: '#fff', fontSize: FONT.h3, fontWeight: '800' },
 
   // View Full Spec Modal
@@ -887,4 +998,4 @@ const styles = StyleSheet.create({
   viewLabel: { fontSize: FONT.tiny, color: COLORS.faint, fontWeight: '700', marginBottom: 4 },
   viewVal: { fontSize: FONT.body, color: COLORS.ink, fontWeight: '700' },
   viewText: { fontSize: FONT.body, color: COLORS.body, lineHeight: 22, fontWeight: '500' },
-});
+})

@@ -21,7 +21,7 @@ import { pick, types, isErrorWithCode, errorCodes } from '@react-native-document
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 const AUDIENCES = ['All', 'Staff', 'Student', 'Guardian'];
 const CATEGORIES = ['General', 'Academic', 'Event', 'Urgent', 'Exam'];
@@ -228,7 +228,7 @@ export default function NoticeBoardScreen() {
   const fetchBranches = async (token: string | null) => {
     setBranchesLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/schools/public`, {
+      const res = await axios.get(`${API_BASE}/schools/public`, {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
 
@@ -248,7 +248,7 @@ export default function NoticeBoardScreen() {
   const fetchNotices = async (token: string | null = authToken, isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      let url = `${BASE_URL}/notices?`;
+      let url = `${API_BASE}/notices?`;
       if (filterAudience !== 'All') url += `sendTo=${filterAudience}&`;
       if (filterCategory) url += `category=${filterCategory}&`;
       if (filterStatus) url += `status=${filterStatus}&`;
@@ -319,7 +319,7 @@ export default function NoticeBoardScreen() {
 
   const performDelete = async (id: string) => {
     try {
-      const res = await axios.delete(`${BASE_URL}/notices/${id}`, { 
+      const res = await axios.delete(`${API_BASE}/notices/${id}`, { 
         headers: { Authorization: `Bearer ${authToken}` } 
       });
 
@@ -406,7 +406,7 @@ export default function NoticeBoardScreen() {
         jsonPayload.submissionDate = formData.submissionDate;
       }
 
-      const url = editingId ? `${BASE_URL}/notices/${editingId}` : `${BASE_URL}/notices`;
+      const url = editingId ? `${API_BASE}/notices/${editingId}` : `${API_BASE}/notices`;
       const method = editingId ? 'put' : 'post';
 
       const response = await axios({
@@ -459,7 +459,7 @@ export default function NoticeBoardScreen() {
         name: picked.name,
       } as any);
 
-      const res = await axios.post(`${BASE_URL}/upload`, formPayload, {
+      const res = await axios.post(`${API_BASE}/upload`, formPayload, {
         headers: { Authorization: `Bearer ${authToken}` },
       });
 

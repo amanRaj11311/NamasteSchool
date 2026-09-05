@@ -1,0 +1,350 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView,
+  Platform, ActivityIndicator, RefreshControl
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Feather from 'react-native-vector-icons/Feather';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import axios from 'axios';
+
+const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+
+// ---------------------------------------------------------------------------
+// Design tokens — premium red/coral brand system
+// ---------------------------------------------------------------------------
+const C = {
+  bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
+  text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
+  primary: '#ef4444', primaryDark: '#DC2626', primarySoft: '#FEF2F2',
+  green: '#10B981', greenDark: '#059669', greenSoft: '#D1FAE5',
+  amber: '#F59E0B', amberDark: '#D97706', amberSoft: '#FEF3C7',
+  slate: '#64748B', slateSoft: '#F1F5F9',
+};
+
+// --- Safe Date Utilities ---
+const getFirstOfMonth = (): Date => {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+};
+
+const formatToYMD = (d: Date | null): string => {
+  if (!d) return '';
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return local.toISOString().split('T')[0];
+};
+
+const formatDisplayDate = (d: Date | null) => {
+  if (!d) return '—';
+  return d.toLocaleDateString('en-GB'); // DD/MM/YYYY
+};
+
+export default function FeeReportsScreen() {
+  const [permissions, setPermissions] = useState<any[]>([]);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+
+  // Filter States
+  const [fromDate, setFromDate] = useState<Date>(getFirstOfMonth());
+  const [toDate, setToDate] = useState<Date>(new Date());
+  const [showFromPicker, setShowFromPicker] = useState(false);
+  const [showToPicker, setShowToPicker] = useState(false);
+
+  // Data States
+  const [summary, setSummary] = useState<any>(null);
+  const [classWise, setClassWise] = useState<any[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
+  
+  // UI States
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => { initialize(); }, []);
+
+  const initialize = async () => {
+    const token = await AsyncStorage.getItem('userToken');
+    const permsRaw = await AsyncStorage.getItem('userPermissions');
+    const superAdminRaw = await AsyncStorage.getItem('isSuperAdmin');
+
+    if (permsRaw) setPermissions(JSON.parse(permsRaw));
+    setIsSuperAdmin(superAdminRaw === 'true');
+    setAuthToken(token);
+    
+    fetchClassesAndReports(token, fromDate, toDate);
+  };
+
+  const authHeaders = (token: string | null) => ({ headers: { Authorization: `Bearer ${token}` } });
+
+  const fetchClassesAndReports = async (token: string | null = authToken, fDate: Date = fromDate, tDate: Date = toDate, isRefresh = false) => {
+    if (isRefresh) setRefreshing(true); else setLoading(true);
+    try {
+      // First fetch classes if we haven't already
+      if (classes.length === 0) {
+        const clsRes = await axios.get(`${BASE_URL}/classes?limit=200`, authHeaders(token));
+        if (clsRes.data?.success) setClasses(clsRes.data.data || []);
+      }
+
+      const params = { fromDate: formatToYMD(fDate), toDate: formatToYMD(tDate) };
+
+      const [summaryRes, classRes] = await Promise.all([
+        axios.get(`${BASE_URL}/fees/reports/collection-summary`, { params, ...authHeaders(token) }),
+        axios.get(`${BASE_URL}/fees/reports/class-wise`, authHeaders(token)),
+      ]);
+
+      if (summaryRes.data?.success) setSummary(summaryRes.data.data);
+      if (classRes.data?.success) setClassWise(classRes.data.data || []);
+
+    } catch (err) { console.error(err); } 
+    finally { setLoading(false); setRefreshing(false); }
+  };
+
+  const hasPermission = useCallback((action: string) => {
+    if (isSuperAdmin) return true;
+    return permissions.some(p => p.module === 'fees' && p.action === action);
+  }, [permissions, isSuperAdmin]);
+
+  const classNameFor = (id: string) => {
+    const c = classes.find((cl) => cl._id === id);
+    return c ? `${c.className} ${c.division || ''}` : 'Unassigned';
+  };
+
+  const totalOutstanding = classWise.reduce((sum, c) => sum + (c.totalDue || 0), 0);
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerIconBadge}><Feather name="bar-chart-2" size={20} color={C.primary} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Fee Analytics & Reports</Text>
+          <Text style={styles.subtitle}>Real-time collection breakdown and class-wise dues.</Text>
+        </View>
+      </View>
+
+      {/* Filter Section */}
+      <View style={styles.filterSection}>
+        <Text style={styles.filterLabel}>COLLECTION DATE RANGE</Text>
+        <View style={styles.dateRow}>
+          <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowFromPicker(true)}>
+            <Feather name="calendar" size={14} color={C.textMuted} style={{marginRight: 6}} />
+            <Text style={styles.datePickerText}>{formatDisplayDate(fromDate)}</Text>
+          </TouchableOpacity>
+          {showFromPicker && (
+            <DateTimePicker 
+              value={fromDate} 
+              mode="date" 
+              display="default" 
+              onChange={(e, d) => { 
+                setShowFromPicker(Platform.OS === 'ios'); 
+                if (d) { setFromDate(d); fetchClassesAndReports(authToken, d, toDate); } 
+              }} 
+            />
+          )}
+
+          <Text style={styles.dateDivider}>—</Text>
+
+          <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowToPicker(true)}>
+            <Feather name="calendar" size={14} color={C.textMuted} style={{marginRight: 6}} />
+            <Text style={styles.datePickerText}>{formatDisplayDate(toDate)}</Text>
+          </TouchableOpacity>
+          {showToPicker && (
+            <DateTimePicker 
+              value={toDate} 
+              mode="date" 
+              display="default" 
+              onChange={(e, d) => { 
+                setShowToPicker(Platform.OS === 'ios'); 
+                if (d) { setToDate(d); fetchClassesAndReports(authToken, fromDate, d); } 
+              }} 
+            />
+          )}
+        </View>
+      </View>
+
+      {/* Dashboard Content */}
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchClassesAndReports(authToken, fromDate, toDate, true)} colors={[C.primary]} />}
+      >
+        {loading ? (
+          <View style={styles.center}><ActivityIndicator size="large" color={C.primary} /></View>
+        ) : (
+          <>
+            {/* 4 KPI Cards Grid */}
+            <View style={styles.kpiGrid}>
+              <View style={[styles.kpiCard, { borderColor: '#A7F3D0' }]}>
+                <View style={styles.kpiRow}>
+                  <View style={[styles.iconCircle, { backgroundColor: C.greenSoft }]}><Feather name="briefcase" size={16} color={C.greenDark} /></View>
+                  <Text style={styles.kpiLabel}>TOTAL COLLECTED</Text>
+                </View>
+                <Text style={[styles.kpiValue, { color: C.greenDark }]} numberOfLines={1} adjustsFontSizeToFit>
+                  ₹{(summary?.totalCollected || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </Text>
+                <Text style={styles.kpiSubText}>Filtered Range Collection</Text>
+              </View>
+
+              <View style={[styles.kpiCard, { borderColor: '#FDE68A' }]}>
+                <View style={styles.kpiRow}>
+                  <View style={[styles.iconCircle, { backgroundColor: C.amberSoft }]}><Feather name="clock" size={16} color={C.amberDark} /></View>
+                  <Text style={styles.kpiLabel}>LATE FEE COLLECTED</Text>
+                </View>
+                <Text style={[styles.kpiValue, { color: C.amberDark }]} numberOfLines={1} adjustsFontSizeToFit>
+                  ₹{(summary?.totalLateFee || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </Text>
+                <Text style={styles.kpiSubText}>Penalty Surcharges</Text>
+              </View>
+
+              <View style={[styles.kpiCard, { borderColor: '#FECACA' }]}>
+                <View style={styles.kpiRow}>
+                  <View style={[styles.iconCircle, { backgroundColor: C.primarySoft }]}><Feather name="file-text" size={16} color={C.primaryDark} /></View>
+                  <Text style={styles.kpiLabel}>TRANSACTIONS</Text>
+                </View>
+                <Text style={[styles.kpiValue, { color: C.primaryDark }]} numberOfLines={1} adjustsFontSizeToFit>
+                  {summary?.transactionCount || 0}
+                </Text>
+                <Text style={styles.kpiSubText}>Recorded Receipts</Text>
+              </View>
+
+              <View style={[styles.kpiCard, { borderColor: '#FECACA' }]}>
+                <View style={styles.kpiRow}>
+                  <View style={[styles.iconCircle, { backgroundColor: C.primarySoft }]}><Feather name="alert-circle" size={16} color={C.primaryDark} /></View>
+                  <Text style={styles.kpiLabel}>TOTAL OUTSTANDING</Text>
+                </View>
+                <Text style={[styles.kpiValue, { color: C.primaryDark }]} numberOfLines={1} adjustsFontSizeToFit>
+                  ₹{totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </Text>
+                <Text style={styles.kpiSubText}>Pending Student Dues</Text>
+              </View>
+            </View>
+
+            {/* Collection Mode Breakdown */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+                  <Feather name="credit-card" size={16} color={C.primary} />
+                  <Text style={styles.sectionTitle}>Collection by Mode</Text>
+                </View>
+                <View style={styles.countBadge}><Text style={styles.countBadgeText}>{(summary?.byMode || []).length} Modes</Text></View>
+              </View>
+
+              {(summary?.byMode || []).length === 0 ? (
+                <View style={styles.emptyBox}>
+                  <Text style={styles.emptyText}>No payment transactions recorded in this date range.</Text>
+                </View>
+              ) : (
+                <View style={styles.listContainer}>
+                  <View style={styles.listHeaderRow}>
+                    <Text style={[styles.listHeaderCell, { flex: 1.5 }]}>Mode</Text>
+                    <Text style={[styles.listHeaderCell, { flex: 1, textAlign: 'center' }]}>Count</Text>
+                    <Text style={[styles.listHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Total Amount</Text>
+                  </View>
+                  {summary.byMode.map((m: any, index: number) => (
+                    <View key={m._id || index} style={styles.listDataRow}>
+                      <View style={{ flex: 1.5 }}>
+                        <View style={styles.modeBadge}><Text style={styles.modeBadgeText}>{m._id || 'Cash'}</Text></View>
+                      </View>
+                      <Text style={[styles.listDataCell, { flex: 1, textAlign: 'center' }]}>{m.count}</Text>
+                      <Text style={[styles.listDataCell, styles.successText, { flex: 1.5, textAlign: 'right' }]}>
+                        ₹{m.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Class-wise All-Time Summary */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+                  <Feather name="users" size={16} color={C.greenDark} />
+                  <Text style={styles.sectionTitle}>Class-wise Breakdown (All Time)</Text>
+                </View>
+                <View style={[styles.countBadge, { backgroundColor: C.greenSoft }]}><Text style={[styles.countBadgeText, { color: C.greenDark }]}>{classWise.length} Classes</Text></View>
+              </View>
+
+              {classWise.length === 0 ? (
+                <View style={styles.emptyBox}>
+                  <Text style={styles.emptyText}>No fee assignments exist yet across classes.</Text>
+                </View>
+              ) : (
+                <View style={styles.listContainer}>
+                  <View style={styles.listHeaderRow}>
+                    <Text style={[styles.listHeaderCell, { flex: 1.5 }]}>Class</Text>
+                    <Text style={[styles.listHeaderCell, { flex: 1, textAlign: 'center' }]}>Students</Text>
+                    <Text style={[styles.listHeaderCell, { flex: 1.5, textAlign: 'right' }]}>Due</Text>
+                  </View>
+                  {classWise.map((c: any, index: number) => (
+                    <View key={c.classId || index} style={styles.listDataRow}>
+                      <Text style={[styles.listDataCell, { flex: 1.5, fontWeight: '800' }]} numberOfLines={1}>
+                        {classNameFor(c.classId)}
+                      </Text>
+                      <Text style={[styles.listDataCell, { flex: 1, textAlign: 'center' }]}>{c.studentCount}</Text>
+                      <Text style={[styles.listDataCell, styles.dangerText, { flex: 1.5, textAlign: 'right' }]}>
+                        ₹{c.totalDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: C.bg },
+  center: { padding: 40, justifyContent: 'center', alignItems: 'center' },
+
+  header: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 20, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
+  headerIconBadge: { width: 44, height: 44, borderRadius: 14, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
+  title: { fontSize: 20, fontWeight: '800', color: C.text, letterSpacing: -0.3 },
+  subtitle: { fontSize: 12, color: C.textMuted, marginTop: 2 },
+
+  filterSection: { backgroundColor: C.surface, padding: 16, borderBottomWidth: 1, borderColor: C.border, zIndex: 10 },
+  filterLabel: { fontSize: 10, fontWeight: '800', color: C.textMuted, letterSpacing: 0.5, marginBottom: 8 },
+  dateRow: { flexDirection: 'row', alignItems: 'center' },
+  datePickerBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceSoft, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, height: 44, borderRadius: 10 },
+  datePickerText: { fontSize: 13, fontWeight: '700', color: C.text },
+  dateDivider: { paddingHorizontal: 10, color: C.textFaint, fontWeight: '800' },
+
+  scrollContent: { padding: 16, paddingBottom: 40 },
+
+  // KPI Grid
+  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 16 },
+  kpiCard: { width: '48%', backgroundColor: C.surface, padding: 16, borderRadius: 16, borderWidth: 1, elevation: 1, marginBottom: 12 },
+  kpiRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  iconCircle: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  kpiLabel: { fontSize: 9.5, fontWeight: '800', color: C.textMuted, letterSpacing: 0.5, flex: 1 },
+  kpiValue: { fontSize: 22, fontWeight: '800', marginBottom: 4 },
+  kpiSubText: { fontSize: 10, color: C.textMuted, fontWeight: '600' },
+
+  // Section Cards
+  sectionCard: { backgroundColor: C.surface, borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: C.border, elevation: 1 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: C.border },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: C.text },
+  countBadge: { backgroundColor: C.primarySoft, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  countBadgeText: { fontSize: 11, fontWeight: '800', color: C.primaryDark },
+
+  emptyBox: { padding: 20, alignItems: 'center', backgroundColor: C.surfaceSoft, borderRadius: 10, borderWidth: 1, borderColor: C.border, borderStyle: 'dashed' },
+  emptyText: { fontSize: 13, fontWeight: '600', color: C.textMuted, textAlign: 'center' },
+
+  // Custom List/Grid Tables
+  listContainer: { backgroundColor: C.surfaceSoft, borderRadius: 10, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
+  listHeaderRow: { flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 12, backgroundColor: C.border },
+  listHeaderCell: { fontSize: 11, fontWeight: '800', color: C.textMuted, textTransform: 'uppercase' },
+  listDataRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.surface },
+  listDataCell: { fontSize: 13, color: C.text, fontWeight: '600' },
+  successText: { color: C.greenDark, fontWeight: '800' },
+  dangerText: { color: C.primaryDark, fontWeight: '800' },
+
+  modeBadge: { backgroundColor: C.primarySoft, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' },
+  modeBadgeText: { fontSize: 11, fontWeight: '800', color: C.primaryDark },
+});

@@ -32,11 +32,30 @@ import SettingsScreen from "../screens/SettingScreen";
 import AddStudentScreen from "../screens/AddStudentScreen";
 import ClassTimetableScreen from "../screens/ClassManagement/ClassTimetableScreen";
 import ClassesScreen from "../screens/ClassManagement/ClassScreen";
+import ClassHomeworkScreen from "../screens/ClassManagement/HomeworkScreen";
+import ClassDiaryScreen from "../screens/ClassManagement/ClassDiary";
+import ClassAttendanceScreen from '../screens/ClassManagement/ClassAttendanceScreen';
+import ClassExamsScreen from "../screens/ClassManagement/ClassExamScreen";
 import ApplyLeaveScreen from '../screens/Leave Management/ApplyLeavesScreen';
 import LeaveTypesScreen from '../screens/Leave Management/LeaveTypeScreen';
 import LeaveBalancesScreen from '../screens/Leave Management/LeavesBalanceScreen';
 import NoticeBoardScreen from '../screens/communicaton/noticeboard';
 import ChatScreen from '../screens/communicaton/ChatScreen';
+import AcademicSessionsScreen from '../screens/academic sessions/AcademicSessionScreen';
+import ClassLevelsScreen from '../screens/academic sessions/ClassLevel';
+import PromotionsDashboardScreen from '../screens/academic sessions/StudentPromotion';
+import FeesScreen from '../screens/FeeManagementScreen/AssignFeesScreen';
+import FeeStructureScreen from '../screens/FeeManagementScreen/FeeStructure';
+import PaymentHistoryScreen from '../screens/FeeManagementScreen/PaymentHistory';
+import FeeReportsScreen from '../screens/FeeManagementScreen/FeeReport';
+import SalaryStructureScreen from '../screens/Salary Management/SalaryStructure';
+import AdvancesScreen from '../screens/Salary Management/Advances';
+import SalaryReportsScreen from '../screens/Salary Management/PayrollScreen';
+import SalaryScreen from '../screens/Salary Management/PayrollScreen';
+import ExpensesScreen from '../screens/Expense Management/ExpenseList';
+import ExpenseCategoriesScreen from '../screens/Expense Management/ExpenseCategories';
+import ExpenseReportsScreen from '../screens/Expense Management/ExpensesReport';
+import GalleryEventsScreen from '../screens/GalleryScreen';
 
 const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -72,14 +91,15 @@ const MENU_STRUCTURE: MenuSection[] = [
         children: [
           { routeName: "Classes", label: "Classes Overview", icon: "layers", component: ClassesScreen, module: "classes" },
           { routeName: "Class TimeTable", label: "Class Timetable", icon: "calendar", component: ClassTimetableScreen, module: "timetable" },
-          { routeName: "Class Attendance", label: "Attendance", icon: "check-square", component: PlaceholderScreen, module: "attendance" },
-          { routeName: "Homework", label: "Homework", icon: "edit-3", component: PlaceholderScreen, module: "homework" },
-          { routeName: "Exams", label: "Exams", icon: "award", component: PlaceholderScreen, module: "exams" },
-          { routeName: "Diary", label: "Class Diary", icon: "book-open", component: PlaceholderScreen, module: "diary" },
+          { routeName: "Class Attendance", label: "Attendance", icon: "check-square", component: ClassAttendanceScreen, module: "attendance" },
+          { routeName: "Homework", label: "Homework", icon: "edit-3", component: ClassHomeworkScreen, module: "homework" },
+          { routeName: "Exams", label: "Exams", icon: "award", component: ClassExamsScreen, module: "exams" },
+          { routeName: "Diary", label: "Class Diary", icon: "book-open", component: ClassDiaryScreen, module: "diary" },
         ]
       },
       { routeName: "Subjects", label: "Subjects", icon: "book", component: SubjectsScreen, module: "subjects" },
       { routeName: "Students", label: "Students Directory", icon: "users", component: AddStudentScreen, module: "students" },
+      {routeName: "Gallery", label: "Gallery & Events", icon: "layers", component: GalleryEventsScreen, module: "classlevels"},
       {
         label: "Staff Management", icon: "user-check", module: "staff_group",
         children: [
@@ -87,6 +107,36 @@ const MENU_STRUCTURE: MenuSection[] = [
           { routeName: "Staff Attendance", label: "Attendance", icon: "clock", component: AttendanceScreen, module: "attendance" },
           { routeName: "Staff Timetable", label: "Time Table", icon: "calendar", component: TimetableScreen, module: "timetable" },
         ]
+      },
+      {
+        
+        label: "Academic & Promotion",
+        icon: "compass",
+        module: "Academic_group",
+        children: [
+          {
+            routeName: "academic",
+            label: "Academic Sessions",
+            icon: "calendar",
+            component: AcademicSessionsScreen,
+            module: "Academic",
+          },
+          {
+            routeName: "class-level-orders",
+            label: "Class Level Orders",
+            icon: "layers",
+            component: ClassLevelsScreen,
+            module: "Academic",
+          },
+          {
+            routeName: "student-promotion",
+            label: "Student Promotion",
+            icon: "arrow-up-circle",
+            component: PromotionsDashboardScreen,
+            module: "Academic",
+          },
+          
+        ],
       },
       {
         label: "Leave Management", icon: "briefcase", module: "leave_group",
@@ -97,17 +147,51 @@ const MENU_STRUCTURE: MenuSection[] = [
         ]
       },
       {
-        label: "Financials", icon: "dollar-sign", module: "finance_group",
+       
+        label: "Financials",
+        icon: "dollar-sign",
+        module: "finance_group",
         children: [
-          { routeName: "Fees", label: "Fees Collection", icon: "plus-circle", component: PlaceholderScreen, module: "fees" },
-          { routeName: "Salary", label: "Salary Records", icon: "credit-card", component: PlaceholderScreen, module: "salary" },
-          { routeName: "Expense", label: "Expenses", icon: "trending-down", component: PlaceholderScreen, module: "expense" },
-        ]
+          {
+            label: "Fees Management",
+            icon: "credit-card",
+            module: "fees",
+            children: [
+              { routeName: "CollectAssignFees", label: "Collect / Assign Fees", icon: "plus-circle", component: FeesScreen, module: "fees" },
+              { routeName: "FeeStructure", label: "Fee Structure", icon: "sliders", component: FeeStructureScreen, module: "fees" },
+              { routeName: "PaymentHistory", label: "Payment History", icon: "file-text", component: PaymentHistoryScreen, module: "fees" },
+              { routeName: "FeeReports", label: "Fee Reports", icon: "bar-chart-2", component: FeeReportsScreen, module: "fees" },
+            ],
+          },
+          {
+            label: "Salary Management",
+            
+            icon: "trending-up",
+            module: "salary",
+            children: [
+              { routeName: "Payroll", label: "Payroll", icon: "credit-card", component: SalaryScreen, module: "salary" },
+              { routeName: "SalaryStructure", label: "Salary Structure", icon: "sliders", component: SalaryStructureScreen, module: "salary" },
+              { routeName: "Advances", label: "Advances", icon: "dollar-sign", component: AdvancesScreen, module: "salary" },
+              { routeName: "SalaryReports", label: "Salary Reports", icon: "bar-chart-2", component:SalaryReportsScreen, module: "salary" },
+            ],
+          },
+          {
+            label: "Expense Management",
+            icon: "trending-down",
+            module: "expense",
+            children: [
+              { routeName: "ExpensesList", label: "Expenses List", icon: "clipboard", component: ExpensesScreen, module: "expense" },
+              { routeName: "Categories", label: "Categories", icon: "tag", component: ExpenseCategoriesScreen, module: "expense" },
+              { routeName: "ExpenseReports", label: "Expense Reports", icon: "bar-chart-2", component: ExpenseReportsScreen, module: "expense" },
+            ],
+          },
+        ],
       },
+      
       {
         label: "Communication", icon: "message-square", module: "communication_group",
         children: [
-          { routeName: "Notice Board", label: "Notice Board", icon: "clipboard", component: NoticeBoardScreen, module: "communication" },
+          { routeName: "Notice Board", label: "Notice Board", icon: "volume-2", component: NoticeBoardScreen, module: "communication" },
           { routeName: "Chat", label: "Chat / Messages", icon: "message-circle", component: ChatScreen, module: "communication" },
         ]
       },
@@ -128,20 +212,37 @@ const MENU_STRUCTURE: MenuSection[] = [
   }
 ];
 
-// Flat route list for the Navigator
-const FLAT_ROUTES: MenuItem[] = [];
-MENU_STRUCTURE.forEach(section => {
-  section.items.forEach(item => {
-    if (item.children) item.children.forEach(child => FLAT_ROUTES.push(child));
-    else FLAT_ROUTES.push(item);
-  });
-});
+// Flat route list for the Navigator (works at any nesting depth)
+const getAllRoutes = (items: MenuItem[]): MenuItem[] => {
+  const routes: MenuItem[] = [];
 
-// --- Core RBAC Check ---
-// A module is visible ONLY if the user has 'read' or 'readOwn' for it.
+  items.forEach((item) => {
+    if (item.children && item.children.length > 0) {
+      routes.push(...getAllRoutes(item.children));
+    } else if (item.routeName && item.component) {
+      routes.push(item);
+    }
+  });
+
+  return routes;
+};
+
+const FLAT_ROUTES: MenuItem[] = MENU_STRUCTURE.flatMap((section) =>
+  getAllRoutes(section.items)
+);
+
 function hasReadPermission(permissions: Permission[], isSuperAdmin: boolean, module: string): boolean {
   if (isSuperAdmin) return true;
   return permissions.some((p) => p.module === module && (p.action === 'read' || p.action === 'readOwn'));
+}
+
+
+function containsRoute(item: MenuItem, routeName: string): boolean {
+  if (item.routeName === routeName) return true;
+  if (item.children && item.children.length > 0) {
+    return item.children.some((child) => containsRoute(child, routeName));
+  }
+  return false;
 }
 
 const getInitials = (name: string) => {
@@ -166,10 +267,6 @@ const handleGlobalLogout = (navigation: any) => {
   ]);
 };
 
-// ---------------------------------------------------------------------
-// 1. Right Header Component (App Bar Avatar)
-// Resolves the Status Bar overlap by using native navigation headers
-// ---------------------------------------------------------------------
 const HeaderRightAvatar = () => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [userName, setUserName] = useState("User");
@@ -226,8 +323,106 @@ const HeaderRightAvatar = () => {
   );
 };
 
+function DrawerMenuNode({
+  item,
+  depth,
+  path,
+  currentRouteName,
+  expandedGroups,
+  toggleGroup,
+  navigation,
+}: {
+  item: MenuItem;
+  depth: number;
+  path: string;
+  currentRouteName: string;
+  expandedGroups: Record<string, boolean>;
+  toggleGroup: (key: string) => void;
+  navigation: any;
+}) {
+  const nodeKey = `${path}/${item.label}`;
+  const hasChildren = !!item.children && item.children.length > 0;
+  const isActive = containsRoute(item, currentRouteName);
+
+  // --- Leaf route (has routeName + component, no children) ---
+  if (!hasChildren) {
+    const active = item.routeName === currentRouteName;
+
+    if (depth === 0) {
+      return (
+        <TouchableOpacity
+          style={[styles.drawerItem, active && styles.drawerItemActive]}
+          onPress={() => item.routeName && navigation.navigate(item.routeName)}
+        >
+          <View style={[styles.drawerIconBox, active && styles.drawerIconBoxActive]}>
+            <Feather name={item.icon as any} size={16} color={active ? "#ffffff" : "#ef4444"} />
+          </View>
+          <Text style={[styles.drawerItemText, active && styles.drawerItemTextActive]}>{item.label}</Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        style={[styles.childDrawerItem, active && styles.childDrawerItemActive]}
+        onPress={() => item.routeName && navigation.navigate(item.routeName)}
+      >
+        <Feather name={item.icon as any} size={14} color={active ? "#ef4444" : "#9CA3AF"} style={{ marginRight: 12 }} />
+        <Text style={[styles.childDrawerItemText, active && styles.childDrawerItemTextActive]}>{item.label}</Text>
+        {active && <View style={styles.childActiveDot} />}
+      </TouchableOpacity>
+    );
+  }
+
+  // --- Group node (has children, at any depth) — toggles only ---
+  const isExpanded = !!expandedGroups[nodeKey];
+
+  return (
+    <View>
+      {depth === 0 ? (
+        <TouchableOpacity
+          style={[styles.drawerItem, isActive && styles.drawerItemActive]}
+          onPress={() => toggleGroup(nodeKey)}
+        >
+          <View style={[styles.drawerIconBox, isActive && styles.drawerIconBoxActive]}>
+            <Feather name={item.icon as any} size={16} color={isActive ? "#ffffff" : "#ef4444"} />
+          </View>
+          <Text style={[styles.drawerItemText, isActive && styles.drawerItemTextActive]}>{item.label}</Text>
+          <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={16} color={isActive ? "#ef4444" : "#9CA3AF"} />
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          style={[styles.childDrawerItem, isActive && styles.childDrawerItemActive]}
+          onPress={() => toggleGroup(nodeKey)}
+        >
+          <Feather name={item.icon as any} size={14} color={isActive ? "#ef4444" : "#9CA3AF"} style={{ marginRight: 12 }} />
+          <Text style={[styles.childDrawerItemText, isActive && styles.childDrawerItemTextActive, { flex: 1 }]}>{item.label}</Text>
+          <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={14} color={isActive ? "#ef4444" : "#9CA3AF"} />
+        </TouchableOpacity>
+      )}
+
+      {isExpanded && (
+        <View style={styles.childrenContainer}>
+          {item.children!.map((child) => (
+            <DrawerMenuNode
+              key={child.label}
+              item={child}
+              depth={depth + 1}
+              path={nodeKey}
+              currentRouteName={currentRouteName}
+              expandedGroups={expandedGroups}
+              toggleGroup={toggleGroup}
+              navigation={navigation}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ---------------------------------------------------------------------
-// 2. Custom Drawer Content
+// 3. Custom Drawer Content
 // ---------------------------------------------------------------------
 function CustomDrawerContent(props: any) {
   const [userName, setUserName] = useState("Loading...");
@@ -243,19 +438,29 @@ function CustomDrawerContent(props: any) {
       if (name) setUserName(name); 
       if (role) setUserRole(role);
 
-      // Auto-expand the active group
-      props.filteredMenu.forEach((section: MenuSection) => {
-        section.items.forEach(item => {
-          if (item.children && item.children.some(c => c.routeName === currentRouteName)) {
-            setExpandedGroups(prev => ({ ...prev, [item.label]: true }));
+      // Auto-expand every ancestor group (at any depth) that leads to the
+      // currently active route — e.g. opening a screen under
+      // Financials -> Fees Management now expands BOTH levels, not just one.
+      const toExpand: Record<string, boolean> = {};
+      const walk = (items: MenuItem[], path: string) => {
+        items.forEach((node) => {
+          if (node.children && node.children.length > 0) {
+            const nodeKey = `${path}/${node.label}`;
+            if (containsRoute(node, currentRouteName)) {
+              toExpand[nodeKey] = true;
+            }
+            walk(node.children, nodeKey);
           }
         });
-      });
+      };
+      props.filteredMenu.forEach((section: MenuSection) => walk(section.items, section.section));
+
+      setExpandedGroups((prev) => ({ ...prev, ...toExpand }));
     })();
   }, [currentRouteName, props.filteredMenu]);
 
-  const toggleGroup = (groupLabel: string) => {
-    setExpandedGroups(prev => ({ ...prev, [groupLabel]: !prev[groupLabel] }));
+  const toggleGroup = (nodeKey: string) => {
+    setExpandedGroups((prev) => ({ ...prev, [nodeKey]: !prev[nodeKey] }));
   };
 
   return (
@@ -275,53 +480,24 @@ function CustomDrawerContent(props: any) {
 
         <View style={styles.separator} />
 
-        {/* Menu Rendering */}
+        {/* Menu Rendering — recursive, any depth */}
         <View style={styles.menuContainer}>
           {props.filteredMenu.map((section: MenuSection) => (
             <View key={section.section}>
               <Text style={styles.sectionHeaderTitle}>{section.section}</Text>
-              
-              {section.items.map((item) => {
-                const hasChildren = item.children && item.children.length > 0;
-                const isChildActive = hasChildren && item.children!.some(c => c.routeName === currentRouteName);
-                const isItemActive = item.routeName === currentRouteName || isChildActive;
-                const isExpanded = expandedGroups[item.label];
 
-                return (
-                  <View key={item.label}>
-                    {/* Parent Menu Item */}
-                    <TouchableOpacity
-                      style={[styles.drawerItem, isItemActive && styles.drawerItemActive]}
-                      onPress={() => {
-                        if (hasChildren) toggleGroup(item.label);
-                        else props.navigation.navigate(item.routeName);
-                      }}
-                    >
-                      <View style={[styles.drawerIconBox, isItemActive ? styles.drawerIconBoxActive : null]}>
-                        <Feather name={item.icon as any} size={16} color={isItemActive ? "#ffffff" : "#ef4444"} />
-                      </View>
-                      <Text style={[styles.drawerItemText, isItemActive && styles.drawerItemTextActive]}>{item.label}</Text>
-                      {hasChildren && <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={16} color={isItemActive ? "#ef4444" : "#9CA3AF"} />}
-                    </TouchableOpacity>
-
-                    {/* Children Sub-Menu */}
-                    {hasChildren && isExpanded && (
-                      <View style={styles.childrenContainer}>
-                        {item.children!.map((child) => {
-                          const childActive = currentRouteName === child.routeName;
-                          return (
-                            <TouchableOpacity key={child.label} style={[styles.childDrawerItem, childActive && styles.childDrawerItemActive]} onPress={() => props.navigation.navigate(child.routeName)}>
-                              <Feather name={child.icon as any} size={14} color={childActive ? "#ef4444" : "#9CA3AF"} style={{ marginRight: 12 }} />
-                              <Text style={[styles.childDrawerItemText, childActive && styles.childDrawerItemTextActive]}>{child.label}</Text>
-                              {childActive && <View style={styles.childActiveDot} />}
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
+              {section.items.map((item) => (
+                <DrawerMenuNode
+                  key={item.label}
+                  item={item}
+                  depth={0}
+                  path={section.section}
+                  currentRouteName={currentRouteName}
+                  expandedGroups={expandedGroups}
+                  toggleGroup={toggleGroup}
+                  navigation={props.navigation}
+                />
+              ))}
             </View>
           ))}
         </View>
@@ -342,60 +518,128 @@ function CustomDrawerContent(props: any) {
 }
 
 // ---------------------------------------------------------------------
-// 3. Drawer Root (Evaluates RBAC dynamically)
+// 4. Drawer Root (Evaluates RBAC dynamically)
 // ---------------------------------------------------------------------
 function DrawerRoot() {
   const [filteredMenu, setFilteredMenu] = useState<MenuSection[] | null>(null);
   const [visibleRoutes, setVisibleRoutes] = useState<MenuItem[]>([]);
 
-  useEffect(() => {
-    (async () => {
+ useEffect(() => {
+  const loadMenu = async () => {
+    try {
       const [permsRaw, superAdminRaw] = await Promise.all([
         AsyncStorage.getItem("userPermissions"),
         AsyncStorage.getItem("isSuperAdmin"),
       ]);
 
-      const permissions: Permission[] = permsRaw ? JSON.parse(permsRaw) : [];
+      let permissions: Permission[] = [];
+
+      try {
+        permissions = permsRaw ? JSON.parse(permsRaw) : [];
+      } catch (error) {
+        console.error("Failed to parse user permissions:", error);
+        permissions = [];
+      }
+
       const isSuperAdmin = superAdminRaw === "true";
 
-      const finalMenu: MenuSection[] = [];
-      const tempRoutes: MenuItem[] = [];
+      const filterMenuItems = (items: MenuItem[]): MenuItem[] => {
+        return items
+          .map((item) => {
+            // If the item has children, recursively filter them
+            if (item.children && item.children.length > 0) {
+              const validChildren = filterMenuItems(item.children);
 
-      MENU_STRUCTURE.forEach(section => {
-        const validItems: MenuItem[] = [];
-        
-        section.items.forEach(item => {
-          if (item.children) {
-            // Group: Filter children based on read/readOwn permission
-            const validChildren = item.children.filter(child => hasReadPermission(permissions, isSuperAdmin, child.module));
-            
-            // If at least one child is accessible, render the group
-            if (validChildren.length > 0) {
-              validItems.push({ ...item, children: validChildren });
-              validChildren.forEach(c => tempRoutes.push(c));
+              if (validChildren.length === 0) {
+                return null;
+              }
+
+              return {
+                ...item,
+                children: validChildren,
+              };
             }
-          } else {
-            // Single Item: Check permission directly
-            if (hasReadPermission(permissions, isSuperAdmin, item.module)) {
-              validItems.push(item);
-              tempRoutes.push(item);
+
+            // Only actual screens with routeName + component are valid routes
+            if (
+              item.routeName &&
+              item.component &&
+              hasReadPermission(
+                permissions,
+                isSuperAdmin,
+                item.module
+              )
+            ) {
+              return item;
             }
+
+            return null;
+          })
+          .filter(Boolean) as MenuItem[];
+      };
+
+      const finalMenu: MenuSection[] = MENU_STRUCTURE
+        .map((section) => {
+          const validItems = filterMenuItems(section.items);
+
+          return {
+            section: section.section,
+            items: validItems,
+          };
+        })
+        .filter((section) => section.items.length > 0);
+
+      // Get only valid leaf routes (works at any nesting depth)
+      const getVisibleRoutes = (items: MenuItem[]): MenuItem[] => {
+        const routes: MenuItem[] = [];
+
+        items.forEach((item) => {
+          if (item.children && item.children.length > 0) {
+            routes.push(...getVisibleRoutes(item.children));
+          } else if (item.routeName && item.component) {
+            routes.push(item);
           }
         });
 
-        if (validItems.length > 0) {
-          finalMenu.push({ section: section.section, items: validItems });
-        }
-      });
+        return routes;
+      };
 
-      setFilteredMenu(finalMenu.length > 0 ? finalMenu : [MENU_STRUCTURE[0]]);
-      setVisibleRoutes(tempRoutes.length > 0 ? tempRoutes : [FLAT_ROUTES[0]]);
-    })();
-  }, []);
+      const routes = finalMenu.flatMap((section) =>
+        getVisibleRoutes(section.items)
+      );
 
-  if (!filteredMenu) {
-    return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#ef4444" /></View>;
-  }
+      // Safety fallback
+      if (routes.length === 0) {
+        console.warn("No accessible routes found");
+
+        setFilteredMenu([]);
+        setVisibleRoutes([]);
+        return;
+      }
+
+      setFilteredMenu(finalMenu);
+      setVisibleRoutes(routes);
+
+    } catch (error) {
+      console.error("Error loading navigation menu:", error);
+      setFilteredMenu([]);
+      setVisibleRoutes([]);
+    }
+  };
+
+  loadMenu();
+}, []);
+
+  if (!filteredMenu || visibleRoutes.length === 0) {
+  return (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color="#ef4444" />
+      <Text style={{ marginTop: 12, color: "#6B7280" }}>
+        Loading accessible modules...
+      </Text>
+    </View>
+  );
+}
 
   return (
     <Drawer.Navigator
@@ -473,7 +717,7 @@ const styles = StyleSheet.create({
   drawerItemText: { fontSize: 14, fontWeight: '700', color: '#4B5563', flex: 1 },
   drawerItemTextActive: { color: '#ef4444' },
   
-  // --- Nested Children ---
+  // --- Nested Children (reused recursively at every depth below 0) ---
   childrenContainer: { marginLeft: 28, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: '#F3F4F6', marginBottom: 8, marginTop: 4 },
   childDrawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10 },
   childDrawerItemActive: { backgroundColor: '#F9FAFB' },
@@ -486,6 +730,6 @@ const styles = StyleSheet.create({
   footerTextContainer: { flex: 1 },
   footerName: { fontSize: 15, fontWeight: '800', color: '#111827' },
   footerRoleBadge: { backgroundColor: '#E0F2FE', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 6 },
-  footerRole: { fontSize: 10, fontWeight: '800', color: '#0284C7', textTransform: 'uppercase' },
+  footerRole: { fontSize: 10, fontWeight: '800', color: '#ef4444', textTransform: 'uppercase' },
   footerLogoutBtn: { padding: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#FEE2E2', shadowColor: '#ef4444', shadowOpacity: 0.1, shadowRadius: 4, elevation: 1 },
 });
