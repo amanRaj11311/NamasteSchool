@@ -8,7 +8,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 // ---------------------------------------------------------------------------
 // Design tokens — premium red/coral brand system
@@ -62,8 +62,8 @@ export default function SalaryReportsScreen() {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const [monthRes, typeRes] = await Promise.all([
-        axios.get(`${BASE_URL}/salary/reports/month-wise`, authHeaders(token)),
-        axios.get(`${BASE_URL}/salary/reports/staff-type-wise`, { params: { month: selectedMonth }, ...authHeaders(token) }),
+        axios.get(`${API_BASE}/salary/reports/month-wise`, authHeaders(token)),
+        axios.get(`${API_BASE}/salary/reports/staff-type-wise`, { params: { month: selectedMonth }, ...authHeaders(token) }),
       ]);
       
       if (monthRes.data?.success) setMonthWise(monthRes.data.data || []);

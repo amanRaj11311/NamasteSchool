@@ -8,7 +8,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 // ---------------------------------------------------------------------------
 // Design tokens — premium red/coral brand system
@@ -80,7 +80,7 @@ export default function GalleryEventsScreen() {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const params = q ? { search: q } : {};
-      const res = await axios.get(`${BASE_URL}/gallery/events`, { params, ...authHeaders(token) });
+      const res = await axios.get(`${API_BASE}/gallery/events`, { params, ...authHeaders(token) });
       if (res.data?.success) setEvents(res.data.data || []);
     } catch (err) { console.error(err); } 
     finally { setLoading(false); setRefreshing(false); }
@@ -102,10 +102,10 @@ export default function GalleryEventsScreen() {
     try {
       const payload = { ...form, eventDate: formatToYMD(form.eventDate) };
       if (editingId) {
-        await axios.put(`${BASE_URL}/gallery/events/${editingId}`, payload, authHeaders(authToken));
+        await axios.put(`${API_BASE}/gallery/events/${editingId}`, payload, authHeaders(authToken));
         Alert.alert('Success', 'Event updated successfully');
       } else {
-        await axios.post(`${BASE_URL}/gallery/events`, payload, authHeaders(authToken));
+        await axios.post(`${API_BASE}/gallery/events`, payload, authHeaders(authToken));
         Alert.alert('Success', 'Event created successfully');
       }
       setShowModal(false);
@@ -119,7 +119,7 @@ export default function GalleryEventsScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
           try {
-            await axios.delete(`${BASE_URL}/gallery/events/${id}`, authHeaders(authToken));
+            await axios.delete(`${API_BASE}/gallery/events/${id}`, authHeaders(authToken));
             fetchEvents(authToken, search, true);
           } catch (e) { Alert.alert('Error', 'Failed to delete event'); }
       }}
@@ -131,14 +131,14 @@ export default function GalleryEventsScreen() {
     if (!selectedEvent || !newPhotoUrl.trim()) { Alert.alert('Error', 'Photo URL is required'); return; }
     setUploadingPhoto(true);
     try {
-      await axios.post(`${BASE_URL}/gallery/events/${selectedEvent._id}/photos`, {
+      await axios.post(`${API_BASE}/gallery/events/${selectedEvent._id}/photos`, {
         photos: [{ url: newPhotoUrl.trim(), caption: newPhotoCaption.trim() }],
       }, authHeaders(authToken));
       
       setNewPhotoUrl(''); setNewPhotoCaption('');
       
       // Refresh active event
-      const updated = await axios.get(`${BASE_URL}/gallery/events/${selectedEvent._id}`, authHeaders(authToken));
+      const updated = await axios.get(`${API_BASE}/gallery/events/${selectedEvent._id}`, authHeaders(authToken));
       if (updated.data?.data) setSelectedEvent(updated.data.data);
       fetchEvents(authToken, search, true);
     } catch (e) { Alert.alert('Error', 'Failed to add photo'); } 
@@ -151,8 +151,8 @@ export default function GalleryEventsScreen() {
       { text: 'Delete', style: 'destructive', onPress: async () => {
           if (!selectedEvent) return;
           try {
-            await axios.delete(`${BASE_URL}/gallery/events/${selectedEvent._id}/photos/${photoId}`, authHeaders(authToken));
-            const updated = await axios.get(`${BASE_URL}/gallery/events/${selectedEvent._id}`, authHeaders(authToken));
+            await axios.delete(`${API_BASE}/gallery/events/${selectedEvent._id}/photos/${photoId}`, authHeaders(authToken));
+            const updated = await axios.get(`${API_BASE}/gallery/events/${selectedEvent._id}`, authHeaders(authToken));
             if (updated.data?.data) setSelectedEvent(updated.data.data);
             fetchEvents(authToken, search, true);
           } catch (e) { Alert.alert('Error', 'Failed to delete photo'); }
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
   filterSection: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border, zIndex: 10 },
   searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceSoft, borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingHorizontal: 12, height: 44 },
   searchInput: { flex: 1, marginLeft: 8, fontSize: 14, color: C.text },
-  addBtnFull: { backgroundColor: '#111827', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, height: 44, borderRadius: 10, marginLeft: 10, elevation: 2 },
+  addBtnFull: { backgroundColor: '#ef4444', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, height: 44, borderRadius: 10, marginLeft: 10, elevation: 2 },
   addBtnTextFull: { color: '#fff', fontSize: 13, fontWeight: '800', marginLeft: 6 },
 
   listContent: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 16 },

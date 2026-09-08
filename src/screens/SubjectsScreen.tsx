@@ -51,6 +51,34 @@ const initialFormState: Subject = {
   schoolId: ''
 };
 
+// --- Palette (back to the original red brand color, kept as one system) ---
+const COLORS = {
+  bg: '#F4F7F9',
+  surface: '#FFFFFF',
+  border: '#E5E7EB',
+  borderSoft: '#F3F4F6',
+  text: '#111827',
+  textMuted: '#6B7280',
+  textFaint: '#9CA3AF',
+  primary: '#ef4444',        // original red — primary brand action
+  primarySoft: '#FEF2F2',
+  primaryBorder: '#FECACA',
+  accent: '#ef4444',         // destructive / delete uses the same brand red
+  accentSoft: '#FEF2F2',
+  success: '#10B981',
+  successSoft: '#ECFDF5',
+  info: '#3B82F6',
+  infoSoft: '#EFF6FF',
+};
+
+function getInitials(name: string) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  return parts.length === 1
+    ? parts[0].slice(0, 2).toUpperCase()
+    : (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
 export default function SubjectsScreen() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
@@ -61,7 +89,7 @@ export default function SubjectsScreen() {
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  
+
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -70,7 +98,8 @@ export default function SubjectsScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Subject>(initialFormState);
   const [errors, setErrors] = useState<Partial<Subject>>({});
-  
+  const [saving, setSaving] = useState(false);
+
   // Inline Dropdown Tracker
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
 
@@ -86,7 +115,7 @@ export default function SubjectsScreen() {
     const token = await AsyncStorage.getItem('userToken');
     const permsRaw = await AsyncStorage.getItem('userPermissions');
     const superAdminRaw = await AsyncStorage.getItem('isSuperAdmin');
-    
+
     if (permsRaw) setPermissions(JSON.parse(permsRaw));
     setIsSuperAdmin(superAdminRaw === 'true');
     setAuthToken(token);
@@ -127,8 +156,8 @@ export default function SubjectsScreen() {
   }, [permissions, isSuperAdmin]);
 
   // --- Filtering ---
-  const filteredSubjects = subjects.filter(subject => 
-    subject.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const filteredSubjects = subjects.filter(subject =>
+    subject.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     subject.code.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -155,9 +184,9 @@ export default function SubjectsScreen() {
   };
 
   const handleDelete = (id: string) => {
-    Alert.alert("Delete Subject", "Are you sure you want to delete this subject?", [
+    Alert.alert("Delete Subject", "Are you sure you want to delete this subject? This action cannot be undone.", [
       { text: "Cancel", style: "cancel" },
-      { 
+      {
         text: "Delete", style: "destructive",
         onPress: async () => {
           try {
@@ -175,7 +204,7 @@ export default function SubjectsScreen() {
 
     if (!formData.name.trim()) { newErrors.name = 'Required'; isValid = false; }
     if (!formData.code.trim()) { newErrors.code = 'Required'; isValid = false; }
-    
+
     setErrors(newErrors);
     return isValid;
   };
@@ -183,6 +212,7 @@ export default function SubjectsScreen() {
   const handleSave = async () => {
     if (!validateForm()) return;
     try {
+      setSaving(true);
       const payload = { ...formData };
       if (editingId) {
         await axios.put(`${API_BASE}/subjects/${editingId}`, payload, { headers: { Authorization: `Bearer ${authToken}` } });
@@ -195,10 +225,12 @@ export default function SubjectsScreen() {
       fetchData(authToken, true);
     } catch (e: any) {
       Alert.alert("Error", e.response?.data?.message || "Failed to save subject.");
+    } finally {
+      setSaving(false);
     }
   };
 
-  // --- Premium Inline Dropdown Renderer ---
+  // --- Inline Dropdown Renderer ---
   const renderInlineDropdown = () => {
     const isOpen = activeDropdown === 'schoolBranch';
     const selectedSchool = schools.find(s => s._id === formData.schoolId);
@@ -206,23 +238,26 @@ export default function SubjectsScreen() {
     return (
       <View style={styles.inputWrapper}>
         <Text style={styles.inputLabel}>School Branch <Text style={styles.asterisk}>*</Text></Text>
-        <TouchableOpacity 
-          style={[styles.dropdownHeader, isOpen && styles.dropdownHeaderActive]} 
+        <TouchableOpacity
+          style={[styles.dropdownHeader, isOpen && styles.dropdownHeaderActive]}
           onPress={() => setActiveDropdown(isOpen ? null : 'schoolBranch')}
-          activeOpacity={0.8}
+          activeOpacity={0.7}
         >
-          <Text style={selectedSchool ? styles.dropdownSelectedText : styles.dropdownPlaceholder} numberOfLines={1}>
-            {selectedSchool?.name || `Select Branch...`}
-          </Text>
-          <Feather name={isOpen ? "chevron-up" : "chevron-down"} size={18} color="#6B7280" />
+          <View style={styles.dropdownHeaderLeft}>
+            <Feather name="home" size={15} color={selectedSchool ? COLORS.primary : COLORS.textFaint} />
+            <Text style={selectedSchool ? styles.dropdownSelectedText : styles.dropdownPlaceholder} numberOfLines={1}>
+              {selectedSchool?.name || `Select a branch`}
+            </Text>
+          </View>
+          <Feather name={isOpen ? "chevron-up" : "chevron-down"} size={18} color={COLORS.textMuted} />
         </TouchableOpacity>
-        
+
         {isOpen && (
           <View style={styles.dropdownListContainer}>
             <ScrollView nestedScrollEnabled style={styles.dropdownScroll} showsVerticalScrollIndicator={false}>
               {schools.map((school, index) => (
-                <TouchableOpacity 
-                  key={school._id} 
+                <TouchableOpacity
+                  key={school._id}
                   style={[styles.dropdownItem, index !== schools.length - 1 && styles.dropdownItemBorder]}
                   onPress={() => {
                     setFormData({ ...formData, schoolId: school._id });
@@ -232,7 +267,7 @@ export default function SubjectsScreen() {
                   <Text style={[styles.dropdownItemText, formData.schoolId === school._id && styles.dropdownItemTextActive]}>
                     {school.name}
                   </Text>
-                  {formData.schoolId === school._id && <Feather name="check" size={16} color="#ef4444" />}
+                  {formData.schoolId === school._id && <Feather name="check" size={16} color={COLORS.primary} />}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -245,37 +280,50 @@ export default function SubjectsScreen() {
   // --- Render Subject Card ---
   const renderCard = ({ item }: { item: Subject }) => (
     <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.subjectName} numberOfLines={1}>{item.name}</Text>
-        <View style={styles.codeBadge}><Text style={styles.codeBadgeText}>CODE: {item.code}</Text></View>
+      <View style={styles.cardTopRow}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
+        </View>
+
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.subjectName} numberOfLines={1}>{item.name}</Text>
+            <View style={styles.codeBadge}>
+              <Text style={styles.codeBadgeText}>{item.code}</Text>
+            </View>
+          </View>
+          {!!item.nickname && (
+            <Text style={styles.subjectNick} numberOfLines={1}>{item.nickname}</Text>
+          )}
+        </View>
       </View>
-      
-      <Text style={styles.subjectNick}>"{item.nickname || 'No nickname'}"</Text>
 
       {item.shortDescription ? (
         <Text style={styles.descText} numberOfLines={2}>{item.shortDescription}</Text>
       ) : (
-        <Text style={[styles.descText, {fontStyle: 'italic', color: '#9CA3AF'}]}>No description provided.</Text>
+        <Text style={[styles.descText, styles.descTextEmpty]}>No description provided.</Text>
       )}
 
       <View style={styles.cardActions}>
-        <View style={styles.actionBtnGroup}>
-          {hasPermission('read') && (
-            <TouchableOpacity style={styles.actionBtn} onPress={() => openViewModal(item)}>
-              <Feather name="eye" size={14} color="#3B82F6" /><Text style={[styles.actionBtnText, {color: '#3B82F6'}]}>View</Text>
-            </TouchableOpacity>
-          )}
-          {hasPermission('update') && (
-            <TouchableOpacity style={styles.actionBtn} onPress={() => openEditForm(item)}>
-              <Feather name="edit" size={14} color="#10B981" /><Text style={[styles.actionBtnText, {color: '#10B981'}]}>Edit</Text>
-            </TouchableOpacity>
-          )}
-          {hasPermission('delete') && (
-            <TouchableOpacity style={[styles.actionBtn, {borderColor: '#FEE2E2', backgroundColor: '#FEF2F2'}]} onPress={() => handleDelete(item._id || item.id!)}>
-              <Feather name="trash-2" size={14} color="#ef4444" /><Text style={[styles.actionBtnText, {color: '#ef4444'}]}>Delete</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        {hasPermission('read') && (
+          <TouchableOpacity style={styles.iconAction} onPress={() => openViewModal(item)} hitSlop={8}>
+            <Feather name="eye" size={16} color={COLORS.info} />
+          </TouchableOpacity>
+        )}
+        {hasPermission('update') && (
+          <TouchableOpacity style={styles.iconAction} onPress={() => openEditForm(item)} hitSlop={8}>
+            <Feather name="edit-2" size={15} color={COLORS.success} />
+          </TouchableOpacity>
+        )}
+        {hasPermission('delete') && (
+          <TouchableOpacity
+            style={[styles.iconAction, styles.iconActionDanger]}
+            onPress={() => handleDelete(item._id || item.id!)}
+            hitSlop={8}
+          >
+            <Feather name="trash-2" size={15} color={COLORS.accent} />
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -284,142 +332,206 @@ export default function SubjectsScreen() {
     <SafeAreaView style={styles.container}>
       {/* Main Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Subjects Manager</Text>
-        <Text style={styles.subtitle}>Manage subjects, codes, and their descriptions.</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Subjects</Text>
+          <Text style={styles.subtitle}>Manage subjects, codes, and descriptions</Text>
+        </View>
+        <View style={styles.countPill}>
+          <Text style={styles.countPillText}>{subjects.length}</Text>
+        </View>
       </View>
 
       <View style={styles.actionBar}>
         <View style={styles.searchContainer}>
-          <Feather name="search" size={18} color="#9CA3AF" />
-          <TextInput 
-            style={styles.searchInput} 
-            placeholder="Search subjects by name or code..." 
-            value={searchQuery} 
-            onChangeText={setSearchQuery} 
+          <Feather name="search" size={17} color={COLORS.textFaint} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by name or code"
+            placeholderTextColor={COLORS.textFaint}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Feather name="x-circle" size={16} color="#9CA3AF" />
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={8}>
+              <Feather name="x-circle" size={16} color={COLORS.textFaint} />
             </TouchableOpacity>
           )}
         </View>
         {hasPermission('create') && (
-          <TouchableOpacity style={styles.addBtn} onPress={openAddForm}>
-            <Feather name="plus" size={18} color="#fff" />
+          <TouchableOpacity style={styles.addBtn} onPress={openAddForm} activeOpacity={0.85}>
+            <Feather name="plus" size={20} color="#fff" />
           </TouchableOpacity>
         )}
       </View>
 
       {/* List */}
       {loading ? (
-        <View style={styles.center}><ActivityIndicator size="large" color="#ef4444" /></View>
+        <View style={styles.center}><ActivityIndicator size="large" color={COLORS.primary} /></View>
       ) : (
         <FlatList
           data={filteredSubjects}
           keyExtractor={(item, idx) => item._id || item.id || idx.toString()}
           renderItem={renderCard}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#ef4444']} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} tintColor={COLORS.primary} />}
           ListEmptyComponent={
-            <View style={styles.center}>
-              <Feather name="book" size={40} color="#D1D5DB" />
-              <Text style={{color: '#6B7280', marginTop: 10, fontWeight: '500'}}>No subjects found.</Text>
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconWrap}>
+                <Feather name="book-open" size={30} color={COLORS.primary} />
+              </View>
+              <Text style={styles.emptyTitle}>No subjects yet</Text>
+              <Text style={styles.emptySubtitle}>
+                {searchQuery ? 'No subjects match your search.' : 'Create your first subject to get started.'}
+              </Text>
+              {hasPermission('create') && !searchQuery && (
+                <TouchableOpacity style={styles.emptyCta} onPress={openAddForm} activeOpacity={0.85}>
+                  <Feather name="plus" size={16} color="#fff" />
+                  <Text style={styles.emptyCtaText}>New Subject</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
         />
       )}
 
-      {/* --- ADD/EDIT FORM MODAL --- */}
-      <Modal visible={isFormVisible} animationType="slide">
-        <SafeAreaView style={styles.formContainer}>
-          <View style={styles.formHeader}>
-            <Text style={styles.formTitle}>{editingId ? 'Edit Subject' : 'Create Subject'}</Text>
-            <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}>
-              <Feather name="x" size={22} color="#4B5563" />
-            </TouchableOpacity>
-          </View>
+      {/* --- ADD/EDIT FORM (centered mid-screen dialog) --- */}
+      <Modal visible={isFormVisible} transparent animationType="fade" onRequestClose={() => setFormVisible(false)}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.formOverlay}
+        >
+          <View style={styles.formDialog}>
+            <View style={styles.formHeader}>
+              <Text style={styles.formTitle}>{editingId ? 'Edit Subject' : 'New Subject'}</Text>
+              <TouchableOpacity
+                onPress={() => setFormVisible(false)}
+                style={styles.closeBtnIcon}
+                hitSlop={10}
+                accessibilityLabel="Cancel"
+              >
+                <Text style={styles.closeBtnGlyph}>{'\u2715'}</Text>
+              </TouchableOpacity>
+            </View>
 
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex: 1}}>
-            <ScrollView contentContainerStyle={styles.formScroll} keyboardShouldPersistTaps="handled">
-              
-              <View style={styles.formCard}>
+            <ScrollView
+              style={styles.formDialogScroll}
+              contentContainerStyle={styles.formScroll}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.sectionTitleRow}>
+                <Feather name="book" size={14} color={COLORS.primary} />
                 <Text style={styles.sectionTitle}>Subject Information</Text>
-                
-                {/* Inline School Branch Selector */}
-                {schools.length > 0 && renderInlineDropdown()}
+              </View>
 
-                <View style={styles.row}>
-                  <View style={[styles.inputWrapper, {flex: 1, marginRight: 10}]}>
-                    <Text style={styles.inputLabel}>Subject Name <Text style={styles.asterisk}>*</Text></Text>
-                    <TextInput 
-                      style={[styles.input, errors.name && styles.inputError]} 
-                      placeholder="e.g. Chemistry" 
-                      value={formData.name} 
-                      onChangeText={t => { setFormData({...formData, name: t}); setErrors({...errors, name: undefined}); }} 
-                    />
-                  </View>
-                  <View style={[styles.inputWrapper, {flex: 1}]}>
-                    <Text style={styles.inputLabel}>Subject Nickname</Text>
-                    <TextInput 
-                      style={styles.input} 
-                      placeholder="e.g. CHE" 
-                      value={formData.nickname} 
-                      onChangeText={t => setFormData({...formData, nickname: t})} 
-                    />
-                  </View>
-                </View>
+              {/* Inline School Branch Selector */}
+              {schools.length > 0 && renderInlineDropdown()}
 
-                <View style={styles.inputWrapper}>
-                  <Text style={styles.inputLabel}>Subject Code <Text style={styles.asterisk}>*</Text></Text>
-                  <TextInput 
-                    style={[styles.input, errors.code && styles.inputError]} 
-                    placeholder="e.g. 112" 
-                    value={formData.code} 
-                    onChangeText={t => { setFormData({...formData, code: t}); setErrors({...errors, code: undefined}); }} 
+              <View style={styles.row}>
+                <View style={[styles.inputWrapper, { flex: 1, marginRight: 10 }]}>
+                  <Text style={styles.inputLabel}>Subject Name <Text style={styles.asterisk}>*</Text></Text>
+                  <TextInput
+                    style={[styles.input, errors.name && styles.inputError]}
+                    placeholder="e.g. Chemistry"
+                    placeholderTextColor={COLORS.textFaint}
+                    value={formData.name}
+                    onChangeText={t => { setFormData({ ...formData, name: t }); setErrors({ ...errors, name: undefined }); }}
                   />
+                  {!!errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
                 </View>
-
-                <View style={styles.inputWrapper}>
-                  <Text style={styles.inputLabel}>Short Description</Text>
-                  <TextInput 
-                    style={[styles.input, {height: 80, textAlignVertical: 'top'}]} 
-                    placeholder="Optional brief description..." 
-                    multiline 
-                    value={formData.shortDescription} 
-                    onChangeText={t => setFormData({...formData, shortDescription: t})} 
+                <View style={[styles.inputWrapper, { flex: 1 }]}>
+                  <Text style={styles.inputLabel}>Nickname</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. CHE"
+                    placeholderTextColor={COLORS.textFaint}
+                    value={formData.nickname}
+                    onChangeText={t => setFormData({ ...formData, nickname: t })}
                   />
                 </View>
               </View>
 
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleSave}>
-                <Text style={styles.saveBtnFullText}>Submit Subject</Text>
-              </TouchableOpacity>
+              <View style={styles.inputWrapper}>
+                <Text style={styles.inputLabel}>Subject Code <Text style={styles.asterisk}>*</Text></Text>
+                <TextInput
+                  style={[styles.input, errors.code && styles.inputError]}
+                  placeholder="e.g. 112"
+                  placeholderTextColor={COLORS.textFaint}
+                  value={formData.code}
+                  onChangeText={t => { setFormData({ ...formData, code: t }); setErrors({ ...errors, code: undefined }); }}
+                />
+                {!!errors.code && <Text style={styles.errorText}>{errors.code}</Text>}
+              </View>
+
+              <View style={[styles.inputWrapper, { marginBottom: 4 }]}>
+                <Text style={styles.inputLabel}>Short Description</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Optional brief description..."
+                  placeholderTextColor={COLORS.textFaint}
+                  multiline
+                  value={formData.shortDescription}
+                  onChangeText={t => setFormData({ ...formData, shortDescription: t })}
+                />
+              </View>
             </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
+
+            <View style={styles.formFooter}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setFormVisible(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveBtnFull, saving && styles.saveBtnFullDisabled]}
+                onPress={handleSave}
+                disabled={saving}
+                activeOpacity={0.85}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Feather name={editingId ? 'check' : 'plus'} size={17} color="#fff" />
+                    <Text style={styles.saveBtnFullText}>{editingId ? 'Save Changes' : 'Create'}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* --- VIEW MODAL --- */}
-      <Modal visible={isViewVisible} transparent animationType="fade">
+      <Modal visible={isViewVisible} transparent animationType="fade" onRequestClose={() => setViewVisible(false)}>
         <View style={styles.overlay}>
           <View style={styles.viewModalContainer}>
             <View style={styles.viewHeader}>
-              <Text style={styles.viewTitle}>Subject Details</Text>
-              <TouchableOpacity onPress={() => setViewVisible(false)}><Feather name="x" size={24} color="#fff" /></TouchableOpacity>
-            </View>
-            <View style={{padding: 24}}>
-              <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6}}>
-                <Text style={styles.viewName}>{viewingSubject?.name}</Text>
-                <View style={styles.codeBadge}><Text style={styles.codeBadgeText}>CODE: {viewingSubject?.code}</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.viewHeaderLabel}>SUBJECT DETAILS</Text>
+                <Text style={styles.viewName} numberOfLines={1}>{viewingSubject?.name}</Text>
               </View>
-              <Text style={styles.schoolNick}>"{viewingSubject?.nickname || 'No nickname'}"</Text>
+              <TouchableOpacity onPress={() => setViewVisible(false)} style={styles.viewCloseBtn} hitSlop={10}>
+                <Text style={styles.viewCloseGlyph}>{'\u2715'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{ padding: 20 }} bounces={false}>
+              <View style={styles.viewMetaRow}>
+                <View style={styles.codeBadge}><Text style={styles.codeBadgeText}>{viewingSubject?.code}</Text></View>
+                {!!viewingSubject?.nickname && (
+                  <Text style={styles.schoolNick}>"{viewingSubject?.nickname}"</Text>
+                )}
+              </View>
 
               <View style={styles.viewSection}>
-                <Text style={styles.viewSectionTitle}><Feather name="file-text"/> SHORT DESCRIPTION</Text>
+                <Text style={styles.viewSectionTitle}>DESCRIPTION</Text>
                 {viewingSubject?.shortDescription ? (
                   <Text style={styles.viewText}>{viewingSubject.shortDescription}</Text>
                 ) : (
-                  <Text style={[styles.viewText, {fontStyle: 'italic', color: '#9CA3AF'}]}>No description provided.</Text>
+                  <Text style={[styles.viewText, styles.viewTextEmpty]}>No description provided.</Text>
                 )}
               </View>
 
@@ -430,13 +542,12 @@ export default function SubjectsScreen() {
                     {viewingSubject?.createdAt ? new Date(viewingSubject.createdAt).toLocaleDateString('en-GB') : 'N/A'}
                   </Text>
                 </View>
-                <View style={styles.metaBox}>
+                <View style={[styles.metaBox, styles.metaBoxLast]}>
                   <Text style={styles.metaLabel}>System ID</Text>
-                  <Text style={[styles.metaValue, {fontSize: 11, color: '#6B7280'}]}>{viewingSubject?._id}</Text>
+                  <Text style={styles.metaValueId} numberOfLines={1}>{viewingSubject?._id}</Text>
                 </View>
               </View>
-
-            </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -447,77 +558,261 @@ export default function SubjectsScreen() {
 
 // --- Styles ---
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F7F9' },
+  container: { flex: 1, backgroundColor: COLORS.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  title: { fontSize: 24, fontWeight: '800', color: '#111827' },
-  subtitle: { fontSize: 13, color: '#6B7280', marginTop: 4 },
-  
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    paddingBottom: 16,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderSoft,
+  },
+  title: { fontSize: 24, fontWeight: '800', color: COLORS.text, letterSpacing: 0.1 },
+  subtitle: { fontSize: 13, color: COLORS.textMuted, marginTop: 3 },
+  countPill: {
+    backgroundColor: COLORS.primarySoft,
+    minWidth: 34,
+    height: 34,
+    borderRadius: 17,
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primaryBorder,
+  },
+  countPillText: { color: COLORS.primary, fontWeight: '800', fontSize: 13 },
+
   actionBar: { flexDirection: 'row', padding: 16, gap: 10, zIndex: 10 },
-  searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 12, borderWidth: 1, borderColor: '#E5E7EB', shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
-  searchInput: { flex: 1, marginLeft: 8, height: 46, fontSize: 14, color: '#111827' },
-  addBtn: { backgroundColor: '#ef4444', width: 46, height: 46, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: '#ef4444', shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  searchInput: { flex: 1, marginLeft: 10, height: 46, fontSize: 14, color: COLORS.text },
+  addBtn: {
+    backgroundColor: COLORS.primary,
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
 
   listContent: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 4 },
-  card: { backgroundColor: '#fff', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#F3F4F6', elevation: 2 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  codeBadge: { backgroundColor: '#EFF6FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  codeBadgeText: { color: '#3B82F6', fontSize: 11, fontWeight: '700' },
-  subjectName: { fontSize: 18, fontWeight: '800', color: '#111827', flex: 1, marginRight: 10 },
-  subjectNick: { fontSize: 13, color: '#6B7280', fontStyle: 'italic', marginBottom: 12 },
-  descText: { fontSize: 13, color: '#4B5563', lineHeight: 18 },
-  
-  cardActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
-  actionBtnGroup: { flexDirection: 'row', gap: 8 },
-  actionBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, gap: 4, backgroundColor: '#fff' },
-  actionBtnText: { fontSize: 12, fontWeight: '700' },
 
-  // Add/Edit Form Premium Styles
-  formContainer: { flex: 1, backgroundColor: '#F4F7F9' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', elevation: 2 },
-  formTitle: { fontSize: 20, fontWeight: '800', color: '#111827' },
-  closeBtnIcon: { padding: 6, backgroundColor: '#F3F4F6', borderRadius: 20 },
-  formScroll: { padding: 16, paddingBottom: 40 },
-  formCard: { backgroundColor: '#fff', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB', elevation: 1 },
-  sectionTitle: { fontSize: 14, fontWeight: '800', color: '#111827', marginBottom: 16, letterSpacing: 0.5, textTransform: 'uppercase' },
-  
-  // Custom Input Styling
+  card: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: COLORS.borderSoft,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  cardTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: COLORS.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: { color: COLORS.primary, fontWeight: '800', fontSize: 14 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  codeBadge: { backgroundColor: COLORS.infoSoft, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 6, marginLeft: 8 },
+  codeBadgeText: { color: COLORS.info, fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
+  subjectName: { fontSize: 16, fontWeight: '800', color: COLORS.text, flexShrink: 1 },
+  subjectNick: { fontSize: 12.5, color: COLORS.textMuted, marginTop: 2 },
+  descText: { fontSize: 13, color: COLORS.textMuted, lineHeight: 19 },
+  descTextEmpty: { fontStyle: 'italic', color: COLORS.textFaint },
+
+  cardActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderSoft,
+  },
+  iconAction: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    backgroundColor: COLORS.bg,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconActionDanger: { backgroundColor: COLORS.accentSoft },
+
+  emptyState: { alignItems: 'center', paddingTop: 72, paddingHorizontal: 32 },
+  emptyIconWrap: {
+    width: 64, height: 64, borderRadius: 20, backgroundColor: COLORS.primarySoft,
+    justifyContent: 'center', alignItems: 'center', marginBottom: 16,
+  },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text, marginBottom: 6 },
+  emptySubtitle: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', lineHeight: 19 },
+  emptyCta: {
+    marginTop: 20, flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12,
+  },
+  emptyCtaText: { color: '#fff', fontWeight: '700', fontSize: 13.5 },
+
+  // Add/Edit Form — centered mid-screen dialog
+  formOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  formDialog: {
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '86%',
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+  },
+  formHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderSoft,
+  },
+  formTitle: { fontSize: 17, fontWeight: '800', color: COLORS.text },
+  closeBtnIcon: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: COLORS.bg, justifyContent: 'center', alignItems: 'center',
+  },
+  closeBtnGlyph: { fontSize: 15, color: COLORS.textMuted, fontWeight: '700', lineHeight: 16 },
+  formDialogScroll: { flexGrow: 0 },
+  formScroll: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 8 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 16 },
+  sectionTitle: { fontSize: 12.5, fontWeight: '800', color: COLORS.text, letterSpacing: 0.6, textTransform: 'uppercase' },
+
+  // Inputs
   inputWrapper: { marginBottom: 16 },
-  inputLabel: { fontSize: 12, fontWeight: '700', color: '#4B5563', marginBottom: 6, marginLeft: 2 },
-  asterisk: { color: '#ef4444' },
-  input: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, height: 48, backgroundColor: '#F9FAFB', fontSize: 14, color: '#111827' },
-  inputError: { borderColor: '#ef4444', backgroundColor: '#FEF2F2' },
+  inputLabel: { fontSize: 12, fontWeight: '700', color: COLORS.textMuted, marginBottom: 7, marginLeft: 2 },
+  asterisk: { color: COLORS.accent },
+  input: {
+    borderWidth: 1.2, borderColor: COLORS.border, borderRadius: 10, paddingHorizontal: 14,
+    height: 48, backgroundColor: COLORS.bg, fontSize: 14, color: COLORS.text,
+  },
+  inputError: { borderColor: COLORS.accent, backgroundColor: COLORS.accentSoft },
+  textArea: { height: 90, paddingTop: 12, textAlignVertical: 'top' },
+  errorText: { fontSize: 11.5, color: COLORS.accent, marginTop: 5, marginLeft: 2, fontWeight: '600' },
   row: { flexDirection: 'row', justifyContent: 'space-between' },
-  
-  // Inline Dropdown Styles
-  dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, height: 48, backgroundColor: '#F9FAFB' },
-  dropdownHeaderActive: { borderColor: '#ef4444', backgroundColor: '#FEF2F2' },
-  dropdownSelectedText: { color: '#111827', fontSize: 14, fontWeight: '500' },
-  dropdownPlaceholder: { color: '#9CA3AF', fontSize: 14 },
-  dropdownListContainer: { marginTop: 4, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, backgroundColor: '#fff', overflow: 'hidden', elevation: 2 },
+
+  // Dropdown
+  dropdownHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    borderWidth: 1.2, borderColor: COLORS.border, borderRadius: 10, paddingHorizontal: 14,
+    height: 48, backgroundColor: COLORS.bg,
+  },
+  dropdownHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  dropdownHeaderActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primarySoft },
+  dropdownSelectedText: { color: COLORS.text, fontSize: 14, fontWeight: '600', flexShrink: 1 },
+  dropdownPlaceholder: { color: COLORS.textFaint, fontSize: 14 },
+  dropdownListContainer: {
+    marginTop: 6, borderWidth: 1, borderColor: COLORS.border, borderRadius: 10,
+    backgroundColor: COLORS.surface, overflow: 'hidden',
+    shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3,
+  },
   dropdownScroll: { maxHeight: 180 },
   dropdownItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 14, alignItems: 'center' },
-  dropdownItemBorder: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  dropdownItemText: { fontSize: 14, color: '#374151', fontWeight: '500' },
-  dropdownItemTextActive: { color: '#ef4444', fontWeight: '700' },
-  
-  saveBtnFull: { backgroundColor: '#ef4444', height: 56, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 10, shadowColor: '#ef4444', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  saveBtnFullText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
+  dropdownItemBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.borderSoft },
+  dropdownItemText: { fontSize: 14, color: COLORS.text, fontWeight: '500' },
+  dropdownItemTextActive: { color: COLORS.primary, fontWeight: '700' },
 
-  // View Modal Premium Styles
-  overlay: { flex: 1, backgroundColor: 'rgba(17,24,39,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  viewModalContainer: { backgroundColor: '#F9FAFB', width: '100%', borderRadius: 24, maxHeight: '85%', overflow: 'hidden', elevation: 10 },
-  viewHeader: { backgroundColor: '#ef4444', padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  viewTitle: { color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 0.5 },
-  viewName: { fontSize: 24, fontWeight: '800', color: '#111827', flex: 1, marginRight: 10 },
-  schoolNick: { fontSize: 14, color: '#6B7280', fontStyle: 'italic', marginBottom: 20 },
-  
-  metaRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#fff', borderRadius: 12, padding: 16, marginTop: 10, borderWidth: 1, borderColor: '#E5E7EB' },
-  metaBox: { flex: 1 },
-  metaLabel: { fontSize: 11, color: '#6B7280', fontWeight: '700', textTransform: 'uppercase', marginBottom: 4 },
-  metaValue: { fontSize: 15, color: '#111827', fontWeight: '700' },
+  // Dialog footer / action buttons
+  formFooter: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderSoft,
+  },
+  cancelBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 12,
+    borderWidth: 1.2,
+    borderColor: COLORS.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.bg,
+  },
+  cancelBtnText: { color: COLORS.textMuted, fontSize: 14.5, fontWeight: '700' },
+  saveBtnFull: {
+    flex: 1.4,
+    flexDirection: 'row', gap: 8,
+    backgroundColor: COLORS.primary, height: 50, borderRadius: 12,
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: COLORS.primary, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4,
+  },
+  saveBtnFullDisabled: { opacity: 0.7 },
+  saveBtnFullText: { color: '#fff', fontSize: 14.5, fontWeight: '800', letterSpacing: 0.3 },
 
-  viewSection: { backgroundColor: '#fff', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB', elevation: 1 },
-  viewSectionTitle: { fontSize: 12, fontWeight: '800', color: '#ef4444', marginBottom: 12, letterSpacing: 0.5 },
-  viewText: { fontSize: 14, color: '#4B5563', lineHeight: 22, fontWeight: '500' },
+  // View Modal (centered dialog)
+  overlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'center', alignItems: 'center', padding: 22 },
+  viewModalContainer: { backgroundColor: COLORS.bg, width: '100%', borderRadius: 22, maxHeight: '82%', overflow: 'hidden' },
+  viewHeader: {
+    backgroundColor: COLORS.primary, paddingHorizontal: 20, paddingVertical: 18,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+  },
+  viewHeaderLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 10.5, fontWeight: '800', letterSpacing: 0.8, marginBottom: 4 },
+  viewName: { color: '#fff', fontSize: 19, fontWeight: '800' },
+  viewCloseBtn: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center', marginLeft: 12,
+  },
+  viewCloseGlyph: { fontSize: 15, color: '#fff', fontWeight: '700', lineHeight: 16 },
+
+  viewMetaRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
+  schoolNick: { fontSize: 13.5, color: COLORS.textMuted, fontStyle: 'italic', marginLeft: 10 },
+
+  viewSection: {
+    backgroundColor: COLORS.surface, borderRadius: 14, padding: 16, marginBottom: 14,
+    borderWidth: 1, borderColor: COLORS.borderSoft,
+  },
+  viewSectionTitle: { fontSize: 11, fontWeight: '800', color: COLORS.primary, marginBottom: 10, letterSpacing: 0.6 },
+  viewText: { fontSize: 14, color: COLORS.text, lineHeight: 21 },
+  viewTextEmpty: { fontStyle: 'italic', color: COLORS.textFaint },
+
+  metaRow: {
+    flexDirection: 'row', backgroundColor: COLORS.surface, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: COLORS.borderSoft,
+  },
+  metaBox: { flex: 1, borderRightWidth: 1, borderRightColor: COLORS.borderSoft, paddingRight: 12 },
+  metaBoxLast: { borderRightWidth: 0, paddingRight: 0, paddingLeft: 12 },
+  metaLabel: { fontSize: 10.5, color: COLORS.textMuted, fontWeight: '800', textTransform: 'uppercase', marginBottom: 5, letterSpacing: 0.4 },
+  metaValue: { fontSize: 14.5, color: COLORS.text, fontWeight: '700' },
+  metaValueId: { fontSize: 11.5, color: COLORS.textMuted, fontWeight: '600' },
 });

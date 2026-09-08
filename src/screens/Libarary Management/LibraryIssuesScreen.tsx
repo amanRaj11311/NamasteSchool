@@ -8,7 +8,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -54,9 +54,9 @@ export default function LibraryIssueScreen() {
     try {
       const hdrs = { headers: { Authorization: `Bearer ${token}` } };
       const [bRes, stRes, sfRes] = await Promise.all([
-        axios.get(`${BASE_URL}/library/books`, hdrs),
-        axios.get(`${BASE_URL}/students?limit=500`, hdrs),
-        axios.get(`${BASE_URL}/staff?limit=500`, hdrs),
+        axios.get(`${API_BASE}/library/books`, hdrs),
+        axios.get(`${API_BASE}/students?limit=500`, hdrs),
+        axios.get(`${API_BASE}/staff?limit=500`, hdrs),
       ]);
       if (bRes.data?.data) setBooks(bRes.data.data);
       if (stRes.data?.data) setStudents(stRes.data.data);
@@ -68,7 +68,7 @@ export default function LibraryIssueScreen() {
     if (!bookId || !borrowerId || !dueDate) { Alert.alert('Error', 'Book, Borrower, and Due Date required'); return; }
     setSubmitting(true);
     try {
-      await axios.post(`${BASE_URL}/library/issue`, {
+      await axios.post(`${API_BASE}/library/issue`, {
         bookId, borrowerType, borrowerId,
         issueDate: formatToYMD(issueDate), dueDate: formatToYMD(dueDate)
       }, { headers: { Authorization: `Bearer ${authToken}` } });

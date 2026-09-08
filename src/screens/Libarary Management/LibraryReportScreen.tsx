@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -34,8 +34,8 @@ export default function LibraryReportsScreen() {
     try {
       const hdrs = { headers: { Authorization: `Bearer ${token}` } };
       const [ovRes, miRes] = await Promise.all([
-        axios.get(`${BASE_URL}/library/reports/overdue`, hdrs),
-        axios.get(`${BASE_URL}/library/reports/most-issued`, hdrs),
+        axios.get(`${API_BASE}/library/reports/overdue`, hdrs),
+        axios.get(`${API_BASE}/library/reports/most-issued`, hdrs),
       ]);
       if (ovRes.data?.success) setOverdue(ovRes.data.data || []);
       if (miRes.data?.success) setMostIssued(miRes.data.data || []);

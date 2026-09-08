@@ -8,7 +8,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
@@ -82,7 +82,7 @@ export default function ExpensesScreen() {
 
   const fetchStaticData = async (token: string | null) => {
     try {
-      const res = await axios.get(`${BASE_URL}/expenses/categories`, authHeaders(token));
+      const res = await axios.get(`${API_BASE}/expenses/categories`, authHeaders(token));
       if (res.data?.success) setCategories(res.data.data || []);
     } catch (e) { console.error('Failed to load categories'); }
     fetchExpenses(token, filterCategory, filterStatus, getMonthStr(filterMonthDate));
@@ -96,7 +96,7 @@ export default function ExpensesScreen() {
       if (stat) params.status = stat;
       if (month) params.month = month;
 
-      const res = await axios.get(`${BASE_URL}/expenses`, { params, ...authHeaders(token) });
+      const res = await axios.get(`${API_BASE}/expenses`, { params, ...authHeaders(token) });
       if (res.data?.success) setExpenses(res.data.data || []);
     } catch (e) { console.error(e); } 
     finally { setLoading(false); setRefreshing(false); }
@@ -118,10 +118,10 @@ export default function ExpensesScreen() {
       };
 
       if (editingId) {
-        await axios.put(`${BASE_URL}/expenses/${editingId}`, payload, authHeaders(authToken));
+        await axios.put(`${API_BASE}/expenses/${editingId}`, payload, authHeaders(authToken));
         Alert.alert('Success', 'Expense updated');
       } else {
-        await axios.post(`${BASE_URL}/expenses`, payload, authHeaders(authToken));
+        await axios.post(`${API_BASE}/expenses`, payload, authHeaders(authToken));
         Alert.alert('Success', 'Expense created');
       }
       setShowModal(false);
@@ -135,7 +135,7 @@ export default function ExpensesScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Yes', onPress: async () => {
           try {
-            await axios.patch(`${BASE_URL}/expenses/${id}/decide`, { status }, authHeaders(authToken));
+            await axios.patch(`${API_BASE}/expenses/${id}/decide`, { status }, authHeaders(authToken));
             fetchExpenses(authToken, filterCategory, filterStatus, getMonthStr(filterMonthDate), true);
           } catch (e) { Alert.alert('Error', 'Failed to update status'); }
       }}
@@ -147,7 +147,7 @@ export default function ExpensesScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
           try {
-            await axios.delete(`${BASE_URL}/expenses/${id}`, authHeaders(authToken));
+            await axios.delete(`${API_BASE}/expenses/${id}`, authHeaders(authToken));
             fetchExpenses(authToken, filterCategory, filterStatus, getMonthStr(filterMonthDate), true);
           } catch (e) { Alert.alert('Error', 'Failed to delete'); }
       }}

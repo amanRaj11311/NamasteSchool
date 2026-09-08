@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
@@ -64,7 +64,7 @@ export default function AdvancesScreen() {
 
   const fetchStaff = async (token: string | null) => {
     try {
-      const res = await axios.get(`${BASE_URL}/staff?limit=500`, authHeaders(token));
+      const res = await axios.get(`${API_BASE}/staff?limit=500`, authHeaders(token));
       if (res.data?.success) setStaffList(res.data.data || []);
     } catch (err) { console.error(err); }
   };
@@ -73,7 +73,7 @@ export default function AdvancesScreen() {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const params = filter ? { status: filter } : {};
-      const res = await axios.get(`${BASE_URL}/salary/advances`, { params, ...authHeaders(token) });
+      const res = await axios.get(`${API_BASE}/salary/advances`, { params, ...authHeaders(token) });
       if (res.data?.success) setAdvances(res.data.data || []);
     } catch (err) { console.error(err); } 
     finally { setLoading(false); setRefreshing(false); }
@@ -88,7 +88,7 @@ export default function AdvancesScreen() {
     if (!form.staff || !form.amount) { Alert.alert('Error', 'Staff and amount are required'); return; }
     setSaving(true);
     try {
-      await axios.post(`${BASE_URL}/salary/advances`, { ...form, amount: Number(form.amount), recoveryPerMonth: Number(form.recoveryPerMonth) || 0 }, authHeaders(authToken));
+      await axios.post(`${API_BASE}/salary/advances`, { ...form, amount: Number(form.amount), recoveryPerMonth: Number(form.recoveryPerMonth) || 0 }, authHeaders(authToken));
       Alert.alert('Success', 'Advance request submitted');
       setShowForm(false);
       fetchAdvances(authToken, statusFilter, true);
@@ -102,7 +102,7 @@ export default function AdvancesScreen() {
       { text: 'Confirm', onPress: async () => {
           setDecidingId(id);
           try {
-            await axios.patch(`${BASE_URL}/salary/advances/${id}/decide`, { status }, authHeaders(authToken));
+            await axios.patch(`${API_BASE}/salary/advances/${id}/decide`, { status }, authHeaders(authToken));
             fetchAdvances(authToken, statusFilter, true);
           } catch (e: any) { Alert.alert('Error', e.response?.data?.message || 'Decision failed'); } 
           finally { setDecidingId(null); }

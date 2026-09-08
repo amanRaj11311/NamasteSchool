@@ -12,6 +12,7 @@ import {
   TouchableWithoutFeedback,
   Platform
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createDrawerNavigator, DrawerContentScrollView } from "@react-navigation/drawer";
@@ -61,6 +62,10 @@ import LibraryCatalogScreen from '../screens/Libarary Management/LibraryCatalogS
 import LibraryIssueScreen from '../screens/Libarary Management/LibraryIssuesScreen';
 import LibraryReturnsScreen from '../screens/Libarary Management/LibraryReportScreen';
 import LibraryReportsScreen from '../screens/Libarary Management/LibraryReturnScreen';
+
+// Local school logo — adjust the relative path if this file ever moves.
+// From src/navigation/AppNavigator.tsx this resolves to src/assets/logo.png
+import SchoolLogo from '../assets/logo.png';
 
 const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -314,6 +319,7 @@ const HeaderRightAvatar = () => {
   const [userName, setUserName] = useState("User");
   const [userEmail, setUserEmail] = useState("");
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     (async () => {
@@ -336,7 +342,7 @@ const HeaderRightAvatar = () => {
         <TouchableWithoutFeedback onPress={() => setShowProfileMenu(false)}>
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback>
-              <View style={styles.profileDropdown}>
+              <View style={[styles.profileDropdown, { top: insets.top + (Platform.OS === 'ios' ? 56 : 52) }]}>
                 <View style={styles.profileDropdownHeader}>
                   <View style={[styles.headerAvatar, { width: 46, height: 46, borderRadius: 23, marginRight: 14 }]}>
                     <Text style={[styles.headerAvatarText, { fontSize: 18 }]}>{getInitials(userName)}</Text>
@@ -463,13 +469,11 @@ function DrawerMenuNode({
   );
 }
 
-// ---------------------------------------------------------------------
-// 3. Custom Drawer Content
-// ---------------------------------------------------------------------
 function CustomDrawerContent(props: any) {
   const [userName, setUserName] = useState("Loading...");
   const [userRole, setUserRole] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const insets = useSafeAreaInsets();
 
   const currentRouteName = props.state.routeNames[props.state.index];
 
@@ -509,10 +513,9 @@ function CustomDrawerContent(props: any) {
     <SafeAreaView style={styles.drawerContainer}>
       <DrawerContentScrollView {...props} contentContainerStyle={{ paddingTop: 0 }} showsVerticalScrollIndicator={false}>
         
-        {/* Logo Section */}
-        <View style={styles.logoHeader}>
+        <View style={[styles.logoHeader, { paddingTop: insets.top + 18 }]}>
           <View style={styles.logoImageContainer}>
-            <Image source={{ uri: 'https://ui-avatars.com/api/?name=NS&background=fff&color=ef4444&rounded=true&bold=true' }} style={styles.logoImage} />
+            <Image source={SchoolLogo} style={styles.logoImage} resizeMode="contain" />
           </View>
           <View style={styles.logoTextContainer}>
             <Text style={styles.logoTitle}>Namaste School</Text>
@@ -545,8 +548,8 @@ function CustomDrawerContent(props: any) {
         </View>
       </DrawerContentScrollView>
 
-      {/* Clean Bottom Footer */}
-      <View style={styles.footerContainer}>
+    
+      <View style={[styles.footerContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={styles.footerTextContainer}>
           <Text style={styles.footerName} numberOfLines={1}>{userName}</Text>
           <View style={styles.footerRoleBadge}><Text style={styles.footerRole}>{userRole}</Text></View>
@@ -559,21 +562,6 @@ function CustomDrawerContent(props: any) {
   );
 }
 
-// ---------------------------------------------------------------------
-// 3b. No-modules-assigned screen
-//
-// Previously, when a logged-in user (e.g. a Student role with an empty
-// permissions array) resolved to zero visible routes, the app fell through
-// to the SAME "Loading accessible modules..." spinner used while data was
-// still being fetched — so the user was stuck on a screen that looked like
-// perpetual loading, with no indication that this was actually a
-// permissions problem, not a slow network.
-//
-// This screen replaces that dead end: it only shows once permission
-// resolution has actually finished and truly come up empty, explains why,
-// and gives the user a way out (logout) instead of a spinner that never
-// resolves.
-// ---------------------------------------------------------------------
 function NoModulesAssignedScreen({ navigation }: { navigation: any }) {
   return (
     <SafeAreaView style={styles.noAccessContainer}>
@@ -787,7 +775,7 @@ const styles = StyleSheet.create({
   
   // --- Profile Dropdown Modal ---
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)' },
-  profileDropdown: { position: 'absolute', top: Platform.OS === 'ios' ? 100 : 60, right: 16, width: 260, backgroundColor: '#ffffff', borderRadius: 16, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10, borderWidth: 1, borderColor: '#F3F4F6' },
+  profileDropdown: { position: 'absolute', right: 16, width: 260, backgroundColor: '#ffffff', borderRadius: 16, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10, borderWidth: 1, borderColor: '#F3F4F6' },
   profileDropdownHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   dropdownName: { fontSize: 16, fontWeight: '800', color: '#111827' },
   dropdownEmail: { fontSize: 12, color: '#6B7280', marginTop: 2, fontWeight: '600' },
@@ -795,9 +783,9 @@ const styles = StyleSheet.create({
   dropdownLogoutBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8, backgroundColor: '#FEF2F2', borderRadius: 10, marginTop: 8, justifyContent: 'center' },
   dropdownLogoutText: { color: '#ef4444', fontSize: 14, fontWeight: '800', marginLeft: 8 },
 
-  // --- Drawer Branding ---
-  logoHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 30, paddingBottom: 24 },
-  logoImageContainer: { width: 50, height: 50, borderRadius: 14, backgroundColor: '#fff', shadowColor: '#ef4444', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 6, justifyContent: 'center', alignItems: 'center' },
+  // --- Drawer Styling ---
+  logoHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 24 },
+  logoImageContainer: { width: 50, height: 50, borderRadius: 14, backgroundColor: '#fff', shadowColor: '#ef4444', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 6, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   logoImage: { width: 36, height: 36, borderRadius: 8 },
   logoTextContainer: { marginLeft: 16, flex: 1 },
   logoTitle: { fontSize: 19, fontWeight: '800', color: '#111827' },
@@ -806,8 +794,15 @@ const styles = StyleSheet.create({
   
   // --- Menu Styling ---
   menuContainer: { paddingHorizontal: 16, paddingBottom: 40 },
-  sectionHeaderTitle: { fontSize: 10, fontWeight: '800', color: '#9CA3AF', letterSpacing: 1, marginTop: 20, marginBottom: 10, marginLeft: 12 },
-  
+sectionHeaderTitle: {
+  fontSize: 10,
+  fontWeight: '800',
+  color: '#9CA3AF',
+  letterSpacing: 1,
+  marginTop: 8, // 20 se kam
+  marginBottom: 10,
+  marginLeft: 12,
+},  
   drawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, marginBottom: 4 },
   drawerItemActive: { backgroundColor: '#FEF2F2' },
   drawerIconBox: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#F9FAFB', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
@@ -815,7 +810,6 @@ const styles = StyleSheet.create({
   drawerItemText: { fontSize: 14, fontWeight: '700', color: '#4B5563', flex: 1 },
   drawerItemTextActive: { color: '#ef4444' },
   
-  // --- Nested Children (reused recursively at every depth below 0) ---
   childrenContainer: { marginLeft: 28, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: '#F3F4F6', marginBottom: 8, marginTop: 4 },
   childDrawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10 },
   childDrawerItemActive: { backgroundColor: '#F9FAFB' },
@@ -823,9 +817,17 @@ const styles = StyleSheet.create({
   childDrawerItemTextActive: { color: '#ef4444', fontWeight: '800' },
   childActiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#ef4444' },
 
-  // --- Clean Footer ---
-  footerContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#F3F4F6', backgroundColor: '#F9FAFB' },
-  footerTextContainer: { flex: 1 },
+  
+footerContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: 16, // 20 → 16
+  paddingTop: 16,
+  borderTopWidth: 1,
+  marginLeft:24,
+  borderTopColor: '#F3F4F6',
+  backgroundColor: '#F9FAFB',
+},  footerTextContainer: { flex: 1 },
   footerName: { fontSize: 15, fontWeight: '800', color: '#111827' },
   footerRoleBadge: { backgroundColor: '#E0F2FE', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 6 },
   footerRole: { fontSize: 10, fontWeight: '800', color: '#ef4444', textTransform: 'uppercase' },

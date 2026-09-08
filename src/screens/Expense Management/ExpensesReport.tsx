@@ -8,7 +8,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -48,8 +48,8 @@ export default function ExpenseReportsScreen() {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const [mRes, cRes] = await Promise.all([
-        axios.get(`${BASE_URL}/expenses/reports/month-wise`, { params: { year }, ...authHeaders(token) }),
-        axios.get(`${BASE_URL}/expenses/reports/category-wise`, { params: { month }, ...authHeaders(token) }),
+        axios.get(`${API_BASE}/expenses/reports/month-wise`, { params: { year }, ...authHeaders(token) }),
+        axios.get(`${API_BASE}/expenses/reports/category-wise`, { params: { month }, ...authHeaders(token) }),
       ]);
       if (mRes.data?.success) setMonthReport(mRes.data.data || []);
       if (cRes.data?.success) setCategoryReport(cRes.data.data || []);

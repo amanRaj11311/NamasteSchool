@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
@@ -73,7 +73,7 @@ export default function SettingsScreen() {
   const fetchSettings = async (token: string | null = authToken) => {
     setLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/settings`, authHeaders(token));
+      const res = await axios.get(`${API_BASE}/settings`, authHeaders(token));
       if (res.data?.data) {
         const s = res.data.data;
         setAcademicSettings({
@@ -105,7 +105,7 @@ export default function SettingsScreen() {
     if (!profile.name.trim() || !profile.email.trim()) { Alert.alert('Error', 'Name and Email are required.'); return; }
     setSaving(true);
     try {
-      await axios.put(`${BASE_URL}/auth/profile`, { name: profile.name, email: profile.email }, authHeaders(authToken));
+      await axios.put(`${API_BASE}/auth/profile`, { name: profile.name, email: profile.email }, authHeaders(authToken));
       await AsyncStorage.setItem('userName', profile.name);
       await AsyncStorage.setItem('userEmail', profile.email);
       showToast('Profile updated successfully');
@@ -120,7 +120,7 @@ export default function SettingsScreen() {
     
     setSaving(true);
     try {
-      await axios.put(`${BASE_URL}/auth/password`, { currentPassword: passwords.current, newPassword: passwords.new }, authHeaders(authToken));
+      await axios.put(`${API_BASE}/auth/password`, { currentPassword: passwords.current, newPassword: passwords.new }, authHeaders(authToken));
       setPasswords({ current: '', new: '', confirm: '' });
       showToast('Password changed securely');
     } catch (e: any) { Alert.alert('Error', e.response?.data?.message || 'Failed to update password'); }
@@ -139,7 +139,7 @@ export default function SettingsScreen() {
         allocationPolicy: academicSettings.allocationPolicy,
         defaultSectionCapacity: Number(academicSettings.defaultSectionCapacity),
       };
-      await axios.put(`${BASE_URL}/settings`, payload, authHeaders(authToken));
+      await axios.put(`${API_BASE}/settings`, payload, authHeaders(authToken));
       showToast('Academic rules updated');
     } catch (e: any) { Alert.alert('Error', e.response?.data?.message || 'Failed to save academic settings'); }
     finally { setSaving(false); }

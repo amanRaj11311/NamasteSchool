@@ -8,7 +8,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -70,9 +70,9 @@ export default function SalaryStructureScreen() {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const [structRes, assignRes, staffRes] = await Promise.all([
-        axios.get(`${BASE_URL}/salary/structures`, authHeaders(token)),
-        axios.get(`${BASE_URL}/salary/assignments`, authHeaders(token)),
-        axios.get(`${BASE_URL}/staff?limit=500`, authHeaders(token)),
+        axios.get(`${API_BASE}/salary/structures`, authHeaders(token)),
+        axios.get(`${API_BASE}/salary/assignments`, authHeaders(token)),
+        axios.get(`${API_BASE}/staff?limit=500`, authHeaders(token)),
       ]);
       if (structRes.data?.success) setStructures(structRes.data.data || []);
       if (assignRes.data?.success) setAssignments(assignRes.data.data || []);
@@ -106,8 +106,8 @@ export default function SalaryStructureScreen() {
     setSaving(true);
     try {
       const payload = { name: structForm.name, basic: Number(structForm.basic), components: structForm.components.map(c => ({ ...c, value: Number(c.value) })) };
-      if (editingStructId) await axios.put(`${BASE_URL}/salary/structures/${editingStructId}`, payload, authHeaders(authToken));
-      else await axios.post(`${BASE_URL}/salary/structures`, payload, authHeaders(authToken));
+      if (editingStructId) await axios.put(`${API_BASE}/salary/structures/${editingStructId}`, payload, authHeaders(authToken));
+      else await axios.post(`${API_BASE}/salary/structures`, payload, authHeaders(authToken));
       Alert.alert('Success', 'Structure saved');
       setStructModal(false); fetchAll(authToken, true);
     } catch (e: any) { Alert.alert('Error', e.response?.data?.message || 'Save failed'); } 
@@ -118,7 +118,7 @@ export default function SalaryStructureScreen() {
     Alert.alert('Deactivate', 'Staff assigned to it are kept as-is.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Deactivate', style: 'destructive', onPress: async () => {
-          try { await axios.delete(`${BASE_URL}/salary/structures/${id}`, authHeaders(authToken)); fetchAll(authToken, true); } 
+          try { await axios.delete(`${API_BASE}/salary/structures/${id}`, authHeaders(authToken)); fetchAll(authToken, true); } 
           catch (e) { Alert.alert('Error', 'Delete failed'); }
       }}
     ]);
@@ -132,12 +132,12 @@ export default function SalaryStructureScreen() {
     setSaving(true);
     try {
       if (assignForm.mode === 'single') {
-        await axios.post(`${BASE_URL}/salary/assignments`, {
+        await axios.post(`${API_BASE}/salary/assignments`, {
           staff: assignForm.staff, salaryStructure: assignForm.salaryStructure,
           basic: assignForm.basic ? Number(assignForm.basic) : undefined, effectiveFrom: assignForm.effectiveFrom.toISOString().split('T')[0],
         }, authHeaders(authToken));
       } else {
-        await axios.post(`${BASE_URL}/salary/assignments/bulk`, {
+        await axios.post(`${API_BASE}/salary/assignments/bulk`, {
           staffType: assignForm.staffType, salaryStructure: assignForm.salaryStructure, effectiveFrom: assignForm.effectiveFrom.toISOString().split('T')[0],
         }, authHeaders(authToken));
       }

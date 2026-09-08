@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 // ---------------------------------------------------------------------------
 // Design tokens — premium red/coral brand system
@@ -60,7 +60,7 @@ export default function ClassLevelsScreen() {
   const fetchLevels = async (token: string | null = authToken, isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/class-levels`, authHeaders(token));
+      const res = await axios.get(`${API_BASE}/class-levels`, authHeaders(token));
       if (res.data?.data) {
         const sorted = res.data.data.sort((a: ClassLevel, b: ClassLevel) => a.sequenceOrder - b.sequenceOrder);
         setLevels(sorted);
@@ -100,10 +100,10 @@ export default function ClassLevelsScreen() {
       };
 
       if (editingId) {
-        await axios.put(`${BASE_URL}/class-levels/${editingId}`, payload, authHeaders(authToken));
+        await axios.put(`${API_BASE}/class-levels/${editingId}`, payload, authHeaders(authToken));
         Alert.alert("Success", "Class Level updated successfully.");
       } else {
-        await axios.post(`${BASE_URL}/class-levels`, payload, authHeaders(authToken));
+        await axios.post(`${API_BASE}/class-levels`, payload, authHeaders(authToken));
         Alert.alert("Success", "Class Level created successfully.");
       }
       setFormVisible(false);
@@ -130,7 +130,7 @@ export default function ClassLevelsScreen() {
     // Persist to backend
     try {
       const reorderList = sortedLevels.map((l) => ({ id: l._id, sequenceOrder: l.sequenceOrder }));
-      await axios.put(`${BASE_URL}/class-levels/reorder`, reorderList, authHeaders(authToken));
+      await axios.put(`${API_BASE}/class-levels/reorder`, reorderList, authHeaders(authToken));
     } catch (e: any) {
       Alert.alert("Error", "Failed to save new sequence order.");
       fetchLevels(authToken, true); // Revert on failure
@@ -142,7 +142,7 @@ export default function ClassLevelsScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
           try {
-            await axios.delete(`${BASE_URL}/class-levels/${id}`, authHeaders(authToken));
+            await axios.delete(`${API_BASE}/class-levels/${id}`, authHeaders(authToken));
             fetchLevels(authToken, true);
           } catch (e: any) { Alert.alert('Error', e.response?.data?.message || 'Failed to delete Class Level.'); }
       }},

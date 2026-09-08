@@ -8,20 +8,44 @@ import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 // ---------------------------------------------------------------------------
-// Design tokens — premium red/coral brand system
+// Design tokens — shared premium palette (matches FeesScreen)
 // ---------------------------------------------------------------------------
 const C = {
-  bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
-  text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
-  primary: '#ef4444', primaryDark: '#DC2626', primarySoft: '#FEF2F2',
-  green: '#10B981', greenSoft: '#D1FAE5',
-  amber: '#F59E0B', amberSoft: '#FEF3C7',
-  blue: '#0EA5E9', blueSoft: '#E0F2FE',
-  slate: '#64748B', slateSoft: '#F1F5F9',
+  bg: '#F3F5F9',
+  surface: '#FFFFFF',
+  surfaceSoft: '#F8F9FC',
+  surfaceSunken: '#EEF1F6',
+  border: '#E7EAF1',
+  borderStrong: '#D9DEE8',
+  text: '#0F1626',
+  textMuted: '#5B667A',
+  textFaint: '#9AA4B6',
+
+  primary: '#E11D48',
+  primaryDark: '#BE123C',
+  primarySoft: '#FFF1F3',
+  primaryBorder: '#FBD1D9',
+
+  ink: '#111827',
+  slate: '#334155',
+
+  green: '#0F9D63',
+  greenDark: '#0B7A4E',
+  greenSoft: '#E7F8F1',
+  greenBorder: '#BFEBD8',
+
+  amber: '#B45309',
+  amberSoft: '#FEF3C7',
+  amberBorder: '#FCE2A4',
+
+  blue: '#2563EB',
+  blueSoft: '#EAF1FE',
 };
+
+const AVATAR_PALETTE = ['#E11D48', '#2563EB', '#0F9D63', '#C99A2E', '#7C3AED', '#0891B2'];
 
 // --- Safe Date Utilities ---
 const formatToYMD = (d: Date | null): string => {
@@ -35,6 +59,18 @@ const formatDisplayDate = (d: string) => {
   try {
     return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   } catch { return d; }
+};
+
+const initialsOf = (name?: string) => {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || name[0]?.toUpperCase() || '?';
+};
+
+const avatarColorFor = (name?: string) => {
+  if (!name) return AVATAR_PALETTE[0];
+  const code = name.charCodeAt(0) || 0;
+  return AVATAR_PALETTE[code % AVATAR_PALETTE.length];
 };
 
 export default function PaymentsScreen() {
@@ -71,7 +107,7 @@ export default function PaymentsScreen() {
     setIsSuperAdmin(superAdminRaw === 'true');
     setAuthToken(token);
     setSchoolId(storedSchoolId);
-    
+
     fetchPayments(token, null, null);
   };
 
@@ -84,9 +120,9 @@ export default function PaymentsScreen() {
       if (fDate) params.fromDate = formatToYMD(fDate);
       if (tDate) params.toDate = formatToYMD(tDate);
 
-      const res = await axios.get(`${BASE_URL}/fees/payments`, { params, ...authHeaders(token) });
+      const res = await axios.get(`${API_BASE}/fees/payments`, { params, ...authHeaders(token) });
       if (res.data?.success) setPayments(res.data.data || []);
-    } catch (err) { console.error(err); } 
+    } catch (err) { console.error(err); }
     finally { setLoading(false); setRefreshing(false); }
   };
 
@@ -100,8 +136,8 @@ export default function PaymentsScreen() {
   // --- Actions ---
   const openReceipt = async (id: string) => {
     const qs = schoolId ? `?schoolId=${schoolId}` : '';
-    const url = `${BASE_URL}/fees/payments/${id}/receipt${qs}`;
-    
+    const url = `${API_BASE}/fees/payments/${id}/receipt${qs}`;
+
     const supported = await Linking.canOpenURL(url);
     if (supported) {
       await Linking.openURL(url);
@@ -114,12 +150,12 @@ export default function PaymentsScreen() {
     if (!cancelReason.trim()) { Alert.alert('Error', 'A cancellation reason is required.'); return; }
     setCancelling(true);
     try {
-      await axios.patch(`${BASE_URL}/fees/payments/${cancelTarget._id}/cancel`, { reason: cancelReason }, authHeaders(authToken));
+      await axios.patch(`${API_BASE}/fees/payments/${cancelTarget._id}/cancel`, { reason: cancelReason }, authHeaders(authToken));
       Alert.alert('Success', 'Payment cancelled successfully.');
       setCancelTarget(null);
       setCancelReason('');
       fetchPayments(authToken, fromDate, toDate, true);
-    } catch (e: any) { Alert.alert('Error', e.response?.data?.message || 'Cancellation failed.'); } 
+    } catch (e: any) { Alert.alert('Error', e.response?.data?.message || 'Cancellation failed.'); }
     finally { setCancelling(false); }
   };
 
@@ -131,26 +167,26 @@ export default function PaymentsScreen() {
         <View style={styles.headerIconBadge}><Feather name="file-text" size={20} color={C.primary} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Payment History</Text>
-          <Text style={styles.subtitle}>View fee transactions and generate receipts.</Text>
+          <Text style={styles.subtitle}>View fee transactions and generate receipts</Text>
         </View>
       </View>
 
       <View style={styles.filterSection}>
         <Text style={styles.filterLabel}>DATE RANGE FILTER</Text>
         <View style={styles.dateRow}>
-          <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowFromPicker(true)}>
-            <Feather name="calendar" size={14} color={C.textMuted} style={{marginRight: 6}} />
-            <Text style={[styles.datePickerText, !fromDate && {color: C.textFaint}]}>{fromDate ? formatDisplayDate(formatToYMD(fromDate)) : 'Start Date'}</Text>
+          <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowFromPicker(true)} activeOpacity={0.85}>
+            <Feather name="calendar" size={14} color={C.textMuted} style={{ marginRight: 6 }} />
+            <Text style={[styles.datePickerText, !fromDate && { color: C.textFaint }]}>{fromDate ? formatDisplayDate(formatToYMD(fromDate)) : 'Start Date'}</Text>
           </TouchableOpacity>
           {showFromPicker && (
             <DateTimePicker value={fromDate || new Date()} mode="date" display="default" onChange={(e, d) => { setShowFromPicker(Platform.OS === 'ios'); if (d) { setFromDate(d); fetchPayments(authToken, d, toDate); } }} />
           )}
 
-          <Text style={styles.dateDivider}>—</Text>
+          <View style={styles.dateDividerWrap}><View style={styles.dateDividerLine} /></View>
 
-          <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowToPicker(true)}>
-            <Feather name="calendar" size={14} color={C.textMuted} style={{marginRight: 6}} />
-            <Text style={[styles.datePickerText, !toDate && {color: C.textFaint}]}>{toDate ? formatDisplayDate(formatToYMD(toDate)) : 'End Date'}</Text>
+          <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowToPicker(true)} activeOpacity={0.85}>
+            <Feather name="calendar" size={14} color={C.textMuted} style={{ marginRight: 6 }} />
+            <Text style={[styles.datePickerText, !toDate && { color: C.textFaint }]}>{toDate ? formatDisplayDate(formatToYMD(toDate)) : 'End Date'}</Text>
           </TouchableOpacity>
           {showToPicker && (
             <DateTimePicker value={toDate || new Date()} mode="date" display="default" onChange={(e, d) => { setShowToPicker(Platform.OS === 'ios'); if (d) { setToDate(d); fetchPayments(authToken, fromDate, d); } }} />
@@ -161,17 +197,17 @@ export default function PaymentsScreen() {
       {/* KPI Cards */}
       {!loading && payments.length > 0 && (
         <View style={styles.kpiGrid}>
-          <View style={[styles.kpiCard, { borderColor: '#A7F3D0' }]}>
+          <View style={[styles.kpiCard, { borderColor: C.greenBorder }]}>
             <View style={styles.kpiRow}>
-              <View style={[styles.iconCircle, { backgroundColor: C.greenSoft }]}><Feather name="dollar-sign" size={16} color={C.green} /></View>
-              <Text style={[styles.kpiValue, { color: C.green }]}>₹{totalAmount.toLocaleString('en-IN')}</Text>
+              <View style={[styles.iconCircle, { backgroundColor: C.greenSoft }]}><Feather name="dollar-sign" size={16} color={C.greenDark} /></View>
+              <Text style={[styles.kpiValue, { color: C.greenDark }]}>₹{totalAmount.toLocaleString('en-IN')}</Text>
             </View>
             <Text style={styles.kpiLabel}>TOTAL COLLECTIONS</Text>
           </View>
-          <View style={[styles.kpiCard, { borderColor: '#FECACA' }]}>
+          <View style={[styles.kpiCard, { borderColor: C.primaryBorder }]}>
             <View style={styles.kpiRow}>
-              <View style={[styles.iconCircle, { backgroundColor: C.primarySoft }]}><Feather name="file-text" size={16} color={C.primary} /></View>
-              <Text style={[styles.kpiValue, { color: C.primary }]}>{payments.length}</Text>
+              <View style={[styles.iconCircle, { backgroundColor: C.primarySoft }]}><Feather name="file-text" size={16} color={C.primaryDark} /></View>
+              <Text style={[styles.kpiValue, { color: C.primaryDark }]}>{payments.length}</Text>
             </View>
             <Text style={styles.kpiLabel}>ACTIVE RECEIPTS</Text>
           </View>
@@ -186,10 +222,10 @@ export default function PaymentsScreen() {
           data={payments}
           keyExtractor={item => item._id}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchPayments(authToken, fromDate, toDate, true)} colors={[C.primary]} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchPayments(authToken, fromDate, toDate, true)} colors={[C.primary]} tintColor={C.primary} />}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Feather name="receipt" size={40} color={C.textFaint} />
+              <View style={styles.emptyIconWrap}><Feather name="inbox" size={28} color={C.textFaint} /></View>
               <Text style={styles.emptyTitle}>No Receipts Found</Text>
               <Text style={styles.emptySubtitle}>No payment receipts recorded for this range.</Text>
             </View>
@@ -208,17 +244,22 @@ export default function PaymentsScreen() {
               </View>
 
               <View style={styles.studentInfo}>
-                <Text style={styles.studentName} numberOfLines={1}>{item.student?.name}</Text>
-                <Text style={styles.studentAdm}>Adm No: {item.student?.admissionNo || item.student?.rollNo || '—'}</Text>
+                <View style={[styles.avatar, { backgroundColor: avatarColorFor(item.student?.name) + '1A', borderColor: avatarColorFor(item.student?.name) + '33' }]}>
+                  <Text style={[styles.avatarText, { color: avatarColorFor(item.student?.name) }]}>{initialsOf(item.student?.name)}</Text>
+                </View>
+                <View style={{ marginLeft: 10, flex: 1 }}>
+                  <Text style={styles.studentName} numberOfLines={1}>{item.student?.name}</Text>
+                  <Text style={styles.studentAdm}>Adm No. {item.student?.admissionNo || item.student?.rollNo || '—'}</Text>
+                </View>
               </View>
 
               <View style={styles.metaRow}>
-                <View style={styles.modeBadge}><Feather name="tag" size={10} color={C.primary} style={{marginRight: 4}} /><Text style={styles.modeBadgeText}>{item.mode || 'Cash'}</Text></View>
+                <View style={styles.modeBadge}><Feather name="tag" size={10} color={C.primaryDark} style={{ marginRight: 4 }} /><Text style={styles.modeBadgeText}>{item.mode || 'Cash'}</Text></View>
                 <Text style={styles.collectedBy}>By: {item.collectedBy?.name || '—'}</Text>
               </View>
 
               <View style={styles.cardActions}>
-                <TouchableOpacity style={styles.receiptBtn} onPress={() => openReceipt(item._id)}>
+                <TouchableOpacity style={styles.receiptBtn} onPress={() => openReceipt(item._id)} activeOpacity={0.9}>
                   <Feather name="download-cloud" size={14} color="#fff" />
                   <Text style={styles.receiptBtnText}>Receipt PDF</Text>
                 </TouchableOpacity>
@@ -234,38 +275,42 @@ export default function PaymentsScreen() {
       )}
 
       {/* Cancel Modal */}
-      <Modal visible={!!cancelTarget} animationType="fade" transparent>
+      <Modal visible={!!cancelTarget} animationType="fade" transparent statusBarTranslucent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.compactModalContainer}>
             <View style={[styles.formHeader, { backgroundColor: C.primarySoft }]}>
-              <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
-                <Feather name="alert-triangle" size={18} color={C.primary} />
-                <Text style={[styles.formTitle, { color: C.primary }]}>Cancel Receipt?</Text>
+              <View style={styles.formHeaderIconBadgeDanger}>
+                <Feather name="alert-triangle" size={16} color={C.primaryDark} />
               </View>
-              <TouchableOpacity onPress={() => { setCancelTarget(null); setCancelReason(''); }} style={styles.closeBtnIcon}><Feather name="x" size={18} color={C.primary} /></TouchableOpacity>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.formTitle, { color: C.primaryDark }]}>Cancel Receipt?</Text>
+                <Text style={[styles.formHint, { color: C.primaryDark, opacity: 0.75 }]}>This reverses the payment allocation</Text>
+              </View>
+              <TouchableOpacity onPress={() => { setCancelTarget(null); setCancelReason(''); }} style={styles.closeBtnIconDanger}><Feather name="x" size={18} color={C.primaryDark} /></TouchableOpacity>
             </View>
-            
+
             <View style={styles.formScroll}>
               <Text style={styles.cancelWarningText}>
-                Cancelling receipt <Text style={{fontWeight: '800'}}>{cancelTarget?.receiptNo}</Text> will reverse the payment allocation and increase the student's due balance. This action cannot be undone.
+                Cancelling receipt <Text style={{ fontWeight: '800', color: C.ink }}>{cancelTarget?.receiptNo}</Text> will reverse the payment allocation and increase the student's due balance. This action cannot be undone.
               </Text>
-              
+
               <View style={styles.inputWrapper}>
                 <Text style={styles.inputLabel}>Reason for Cancellation *</Text>
-                <TextInput 
-                  style={[styles.input, { height: 80, textAlignVertical: 'top' }]} 
-                  multiline 
-                  placeholder="Explain why this payment is being cancelled..." 
-                  value={cancelReason} 
-                  onChangeText={setCancelReason} 
+                <TextInput
+                  style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+                  multiline
+                  placeholder="Explain why this payment is being cancelled..."
+                  placeholderTextColor={C.textFaint}
+                  value={cancelReason}
+                  onChangeText={setCancelReason}
                 />
               </View>
 
-              <View style={{flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 10}}>
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
                 <TouchableOpacity style={styles.ghostBtn} onPress={() => { setCancelTarget(null); setCancelReason(''); }}>
                   <Text style={styles.ghostBtnText}>Keep Payment</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.saveBtnFullRed} onPress={handleCancelPayment} disabled={cancelling}>
+                <TouchableOpacity style={styles.saveBtnFullRed} onPress={handleCancelPayment} disabled={cancelling} activeOpacity={0.9}>
                   {cancelling ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnFullText}>Confirm Cancel</Text>}
                 </TouchableOpacity>
               </View>
@@ -285,59 +330,71 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { padding: 40, justifyContent: 'center', alignItems: 'center' },
 
-  header: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 20, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
-  headerIconBadge: { width: 44, height: 44, borderRadius: 12, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 20, fontWeight: '800', color: C.text },
-  subtitle: { fontSize: 12, color: C.textMuted, marginTop: 2 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 20, paddingBottom: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
+  headerIconBadge: { width: 46, height: 46, borderRadius: 15, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.primaryBorder },
+  title: { fontSize: 21, fontWeight: '800', color: C.ink, letterSpacing: -0.3 },
+  subtitle: { fontSize: 12, color: C.textMuted, marginTop: 3, fontWeight: '500' },
 
   filterSection: { backgroundColor: C.surface, padding: 16, borderBottomWidth: 1, borderColor: C.border, zIndex: 10 },
-  filterLabel: { fontSize: 10, fontWeight: '800', color: C.textMuted, letterSpacing: 0.5, marginBottom: 8 },
+  filterLabel: { fontSize: 10, fontWeight: '800', color: C.textFaint, letterSpacing: 0.5, marginBottom: 10 },
   dateRow: { flexDirection: 'row', alignItems: 'center' },
-  datePickerBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceSoft, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, height: 40, borderRadius: 10 },
-  datePickerText: { fontSize: 13, fontWeight: '600', color: C.text },
-  dateDivider: { paddingHorizontal: 10, color: C.textFaint, fontWeight: '800' },
+  datePickerBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceSoft, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, height: 44, borderRadius: 12 },
+  datePickerText: { fontSize: 13, fontWeight: '700', color: C.text },
+  dateDividerWrap: { width: 22, alignItems: 'center' },
+  dateDividerLine: { width: 10, height: 1.5, backgroundColor: C.borderStrong },
 
   kpiGrid: { flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingTop: 16 },
-  kpiCard: { flex: 1, backgroundColor: C.surface, padding: 14, borderRadius: 16, borderWidth: 1, shadowColor: '#0F172A', shadowOpacity: 0.03, shadowRadius: 8, elevation: 1 },
+  kpiCard: { flex: 1, backgroundColor: C.surface, padding: 14, borderRadius: 16, borderWidth: 1, shadowColor: '#0F1626', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 },
   kpiRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   iconCircle: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   kpiValue: { fontSize: 18, fontWeight: '800' },
-  kpiLabel: { fontSize: 9.5, fontWeight: '800', color: C.textMuted, letterSpacing: 0.5 },
+  kpiLabel: { fontSize: 9.5, fontWeight: '800', color: C.textFaint, letterSpacing: 0.5 },
 
   listContent: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 16 },
-  emptyState: { alignItems: 'center', padding: 36, marginTop: 20, backgroundColor: C.surface, borderRadius: 18, borderWidth: 1.5, borderColor: C.border, borderStyle: 'dashed' },
-  emptyTitle: { fontSize: 16, fontWeight: '800', color: C.text, marginTop: 12 },
+  emptyState: { alignItems: 'center', padding: 36, marginTop: 20, backgroundColor: C.surface, borderRadius: 20, borderWidth: 1.5, borderColor: C.border, borderStyle: 'dashed' },
+  emptyIconWrap: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.surfaceSunken, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: C.ink, marginTop: 12 },
   emptySubtitle: { fontSize: 12.5, color: C.textMuted, marginTop: 4, textAlign: 'center' },
 
-  card: { backgroundColor: C.surface, borderRadius: 16, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: C.border, elevation: 1 },
+  card: {
+    backgroundColor: C.surface, borderRadius: 18, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: C.border,
+    shadowColor: '#0F1626', shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 1,
+  },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, borderBottomWidth: 1, borderBottomColor: C.border, paddingBottom: 12 },
   receiptNo: { fontSize: 14, fontWeight: '800', color: C.primaryDark, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
   dateText: { fontSize: 11, color: C.textMuted, fontWeight: '600', marginTop: 4 },
   amountContainer: { alignItems: 'flex-end' },
-  amountText: { fontSize: 18, fontWeight: '800', color: C.green },
-  lateFeeBadge: { backgroundColor: C.primarySoft, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4 },
+  amountText: { fontSize: 18, fontWeight: '800', color: C.greenDark },
+  lateFeeBadge: { backgroundColor: C.primarySoft, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, marginTop: 4 },
   lateFeeText: { fontSize: 9, fontWeight: '800', color: C.primaryDark },
 
-  studentInfo: { marginBottom: 10 },
-  studentName: { fontSize: 15, fontWeight: '800', color: C.text },
+  studentInfo: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  avatar: { width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+  avatarText: { fontSize: 12.5, fontWeight: '800' },
+  studentName: { fontSize: 14.5, fontWeight: '800', color: C.ink },
   studentAdm: { fontSize: 11, color: C.textMuted, fontWeight: '600', marginTop: 2 },
 
-  metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: C.surfaceSoft, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: C.border },
-  modeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.primarySoft, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  modeBadgeText: { fontSize: 10, fontWeight: '800', color: C.primary },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: C.surfaceSoft, padding: 10, borderRadius: 11, borderWidth: 1, borderColor: C.border },
+  modeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.primarySoft, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7 },
+  modeBadgeText: { fontSize: 10, fontWeight: '800', color: C.primaryDark },
   collectedBy: { fontSize: 11, fontWeight: '600', color: C.textMuted },
 
-  cardActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 },
-  receiptBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#111827', paddingVertical: 10, borderRadius: 10, gap: 6, marginRight: 10 },
-  receiptBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  iconBtnDelete: { padding: 10, backgroundColor: '#FEF2F2', borderRadius: 10, borderWidth: 1, borderColor: '#FECACA' },
+  cardActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, gap: 10 },
+  receiptBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: C.ink, paddingVertical: 12, borderRadius: 11, gap: 6 },
+  receiptBtnText: { color: '#fff', fontSize: 12.5, fontWeight: '700' },
+  iconBtnDelete: { padding: 12, backgroundColor: C.primarySoft, borderRadius: 11, borderWidth: 1, borderColor: C.primaryBorder },
 
   // Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'center', padding: 16 },
-  compactModalContainer: { backgroundColor: C.surface, borderRadius: 20, elevation: 10, overflow: 'hidden' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: C.border },
-  formTitle: { fontSize: 16, fontWeight: '800' },
-  closeBtnIcon: { padding: 4 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(9,14,26,0.62)', justifyContent: 'center', padding: 16 },
+  compactModalContainer: {
+    backgroundColor: C.surface, borderRadius: 26, overflow: 'hidden',
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 12,
+  },
+  formHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 20, borderBottomWidth: 1, borderBottomColor: C.border },
+  formHeaderIconBadgeDanger: { width: 38, height: 38, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.6)', justifyContent: 'center', alignItems: 'center' },
+  formTitle: { fontSize: 16.5, fontWeight: '800' },
+  formHint: { fontSize: 11.5, marginTop: 2, fontWeight: '600' },
+  closeBtnIconDanger: { padding: 8, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 20 },
   formScroll: { padding: 20 },
 
   cancelWarningText: { fontSize: 13, color: C.text, lineHeight: 20, marginBottom: 20 },
@@ -348,6 +405,6 @@ const styles = StyleSheet.create({
 
   ghostBtn: { paddingVertical: 10, paddingHorizontal: 16, justifyContent: 'center' },
   ghostBtnText: { color: C.textMuted, fontSize: 14, fontWeight: '700' },
-  saveBtnFullRed: { backgroundColor: C.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center', elevation: 2 },
+  saveBtnFullRed: { backgroundColor: C.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: C.primary, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
   saveBtnFullText: { color: '#fff', fontSize: 14, fontWeight: '800' },
 });

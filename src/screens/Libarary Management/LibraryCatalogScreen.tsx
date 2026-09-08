@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
@@ -60,7 +60,7 @@ export default function LibraryCatalogScreen() {
       const params: any = {};
       if (q) params.search = q;
       if (cat) params.category = cat;
-      const res = await axios.get(`${BASE_URL}/library/books`, { params, ...authHeaders(token) });
+      const res = await axios.get(`${API_BASE}/library/books`, { params, ...authHeaders(token) });
       if (res.data?.success) setBooks(res.data.data || []);
     } catch (e) { console.error(e); } 
     finally { setLoading(false); setRefreshing(false); }
@@ -76,8 +76,8 @@ export default function LibraryCatalogScreen() {
     setSaving(true);
     try {
       const payload = { ...form, totalCopies: Number(form.totalCopies), availableCopies: Number(form.availableCopies) };
-      if (editingId) await axios.put(`${BASE_URL}/library/books/${editingId}`, payload, authHeaders(authToken));
-      else await axios.post(`${BASE_URL}/library/books`, payload, authHeaders(authToken));
+      if (editingId) await axios.put(`${API_BASE}/library/books/${editingId}`, payload, authHeaders(authToken));
+      else await axios.post(`${API_BASE}/library/books`, payload, authHeaders(authToken));
       Alert.alert('Success', 'Book saved successfully');
       setShowModal(false); fetchBooks(authToken, search, categoryFilter, true);
     } catch (e: any) { Alert.alert('Error', e.response?.data?.message || 'Failed to save'); } 
@@ -88,7 +88,7 @@ export default function LibraryCatalogScreen() {
     Alert.alert('Delete Book', 'Remove this book from the catalog?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
-          try { await axios.delete(`${BASE_URL}/library/books/${id}`, authHeaders(authToken)); fetchBooks(authToken, search, categoryFilter, true); } 
+          try { await axios.delete(`${API_BASE}/library/books/${id}`, authHeaders(authToken)); fetchBooks(authToken, search, categoryFilter, true); } 
           catch (e) { Alert.alert('Error', 'Failed to delete'); }
       }}
     ]);

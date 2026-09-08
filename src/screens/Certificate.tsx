@@ -10,7 +10,7 @@ import RNBlobUtil from 'react-native-blob-util';
 
 import FileViewer from 'react-native-file-viewer';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 // ---------------------------------------------------------------------------
 // Design tokens — premium red/coral brand system
@@ -112,8 +112,8 @@ export default function CertificatesHistoryScreen() {
   const fetchDependencies = async (token: string | null) => {
     try {
       const [clsRes, staffRes] = await Promise.all([
-        axios.get(`${BASE_URL}/classes`, authHeaders(token)),
-        axios.get(`${BASE_URL}/staff?limit=500`, authHeaders(token))
+        axios.get(`${API_BASE}/classes`, authHeaders(token)),
+        axios.get(`${API_BASE}/staff?limit=500`, authHeaders(token))
       ]);
       const clsData = clsRes.data?.data || [];
       setClasses(clsData);
@@ -126,7 +126,7 @@ export default function CertificatesHistoryScreen() {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const params = type ? { type } : {};
-      const res = await axios.get(`${BASE_URL}/certificates`, { params, ...authHeaders(token) });
+      const res = await axios.get(`${API_BASE}/certificates`, { params, ...authHeaders(token) });
       if (res.data?.success) setLogs(res.data.data || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); setRefreshing(false); }
@@ -134,7 +134,7 @@ export default function CertificatesHistoryScreen() {
 
   const fetchClassStudents = async (classId: string) => {
     try {
-      const res = await axios.get(`${BASE_URL}/students`, { params: { classId, limit: 500 }, ...authHeaders(authToken) });
+      const res = await axios.get(`${API_BASE}/students`, { params: { classId, limit: 500 }, ...authHeaders(authToken) });
       const list = res.data?.data || res.data?.students || [];
       setClassStudents(list);
       if (list.length > 0) setSelectedStudentId(list[0]._id);
@@ -175,7 +175,7 @@ export default function CertificatesHistoryScreen() {
         purpose, remarks, templateId: selectedTemplateId,
       };
 
-      await axios.post(`${BASE_URL}${endpoint}`, payload, authHeaders(authToken));
+      await axios.post(`${API_BASE}${endpoint}`, payload, authHeaders(authToken));
 
       Alert.alert('Success', `${docType} generated successfully. Tap "Reprint PDF" in the list to view.`);
       setShowModal(false);
@@ -196,7 +196,7 @@ const handleReprint = async (certId: string) => {
   setReprintingId(certId);
 
   try {
-    const url = `${BASE_URL}/certificates/${certId}/reprint`;
+    const url = `${API_BASE}/certificates/${certId}/reprint`;
 
     console.log('Reprint URL:', url);
 

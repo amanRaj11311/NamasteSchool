@@ -8,7 +8,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
@@ -75,7 +75,7 @@ export default function SalaryScreen() {
   const fetchPayrolls = async (token: string | null = authToken, m: string = monthStr, isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/salary/payroll?month=${m}`, authHeaders(token));
+      const res = await axios.get(`${API_BASE}/salary/payroll?month=${m}`, authHeaders(token));
       if (res.data?.success) {
         const data = res.data.data || [];
         setPayrolls(data);
@@ -95,7 +95,7 @@ export default function SalaryScreen() {
     try {
       const payload: any = { month: monthStr };
       if (genScope === 'byType' && genStaffType) payload.staffType = genStaffType;
-      const res = await axios.post(`${BASE_URL}/salary/payroll/generate`, payload, authHeaders(authToken));
+      const res = await axios.post(`${API_BASE}/salary/payroll/generate`, payload, authHeaders(authToken));
       Alert.alert('Success', res.data?.message || 'Payroll generated');
       setShowGenerate(false);
       fetchPayrolls(authToken, monthStr, true);
@@ -110,7 +110,7 @@ export default function SalaryScreen() {
         ...payForm,
         paidOn: payForm.paidOn.toISOString().split('T')[0]
       };
-      await axios.patch(`${BASE_URL}/salary/payroll/${payTarget._id}/pay`, payload, authHeaders(authToken));
+      await axios.patch(`${API_BASE}/salary/payroll/${payTarget._id}/pay`, payload, authHeaders(authToken));
       Alert.alert('Success', 'Marked as paid');
       setPayTarget(null);
       fetchPayrolls(authToken, monthStr, true);
@@ -122,7 +122,7 @@ export default function SalaryScreen() {
     if (!cancelReason.trim()) { Alert.alert('Error', 'Reason required'); return; }
     setCancelling(true);
     try {
-      await axios.patch(`${BASE_URL}/salary/payroll/${cancelTarget._id}/cancel`, { reason: cancelReason }, authHeaders(authToken));
+      await axios.patch(`${API_BASE}/salary/payroll/${cancelTarget._id}/cancel`, { reason: cancelReason }, authHeaders(authToken));
       Alert.alert('Success', 'Payroll cancelled');
       setCancelTarget(null); setCancelReason('');
       fetchPayrolls(authToken, monthStr, true);
@@ -132,7 +132,7 @@ export default function SalaryScreen() {
 
   const openSlip = async (id: string) => {
     const qs = schoolId ? `?schoolId=${schoolId}` : '';
-    const url = `${BASE_URL}/salary/payroll/${id}/slip${qs}`;
+    const url = `${API_BASE}/salary/payroll/${id}/slip${qs}`;
     const supported = await Linking.canOpenURL(url);
     if (supported) await Linking.openURL(url);
   };

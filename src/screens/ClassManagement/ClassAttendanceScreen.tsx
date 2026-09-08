@@ -8,8 +8,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
+import XLSX from 'xlsx';
+import RNFS from 'react-native-fs';
+import Share from 'react-native-share';
+import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import { API_BASE } from '../../network/api';
+
+
 const CLASS_ATTENDANCE_URL = `${API_BASE}/attendance/class`;
+const BULK_ATTENDANCE_URL = `${API_BASE}/attendance/class/bulk`;
 
 const C = {
   bg: '#F4F6F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
@@ -79,12 +86,6 @@ function useDebouncedValue<T>(value: T, delay = 300): T {
   return debounced;
 }
 
-// ---------------------------------------------------------------------------
-// Attendance payload helpers
-// ---------------------------------------------------------------------------
-
-// Builds a single attendanceList entry. Defaults status to 'Present' only
-// when nothing valid was selected — never sends an empty/undefined status.
 const buildAttendanceItem = (student: any, status: string) => ({
   rollNo: student.rollNo?.toString() || '',
   studentName: student.name || '',
@@ -92,8 +93,6 @@ const buildAttendanceItem = (student: any, status: string) => ({
   status: status && VALID_STATUSES.includes(status) ? status : 'Present',
 });
 
-// Validates the pieces of an attendance payload before it's sent to the API.
-// Returns an array of human-readable error strings; empty array = valid.
 const validateAttendancePayload = (
   classId: string,
   schoolId: string,
@@ -121,10 +120,6 @@ const validateAttendancePayload = (
   return errors;
 };
 
-// ---------------------------------------------------------------------------
-// StudentRow — memoized so scrolling/marking one student never re-renders
-// every other row in a large class.
-// ---------------------------------------------------------------------------
 type StudentRowProps = {
   student: any;
   year: number;
@@ -228,18 +223,11 @@ export default function ClassAttendanceScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebouncedValue(searchQuery, 250);
 
-  // KPI drill-down: null = whole-month totals, otherwise a single YYYY-MM-DD
-  // the user tapped on in the matrix header — stats bar then scopes to it.
   const [selectedStatDate, setSelectedStatDate] = useState<string | null>(null);
 
-  // Today, locked once per mount — attendance can only be marked for this
-  // date or earlier, never for a date in the future.
   const todayStr = useMemo(() => formatToYMD(new Date()), []);
   const isFutureDateStr = useCallback((dateStr: string) => dateStr > todayStr, [todayStr]);
 
-  // The classes API already returns each class's schoolId (as an object
-  // { _id, name, code, city } or sometimes a plain string) — read it from
-  // the currently selected class instead of relying on storage.
   const selectedSchoolId = useMemo(() => {
     const cls = classes.find((c: any) => c._id === selectedClassId);
     const sid = cls?.schoolId;
@@ -247,16 +235,24 @@ export default function ClassAttendanceScreen() {
     return typeof sid === 'string' ? sid : sid?._id || null;
   }, [classes, selectedClassId]);
 
+  const selectedClass = useMemo(
+    () => classes.find((c: any) => c._id === selectedClassId),
+    [classes, selectedClassId]
+  );
+
   // UI States
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
 
   // Modals
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [isDailyModalVisible, setDailyModalVisible] = useState(false);
   const [isSingleEditModalVisible, setSingleEditModalVisible] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   // Daily Attendance Form
   const [dailyDate, setDailyDate] = useState<Date>(new Date());
@@ -365,11 +361,8 @@ export default function ClassAttendanceScreen() {
     return map;
   }, [students, attendanceMap]);
 
-  // KPI scope — either the whole month, or a single day the user tapped on
-  // in the matrix header (selectedStatDate). Everything the stats bar reads
-  // comes from this single source so the two modes never drift apart.
   const statsScopeRecords = useMemo(() => {
-    if (!selectedStatDate) return attendanceRecords;
+    if (!selectedStatDate) return [];
     return attendanceRecords.filter(r => r.date.split('T')[0] === selectedStatDate);
   }, [attendanceRecords, selectedStatDate]);
 
@@ -386,6 +379,209 @@ export default function ClassAttendanceScreen() {
     return new Date(year, month, day, 12, 0, 0).getDay() === 0;
   };
 
+  const getStudentDayStatus = useCallback((student: any, day: number): string | null => {
+    const key = student.rollNo?.toString() || student.name;
+    const dateStr = formatToYMD(new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), day, 12, 0, 0));
+    return attendanceMap[key]?.[dateStr] || null;
+  }, [attendanceMap, selectedMonth]);
+
+  const downloadSampleAttendanceTemplate = async () => {
+    try {
+      const year = selectedMonth.getFullYear();
+      const month = selectedMonth.getMonth();
+
+      const headers = [
+        'S.No', 'Roll No', 'Student Name', 'Photo URL',
+        ...daysArray.map(d => (isSunday(year, month, d) ? `Day ${d} (SUN)` : `Day ${d}`)),
+      ];
+      const sampleRow1Days = daysArray.map(d => (isSunday(year, month, d) ? 'H' : 'P'));
+      const sampleRow2Days = daysArray.map(d => (isSunday(year, month, d) ? 'H' : d % 7 === 0 ? 'A' : 'P'));
+
+      const rows = [
+        headers,
+        [1, '101', 'Student 1', '', ...sampleRow1Days],
+        [2, '102', 'Student 2', '', ...sampleRow2Days],
+      ];
+
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+      worksheet['!cols'] = [{ wch: 8 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, ...daysArray.map(() => ({ wch: 10 }))];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Attendance Template');
+      const wbout = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
+
+      const fileName = `${selectedClass?.className || 'Class'}_Attendance_Sample_Template.xlsx`;
+      const filePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
+      await RNFS.writeFile(filePath, wbout, 'base64');
+
+      await Share.open({
+        url: `file://${filePath}`,
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        filename: fileName,
+        failOnCancel: false,
+      });
+    } catch (e: any) {
+      if (e?.message && !String(e.message).includes('User did not share')) {
+        console.error('Template export failed:', e);
+        Alert.alert('Export failed', 'Could not generate the template file.');
+      }
+    }
+  };
+
+  const downloadFormattedMonthlyExcel = async () => {
+    if (!selectedClass) {
+      Alert.alert('No class selected', 'Please select a class first to export Excel.');
+      return;
+    }
+    if (students.length === 0) {
+      Alert.alert('Nothing to export', 'There are no students in this class.');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const year = selectedMonth.getFullYear();
+      const month = selectedMonth.getMonth();
+      const workingDaysCount = Math.max(1, daysArray.length - daysArray.filter(d => isSunday(year, month, d)).length);
+
+      const headers = [
+        'S.No', 'Roll No', 'Student Name', 'Photo URL',
+        ...daysArray.map(d => (isSunday(year, month, d) ? `Day ${d} (SUN)` : `Day ${d}`)),
+        'Present (P)', 'Absent (A)', 'Leave (L)', 'Holiday (H)', 'Attendance %',
+      ];
+      const rows: any[][] = [headers];
+
+      students.forEach((s, idx) => {
+        let pCount = 0, aCount = 0, lCount = 0, hCount = 0;
+        const dayCells = daysArray.map(d => {
+          const isSun = isSunday(year, month, d);
+          const st = getStudentDayStatus(s, d) || (isSun ? 'Holiday' : null);
+          if (st === 'Present') { pCount++; return 'P'; }
+          if (st === 'Absent') { aCount++; return 'A'; }
+          if (st === 'Leave') { lCount++; return 'L'; }
+          if (st === 'Half-Day') { pCount += 0.5; return 'HD'; }
+          if (st === 'Holiday' || isSun) { hCount++; return 'H'; }
+          return '-';
+        });
+
+        const pct = ((pCount / workingDaysCount) * 100).toFixed(1);
+
+        rows.push([
+          idx + 1,
+          s.rollNo || 'N/A',
+          s.name,
+          s.photo || '',
+          ...dayCells,
+          pCount, aCount, lCount, hCount,
+          `${pct}%`,
+        ]);
+      });
+
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
+      worksheet['!cols'] = [
+        { wch: 8 }, { wch: 12 }, { wch: 22 }, { wch: 20 },
+        ...daysArray.map(() => ({ wch: 10 })),
+        { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 15 },
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Attendance Matrix');
+      const wbout = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
+
+      const monthLabel = `${year}-${String(month + 1).padStart(2, '0')}`;
+      const fileName = `${selectedClass?.className || 'Class'}_Monthly_Attendance_${monthLabel}.xlsx`;
+      const filePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
+      await RNFS.writeFile(filePath, wbout, 'base64');
+
+      await Share.open({
+        url: `file://${filePath}`,
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        filename: fileName,
+        failOnCancel: false,
+      });
+    } catch (e: any) {
+      if (e?.message && !String(e.message).includes('User did not share')) {
+        console.error('Monthly export failed:', e);
+        Alert.alert('Export failed', 'Could not generate the Excel file.');
+      }
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------
+  // EXCEL — Upload Excel (bulk import a filled monthly matrix)
+  // Mirrors the web page's handleFileUpload(): reads Roll No / Student Name
+  // / Photo URL / Day N columns per row and posts to the same bulk endpoint.
+  // ---------------------------------------------------------------------
+  const handleUploadExcel = async () => {
+    let picked;
+    try {
+      [picked] = await pick({ type: [types.xlsx, types.xls, types.csv] });
+    } catch (err) {
+      if (isErrorWithCode(err) && err.code === errorCodes.OPERATION_CANCELED) return;
+      console.error('File pick failed:', err);
+      Alert.alert('Could not open file picker', 'Please try again.');
+      return;
+    }
+
+    if (!selectedClassId) {
+      Alert.alert('No class selected', 'Please select a class first.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const base64 = await RNFS.readFile(picked.uri, 'base64');
+      const workbook = XLSX.read(base64, { type: 'base64' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const jsonRows: any[] = XLSX.utils.sheet_to_json(sheet);
+
+      const matrixData: any[] = [];
+      jsonRows.forEach(row => {
+        const rollNo = String(row['Roll No'] ?? row['rollNo'] ?? row['Roll'] ?? '').trim();
+        const studentName = String(row['Student Name'] ?? row['studentName'] ?? row['Name'] ?? '').trim();
+        const photo = String(row['Photo URL'] ?? row['photo'] ?? '').trim() || '/default-avatar.png';
+
+        if (!studentName && !rollNo) return;
+
+        const daysObj: Record<string, string> = {};
+        daysArray.forEach(d => {
+          const val = row[`Day ${d}`] ?? row[`Day${d}`] ?? row[d];
+          if (val) daysObj[d] = String(val).trim().toUpperCase();
+        });
+
+        matrixData.push({ rollNo, studentName, photo, days: daysObj });
+      });
+
+      if (matrixData.length === 0) {
+        Alert.alert('No data found', 'No valid attendance rows were found in the selected file.');
+        return;
+      }
+
+      const year = selectedMonth.getFullYear();
+      const month = String(selectedMonth.getMonth() + 1).padStart(2, '0');
+
+      const res = await axios.post(
+        BULK_ATTENDANCE_URL,
+        { classId: selectedClassId, month: `${year}-${month}`, matrixData },
+        authHeaders(authToken)
+      );
+
+      if (res.data?.success) {
+        Alert.alert('Success', 'Monthly attendance matrix imported successfully!');
+        setShowUploadModal(false);
+        fetchGridData(authToken, selectedClassId, selectedMonth, true);
+      }
+    } catch (err: any) {
+      console.error('Upload failed:', err?.response?.data || err?.message);
+      Alert.alert('Import failed', err?.response?.data?.message || err?.response?.data?.error || 'Failed to parse or import the attendance file.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   // --- Actions ---
   const openDailyModal = () => {
     setDailyDate(new Date());
@@ -400,38 +596,7 @@ export default function ClassAttendanceScreen() {
     setSelectedStatDate(prev => (prev === dateStr ? null : dateStr));
   }, []);
 
-  // ---------------------------------------------------------------------
-  // handleSaveDaily — FIXED
-  //
-  // ROOT CAUSE (confirmed from routes/controller/service/model): the app
-  // was posting to POST /api/attendance, which is routed to
-  // `saveAttendance` -> `saveAttendanceRecord`. That service does
-  // `Attendance.create(data)` directly off the top-level body and never
-  // reads `attendanceList` at all — it's the STAFF single-record endpoint,
-  // built for { staff, date, status, ... }. Since our body has no
-  // top-level `status`, Mongoose's schema-level `required: true` on
-  // `status` rejected it with "status: Path `status` is required.",
-  // regardless of what was correctly inside `attendanceList`.
-  //
-  // The correct endpoint for classId + date + attendanceList[] is
-  // POST /api/attendance/class -> `markClassDailyAttendance`, which loops
-  // `attendanceList`, upserts one record per rollNo, and only defaults
-  // status to 'Present' when the item's own status is missing — exactly
-  // the behavior we want. Fix: point at CLASS_ATTENDANCE_URL and keep the
-  // original single grouped payload; no per-item flattening or looped
-  // requests are needed once the endpoint is correct.
-  //
-  // 1. attendanceList is built first, in its own variable, via
-  //    buildAttendanceItem (guarantees a valid, non-empty status per item).
-  // 2. The date is checked against today (see isFutureDateStr) before
-  //    anything else — attendance can never be marked ahead of today.
-  // 3. Everything is validated with validateAttendancePayload BEFORE the
-  //    payload object or the API call is made. Validation failures show a
-  //    clear Alert and stop — nothing fails silently.
-  // 4. The final payload is logged in full right before it's sent.
-  // 5. On error, the full backend error body is logged and the backend's
-  //    actual message/error is shown to the user.
-  // ---------------------------------------------------------------------
+  
   const handleSaveDaily = async () => {
     if (!selectedClassId || !selectedSchoolId) {
       Alert.alert('Missing info', 'Could not determine the school for this class. Try reselecting the class.');
@@ -484,11 +649,6 @@ export default function ClassAttendanceScreen() {
     }
   };
 
-  // ---------------------------------------------------------------------
-  // handleSaveSingleEdit — FIXED (same defensive pattern as handleSaveDaily,
-  // also pointed at CLASS_ATTENDANCE_URL for the same reason, and blocks
-  // future dates the same way.)
-  // ---------------------------------------------------------------------
   const handleSaveSingleEdit = async () => {
     if (!singleEditData) return;
 
@@ -662,45 +822,105 @@ export default function ClassAttendanceScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Excel actions row — parity with the web page's Download Format /
+            Full Month Excel / Upload Excel buttons. All three are real,
+            working actions here (not placeholders). */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.excelActionsRow}>
+          <TouchableOpacity
+            style={[styles.excelActionBtn, styles.excelActionBtnOutline, { borderColor: C.green }]}
+            onPress={downloadSampleAttendanceTemplate}
+            activeOpacity={0.85}
+          >
+            <Feather name="download" size={13} color={C.green} />
+            <Text style={[styles.excelActionText, { color: C.green }]}>Download Format</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.excelActionBtn, { backgroundColor: C.green }]}
+            onPress={downloadFormattedMonthlyExcel}
+            disabled={exporting || students.length === 0}
+            activeOpacity={0.85}
+          >
+            {exporting ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="file-text" size={13} color="#fff" />}
+            <Text style={[styles.excelActionText, { color: '#fff' }]}>{exporting ? 'Exporting…' : 'Full Month Excel'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.excelActionBtn, styles.excelActionBtnOutline, { borderColor: C.primary }]}
+            onPress={() => setShowUploadModal(true)}
+            activeOpacity={0.85}
+          >
+            <Feather name="upload" size={13} color={C.primary} />
+            <Text style={[styles.excelActionText, { color: C.primary }]}>Upload Excel</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </View>
 
-      {/* Summary / KPI Bar — defaults to whole-month totals; tapping a day
-          in the matrix header (below) scopes every card to just that day. */}
+      {/* Summary / KPI Bar — shows NOTHING (no month totals) until the user
+          taps a specific day in the matrix header below. Once a day is
+          tapped, every card here scopes to that single day only. */}
       {!loading && students.length > 0 && (
         <View style={styles.statsSection}>
           <View style={styles.statsScopeRow}>
             <View style={styles.statsScopeChip}>
-              <Feather name={selectedStatDate ? 'calendar' : 'bar-chart-2'} size={12} color={C.primary} />
+              <Feather name={selectedStatDate ? 'calendar' : 'mouse-pointer'} size={12} color={C.primary} />
               <Text style={styles.statsScopeText}>
-                {selectedStatDate ? formatPretty(selectedStatDate) : `${selectedMonth.toLocaleString('default', { month: 'long' })} overview`}
+                {selectedStatDate ? formatPretty(selectedStatDate) : 'Tap a date below to see its count'}
               </Text>
             </View>
             {selectedStatDate && (
               <TouchableOpacity style={styles.statsClearBtn} onPress={() => setSelectedStatDate(null)} activeOpacity={0.7}>
                 <Feather name="x" size={11} color={C.textMuted} />
-                <Text style={styles.statsClearText}>Back to month</Text>
+                <Text style={styles.statsClearText}>Clear</Text>
               </TouchableOpacity>
             )}
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
-            <View style={[styles.statCard, SHADOW.card, { borderColor: C.border }]}>
-              <Text style={styles.statValue}>{scopedPct !== null ? `${scopedPct}%` : '—'}</Text>
-              <Text style={styles.statLabel}>Overall</Text>
-            </View>
-            {STATUS_ORDER.filter(s => s !== 'Holiday').map(st => {
-              const meta = STATUS_META[st];
-              return (
-                <View key={st} style={[styles.statCard, SHADOW.card, { borderLeftWidth: 3, borderLeftColor: meta.color }]}>
-                  <View style={styles.statCardTop}>
-                    <Feather name={meta.icon as any} size={12} color={meta.color} />
-                    <Text style={[styles.statValue, { color: meta.color }]}>{scopedStats[st]}</Text>
+          {selectedStatDate ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
+              <View style={[styles.statCard, SHADOW.card, { borderColor: C.border }]}>
+                <Text style={styles.statValue}>{scopedPct !== null ? `${scopedPct}%` : '—'}</Text>
+                <Text style={styles.statLabel}>Present %</Text>
+              </View>
+              {STATUS_ORDER.filter(s => s !== 'Holiday').map(st => {
+                const meta = STATUS_META[st];
+                return (
+                  <View key={st} style={[styles.statCard, SHADOW.card, { borderLeftWidth: 3, borderLeftColor: meta.color }]}>
+                    <View style={styles.statCardTop}>
+                      <Feather name={meta.icon as any} size={12} color={meta.color} />
+                      <Text style={[styles.statValue, { color: meta.color }]}>{scopedStats[st]}</Text>
+                    </View>
+                    <Text style={styles.statLabel}>{meta.label}</Text>
                   </View>
-                  <Text style={styles.statLabel}>{meta.label}</Text>
-                </View>
-              );
-            })}
-          </ScrollView>
+                );
+              })}
+            </ScrollView>
+          ) : (
+            <View style={styles.statsEmptyHint}>
+              <Feather name="arrow-down" size={13} color={C.textFaint} />
+              <Text style={styles.statsEmptyHintText}>Select a day in the calendar header to see Present / Absent / Leave counts for that date</Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Status legend — parity with the web page's P/A/L/HD/H legend */}
+      {!loading && students.length > 0 && (
+        <View style={styles.legendRow}>
+          {STATUS_ORDER.map(st => {
+            const meta = STATUS_META[st];
+            return (
+              <View key={st} style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: meta.color }]} />
+                <Text style={styles.legendText}>{meta.abbr}: {meta.label}</Text>
+              </View>
+            );
+          })}
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: C.textFaint }]} />
+            <Text style={styles.legendText}>·: Not Marked</Text>
+          </View>
         </View>
       )}
 
@@ -928,6 +1148,37 @@ export default function ClassAttendanceScreen() {
         </View>
       </Modal>
 
+      {/* MODAL: Upload Monthly Excel — parity with the web page's upload modal */}
+      <Modal visible={showUploadModal} animationType="fade" transparent>
+        <View style={styles.modalOverlayCenter}>
+          <View style={[styles.editModalCard, SHADOW.raised]}>
+            <View style={styles.editModalHeader}>
+              <Text style={styles.editModalTitle}>Upload Monthly Attendance</Text>
+              <TouchableOpacity onPress={() => setShowUploadModal(false)}><Feather name="x" size={18} color={C.textMuted} /></TouchableOpacity>
+            </View>
+
+            <Text style={styles.uploadInfoText}>
+              Upload an Excel file with the monthly attendance for{' '}
+              <Text style={{ fontWeight: '800', color: C.text }}>{selectedClass?.className || 'this class'}</Text>
+              {' '}({selectedMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}). Use "Download Format" first if you need a blank template.
+            </Text>
+
+            <View style={styles.uploadDropZone}>
+              <Feather name="upload-cloud" size={30} color={C.primary} />
+              <Text style={styles.uploadDropTitle}>Select Excel / CSV File</Text>
+              <Text style={styles.uploadDropSubtitle}>.xlsx, .xls, .csv supported</Text>
+              <TouchableOpacity style={styles.uploadChooseBtn} onPress={handleUploadExcel} disabled={uploading} activeOpacity={0.85}>
+                {uploading ? <ActivityIndicator size="small" color={C.primary} /> : <Text style={styles.uploadChooseBtnText}>Choose File</Text>}
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.ghostBtn} onPress={() => setShowUploadModal(false)}>
+              <Text style={styles.ghostBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -954,17 +1205,29 @@ const styles = StyleSheet.create({
   markBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.primary, paddingHorizontal: 18, height: 46, borderRadius: 12, gap: 6, ...SHADOW.card },
   markBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
+  excelActionsRow: { flexDirection: 'row', gap: 8, marginTop: 12, paddingBottom: 2 },
+  excelActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 38, borderRadius: 20, ...SHADOW.soft },
+  excelActionBtnOutline: { backgroundColor: C.surface, borderWidth: 1.4 },
+  excelActionText: { fontSize: 11.5, fontWeight: '800' },
+
   statsSection: { backgroundColor: C.bg, paddingTop: 12, paddingBottom: 4 },
   statsScopeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 8 },
   statsScopeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.primarySoft, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
   statsScopeText: { fontSize: 11.5, fontWeight: '800', color: C.primaryDark },
   statsClearBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 5 },
   statsClearText: { fontSize: 11, fontWeight: '700', color: C.textMuted },
+  statsEmptyHint: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderStyle: 'dashed', borderRadius: 12, padding: 12 },
+  statsEmptyHintText: { flex: 1, fontSize: 11.5, color: C.textMuted, fontWeight: '600' },
 
   statCard: { minWidth: 92, backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, paddingVertical: 10, paddingHorizontal: 14, alignItems: 'flex-start' },
   statCardTop: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   statValue: { fontSize: 17, fontWeight: '800', color: C.text },
   statLabel: { fontSize: 10.5, color: C.textMuted, fontWeight: '700', marginTop: 3, letterSpacing: 0.2 },
+
+  legendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.bg },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: 10.5, color: C.textMuted, fontWeight: '700' },
 
   emptyState: { alignItems: 'center', padding: 40, marginTop: 20 },
   emptyTitle: { fontSize: 16, fontWeight: '800', color: C.text, marginTop: 12 },
@@ -1040,6 +1303,14 @@ const styles = StyleSheet.create({
   editStatusBtn: { width: '48%', flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: C.border, backgroundColor: C.surfaceSoft },
   editStatusDot: { width: 10, height: 10, borderRadius: 5 },
   editStatusText: { fontSize: 13, fontWeight: '600', color: C.textMuted },
+
+  // Upload Modal
+  uploadInfoText: { fontSize: 12.5, color: C.textMuted, lineHeight: 18, marginBottom: 16 },
+  uploadDropZone: { alignItems: 'center', borderWidth: 1.4, borderStyle: 'dashed', borderColor: C.border, borderRadius: 16, paddingVertical: 26, backgroundColor: C.surfaceSoft, marginBottom: 16 },
+  uploadDropTitle: { fontSize: 13.5, fontWeight: '800', color: C.text, marginTop: 8 },
+  uploadDropSubtitle: { fontSize: 11, color: C.textFaint, marginTop: 3, marginBottom: 14 },
+  uploadChooseBtn: { borderWidth: 1.4, borderColor: C.primary, borderRadius: 20, paddingHorizontal: 20, paddingVertical: 9, minWidth: 120, alignItems: 'center' },
+  uploadChooseBtnText: { fontSize: 12.5, fontWeight: '800', color: C.primary },
 
   // Form Base
   inputWrapper: { marginBottom: 16 },

@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 // ---------------------------------------------------------------------------
 // Design tokens — premium red/coral brand system
@@ -80,8 +80,8 @@ export default function PromotionsDashboardScreen() {
     setLoading(true);
     try {
       const [yearsRes, levelsRes] = await Promise.all([
-        axios.get(`${BASE_URL}/academic-years`, authHeaders(token)),
-        axios.get(`${BASE_URL}/class-levels`, authHeaders(token)),
+        axios.get(`${API_BASE}/academic-years`, authHeaders(token)),
+        axios.get(`${API_BASE}/class-levels`, authHeaders(token)),
       ]);
       
       const years = yearsRes.data?.data || [];
@@ -106,7 +106,7 @@ export default function PromotionsDashboardScreen() {
     }
     setLoadingPreview(true);
     try {
-      let url = `${BASE_URL}/promotions/preview?fromAcademicYearId=${fromAcademicYearId}&toAcademicYearId=${toAcademicYearId}`;
+      let url = `${API_BASE}/promotions/preview?fromAcademicYearId=${fromAcademicYearId}&toAcademicYearId=${toAcademicYearId}`;
       if (selectedClassLevelId) url += `&classLevelId=${selectedClassLevelId}`;
 
       const res = await axios.get(url, authHeaders(authToken));
@@ -176,7 +176,7 @@ export default function PromotionsDashboardScreen() {
               })),
             };
 
-            const res = await axios.post(`${BASE_URL}/promotions/commit`, payload, authHeaders(authToken));
+            const res = await axios.post(`${API_BASE}/promotions/commit`, payload, authHeaders(authToken));
             if (res.data?.success) {
               Alert.alert("Success", res.data.message || "Promotion executed successfully!");
               setPreviewData(null);

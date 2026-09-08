@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -47,7 +47,7 @@ export default function ExpenseCategoriesScreen() {
   const fetchCategories = async (token: string | null = authToken, isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/expenses/categories`, authHeaders(token));
+      const res = await axios.get(`${API_BASE}/expenses/categories`, authHeaders(token));
       if (res.data?.success) setCategories(res.data.data || []);
     } catch (e) { console.error(e); } 
     finally { setLoading(false); setRefreshing(false); }
@@ -62,8 +62,8 @@ export default function ExpenseCategoriesScreen() {
     if (!form.name.trim() || !form.code.trim()) { Alert.alert('Error', 'Name and Code are required'); return; }
     setSaving(true);
     try {
-      if (editingId) await axios.put(`${BASE_URL}/expenses/categories/${editingId}`, form, authHeaders(authToken));
-      else await axios.post(`${BASE_URL}/expenses/categories`, form, authHeaders(authToken));
+      if (editingId) await axios.put(`${API_BASE}/expenses/categories/${editingId}`, form, authHeaders(authToken));
+      else await axios.post(`${API_BASE}/expenses/categories`, form, authHeaders(authToken));
       Alert.alert('Success', 'Category saved');
       setShowModal(false); fetchCategories(authToken, true);
     } catch (e: any) { Alert.alert('Error', e.response?.data?.message || 'Save failed'); } 
@@ -75,7 +75,7 @@ export default function ExpenseCategoriesScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
           try {
-            await axios.delete(`${BASE_URL}/expenses/categories/${id}`, authHeaders(authToken));
+            await axios.delete(`${API_BASE}/expenses/categories/${id}`, authHeaders(authToken));
             fetchCategories(authToken, true);
           } catch (e) { Alert.alert('Error', 'Delete failed'); }
       }}

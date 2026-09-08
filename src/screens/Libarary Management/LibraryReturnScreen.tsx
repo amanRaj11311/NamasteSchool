@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -46,7 +46,7 @@ export default function LibraryReturnsScreen() {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const params = stat ? { status: stat } : {};
-      const res = await axios.get(`${BASE_URL}/library/issues`, { params, headers: { Authorization: `Bearer ${token}` } });
+      const res = await axios.get(`${API_BASE}/library/issues`, { params, headers: { Authorization: `Bearer ${token}` } });
       if (res.data?.success) setIssues(res.data.data || []);
     } catch (err) { console.error(err); } 
     finally { setLoading(false); setRefreshing(false); }
@@ -56,7 +56,7 @@ export default function LibraryReturnsScreen() {
     if (!selectedIssue) return;
     setSubmitting(true);
     try {
-      await axios.patch(`${BASE_URL}/library/issue/${selectedIssue._id}/return`, {
+      await axios.patch(`${API_BASE}/library/issue/${selectedIssue._id}/return`, {
         fineAmount: parseFloat(fineAmount) || 0,
         finePaid: !!finePaid,
       }, { headers: { Authorization: `Bearer ${authToken}` } });
