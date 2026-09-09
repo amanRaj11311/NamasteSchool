@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -49,6 +49,7 @@ interface Staff {
   staffType: string;
   staffId: string;
   primaryMobile?: string;
+  photo?: string;
 }
 
 interface ClassObj {
@@ -61,9 +62,15 @@ interface ClassObj {
   syllabus: string;
   evaluationType: string;
   description: string;
+  capacity?: number;
   studentCount?: number;
   boysCount?: number;
   girlsCount?: number;
+}
+
+interface AttendanceSummary {
+  present: number;
+  total: number;
 }
 
 const initialFormState = {
@@ -74,7 +81,13 @@ const initialFormState = {
   description: '',
   syllabus: '',
   evaluationType: '',
+  capacity: '35',
 };
+
+type ViewMode = 'card' | 'list';
+type AlertState = { type: 'success' | 'danger' | ''; message: string };
+
+const PAGE_LIMIT = 10;
 
 export default function ClassesScreen() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
@@ -93,8 +106,25 @@ export default function ClassesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Filters
+  // Today's attendance summary, keyed by classId — mirrors the web dashboard's
+  // "Present / Total" indicator on each class card.
+  const [todayAttendanceMap, setTodayAttendanceMap] = useState<Record<string, AttendanceSummary>>({});
+
+  // View mode: card grid (default) or a compact list row, matching the web
+  // Grid View / List View toggle.
+  const [viewMode, setViewMode] = useState<ViewMode>('card');
+
+  // Inline dismissible banner (mirrors the web page's alert banner, in
+  // addition to native Alert.alert confirmations for destructive actions).
+  const [alertState, setAlertState] = useState<AlertState>({ type: '', message: '' });
+
+  // Filters & server-side pagination (matches the web page's page/limit/search params)
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Form Modals & State
   const [isFormVisible, setFormVisible] = useState(false);
@@ -113,6 +143,29 @@ export default function ClassesScreen() {
     initialize();
   }, []);
 
+  // Reset to page 1 whenever the search term (debounced) or view mode changes,
+  // then refetch — same behaviour as the web page's useEffect on [search, viewMode].
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+    }, 400);
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (!authToken) return;
+    setCurrentPage(1);
+    fetchClasses(authToken, 1, debouncedSearch);
+  }, [debouncedSearch, viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!authToken) return;
+    fetchClasses(authToken, currentPage, debouncedSearch);
+  }, [currentPage]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const initialize = async () => {
     const token = await AsyncStorage.getItem('userToken');
     const permsRaw = await AsyncStorage.getItem('userPermissions');
@@ -122,33 +175,85 @@ export default function ClassesScreen() {
     setIsSuperAdmin(superAdminRaw === 'true');
     setAuthToken(token);
 
-    fetchData(token);
+    await Promise.all([fetchClasses(token, 1, ''), fetchSchools(token), fetchStaff(token), fetchTodayAttendance(token)]);
+    setLoading(false);
   };
 
-  const fetchData = async (token: string | null, isRefresh = false) => {
+  const fetchClasses = async (token: string | null, page: number, search: string, isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-
-      const [classesRes, schoolsRes, staffRes] = await Promise.all([
-        axios.get(`${API_BASE}/classes`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API_BASE}/schools`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API_BASE}/staff`, { headers: { Authorization: `Bearer ${token}` } }),
-      ]);
-
-      if (classesRes.data?.success) setClasses(classesRes.data.data || []);
-      if (schoolsRes.data?.success) setSchools(schoolsRes.data.data || []);
-      if (staffRes.data?.success) setStaffList(staffRes.data.data || []);
+      const res = await axios.get(`${API_BASE}/classes`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { page, limit: PAGE_LIMIT, search: search || undefined },
+      });
+      if (res.data?.success) {
+        setClasses(res.data.data || []);
+        const pagination = res.data.pagination;
+        if (pagination) {
+          setTotalPages(pagination.totalPages || 1);
+          setTotalItems(pagination.total ?? (res.data.data || []).length);
+        } else {
+          setTotalPages(1);
+          setTotalItems((res.data.data || []).length);
+        }
+      }
     } catch (error) {
       console.error(error);
-      if (!isRefresh) Alert.alert('Error', 'Could not load classes. Pull down to try again.');
+      setAlertState({ type: 'danger', message: 'Could not load classes. Pull down to try again.' });
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const onRefresh = useCallback(() => fetchData(authToken, true), [authToken]);
+  const fetchSchools = async (token: string | null) => {
+    try {
+      const res = await axios.get(`${API_BASE}/schools`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.data?.success) setSchools(res.data.data || []);
+    } catch (error) {
+      console.error('Failed to load schools:', error);
+    }
+  };
+
+  const fetchStaff = async (token: string | null) => {
+    try {
+      const res = await axios.get(`${API_BASE}/staff`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.data?.success) setStaffList(res.data.data || []);
+    } catch (error) {
+      console.error('Failed to load staff:', error);
+    }
+  };
+
+  // Mirrors the web page's fetchTodayAttendance: pulls this month's class
+  // attendance and rolls up a present/total count per class for "today".
+  const fetchTodayAttendance = async (token: string | null) => {
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const monthStr = todayStr.substring(0, 7);
+      const res = await axios.get(`${API_BASE}/attendance/class`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { month: monthStr },
+      });
+      if (res.data?.data) {
+        const map: Record<string, AttendanceSummary> = {};
+        res.data.data.forEach((rec: any) => {
+          if (rec.date === todayStr && rec.classId) {
+            const cid = typeof rec.classId === 'object' ? rec.classId._id : rec.classId;
+            if (!map[cid]) map[cid] = { present: 0, total: 0 };
+            map[cid].total += 1;
+            if (rec.status === 'Present') map[cid].present += 1;
+          }
+        });
+        setTodayAttendanceMap(map);
+      }
+    } catch (error) {
+      console.error('Failed to fetch today attendance summary:', error);
+    }
+  };
+
+  const onRefresh = useCallback(() => {
+    fetchClasses(authToken, currentPage, debouncedSearch, true);
+    fetchTodayAttendance(authToken);
+  }, [authToken, currentPage, debouncedSearch]);
 
   // RBAC Checker
   const hasPermission = useCallback(
@@ -160,23 +265,13 @@ export default function ClassesScreen() {
   );
 
   // --- Derived Overview Stats ---
-  const totalClasses = classes.length;
+  const totalClasses = totalItems || classes.length;
   const totalDivisions = classes.filter((c) => c.division).length;
   const assignedTeachers = new Set(
     classes.filter((c) => c.classTeacher).map((c) => (typeof c.classTeacher === 'object' ? c.classTeacher._id : c.classTeacher))
   ).size;
 
-  // --- Filtering ---
-  const filteredClasses = useMemo(
-    () =>
-      classes.filter(
-        (c) =>
-          c.className.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
-          (c.division && c.division.toLowerCase().includes(searchQuery.trim().toLowerCase())) ||
-          (c.syllabus && c.syllabus.toLowerCase().includes(searchQuery.trim().toLowerCase()))
-      ),
-    [classes, searchQuery]
-  );
+  const filteredClasses = classes; // filtering now happens server-side via debouncedSearch
 
   // --- Actions ---
   const openAddForm = () => {
@@ -197,6 +292,7 @@ export default function ClassesScreen() {
       description: cls.description || '',
       syllabus: cls.syllabus || '',
       evaluationType: cls.evaluationType || '',
+      capacity: cls.capacity != null ? String(cls.capacity) : '35',
     });
     setErrors({});
     setActiveDropdown(null);
@@ -218,9 +314,10 @@ export default function ClassesScreen() {
         onPress: async () => {
           try {
             await axios.delete(`${API_BASE}/classes/${id}`, { headers: { Authorization: `Bearer ${authToken}` } });
-            fetchData(authToken, true);
+            setAlertState({ type: 'success', message: 'Class deleted successfully.' });
+            fetchClasses(authToken, currentPage, debouncedSearch, true);
           } catch (error) {
-            Alert.alert('Error', 'Failed to delete class.');
+            setAlertState({ type: 'danger', message: 'Failed to delete class.' });
           }
         },
       },
@@ -231,6 +328,10 @@ export default function ClassesScreen() {
     let newErrors: any = {};
     if (!formData.schoolId) newErrors.schoolId = 'School Branch is required';
     if (!formData.className.trim()) newErrors.className = 'Class Name is required';
+    const capacityNum = Number(formData.capacity);
+    if (!formData.capacity || Number.isNaN(capacityNum) || capacityNum < 1 || capacityNum > 100) {
+      newErrors.capacity = 'Enter a capacity between 1 and 100';
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -239,17 +340,19 @@ export default function ClassesScreen() {
 
     try {
       setSaving(true);
+      const payload = { ...formData, capacity: capacityNum };
       if (editingId) {
-        await axios.put(`${API_BASE}/classes/${editingId}`, formData, { headers: { Authorization: `Bearer ${authToken}` } });
-        Alert.alert('Success', 'Class updated successfully.');
+        await axios.put(`${API_BASE}/classes/${editingId}`, payload, { headers: { Authorization: `Bearer ${authToken}` } });
+        setAlertState({ type: 'success', message: 'Class updated successfully.' });
       } else {
-        await axios.post(`${API_BASE}/classes`, formData, { headers: { Authorization: `Bearer ${authToken}` } });
-        Alert.alert('Success', 'Class created successfully.');
+        await axios.post(`${API_BASE}/classes`, payload, { headers: { Authorization: `Bearer ${authToken}` } });
+        setAlertState({ type: 'success', message: 'Class created successfully.' });
       }
       closeForm();
-      fetchData(authToken, true);
+      setCurrentPage(1);
+      fetchClasses(authToken, 1, debouncedSearch, true);
     } catch (e: any) {
-      Alert.alert('Error', e.response?.data?.message || 'Failed to save class.');
+      setAlertState({ type: 'danger', message: e.response?.data?.message || 'Failed to save class.' });
     } finally {
       setSaving(false);
     }
@@ -347,117 +450,270 @@ export default function ClassesScreen() {
     { label: 'Both', value: 'Both' },
   ];
 
-  // --- Render Card ---
+  const goToTeacherAttendance = (teacherObj: any) => {
+    const staffId = typeof teacherObj === 'object' ? teacherObj?._id : teacherObj;
+    if (!staffId) return;
+    navigation.navigate('Staff Attendance', { staffId });
+  };
+
+  const attendanceLabel = (classId?: string) => {
+    const summary = classId ? todayAttendanceMap[classId] : undefined;
+    if (!summary) return { text: 'Not Marked Today', tone: 'warning' as const };
+    const pct = Math.round((summary.present / Math.max(1, summary.total)) * 100);
+    return { text: `${summary.present}/${summary.total} Present (${pct}%)`, tone: 'success' as const };
+  };
+
+  // --- Render Card (Grid mode) ---
   const renderCard = ({ item }: { item: ClassObj }) => {
+    const classId = item._id || item.id;
     const teacherIsPopulated = typeof item.classTeacher === 'object' && item.classTeacher;
     const teacherName = teacherIsPopulated ? item.classTeacher.name : item.classTeacher ? 'Assigned' : 'Unassigned';
     const teacherId = teacherIsPopulated ? item.classTeacher.staffId : '';
+    const att = attendanceLabel(classId);
 
     return (
       <View style={[styles.card, isTablet && styles.cardTablet]}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderLeft}>
-            <View style={styles.primaryBadge}>
-              <Text style={styles.primaryBadgeText}>{item.className}</Text>
+        {/* Top accent strip — mirrors the web card's gradient header line */}
+        <View style={styles.accentStrip}>
+          <View style={[styles.accentSegment, { backgroundColor: COLORS.primary }]} />
+          <View style={[styles.accentSegment, { backgroundColor: COLORS.ink }]} />
+          <View style={[styles.accentSegment, { backgroundColor: COLORS.info }]} />
+        </View>
+
+        <View style={styles.cardBody}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardHeaderLeft}>
+              <View style={styles.primaryBadge}>
+                <Text style={styles.primaryBadgeText}>{item.className}</Text>
+              </View>
+              {item.division ? (
+                <View style={styles.darkBadge}>
+                  <Text style={styles.darkBadgeText}>DIV {item.division}</Text>
+                </View>
+              ) : null}
+              <View style={styles.syllabusBadge}>
+                <Feather name="book-open" size={12} color={COLORS.secondary} />
+                <Text style={styles.syllabusBadgeText} numberOfLines={1}>
+                  {item.syllabus || 'N/A'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Quick action icons — matches the web card's top-right icon cluster */}
+            <View style={styles.quickIconGroup}>
+              {hasPermission('read') && (
+                <TouchableOpacity
+                  style={styles.quickIconBtn}
+                  accessibilityLabel="View class details"
+                  onPress={() => {
+                    setViewingClass(item);
+                    setViewVisible(true);
+                  }}
+                >
+                  <Feather name="eye" size={13} color={COLORS.info} />
+                </TouchableOpacity>
+              )}
+              {hasPermission('update') && (
+                <TouchableOpacity style={styles.quickIconBtn} accessibilityLabel="Edit class" onPress={() => openEditForm(item)}>
+                  <Feather name="edit-2" size={13} color={COLORS.secondary} />
+                </TouchableOpacity>
+              )}
+              {hasPermission('delete') && (
+                <TouchableOpacity style={styles.quickIconBtn} accessibilityLabel="Delete class" onPress={() => handleDelete(classId)}>
+                  <Feather name="trash-2" size={13} color={COLORS.primary} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.teacherSection}>
+            <View style={styles.teacherLeft}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{(teacherName || 'U').charAt(0).toUpperCase()}</Text>
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.metaLabel}>CLASS TEACHER</Text>
+                <Text style={styles.teacherName} numberOfLines={1}>
+                  {teacherName}
+                </Text>
+                {teacherId ? <Text style={styles.teacherId}>{teacherId}</Text> : null}
+              </View>
+            </View>
+            {teacherIsPopulated && (
+              <TouchableOpacity style={styles.teacherAttBtn} onPress={() => goToTeacherAttendance(item.classTeacher)}>
+                <Feather name="user-check" size={12} color={COLORS.primary} />
+                <Text style={styles.teacherAttBtnText}>Teacher Att.</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.metricsList}>
+            <View style={styles.metricRow}>
+              <Text style={styles.metricLabel}>Evaluation Scheme</Text>
+              <View style={styles.secondaryPillBadge}>
+                <Text style={styles.secondaryPillText}>{item.evaluationType || 'Marks & Grades'}</Text>
+              </View>
+            </View>
+
+            <View style={styles.metricRow}>
+              <Text style={styles.metricLabel}>
+                <Feather name="calendar" size={11} color={COLORS.success} />  Today's Attendance
+              </Text>
+              <View style={att.tone === 'success' ? styles.successPillBadge : styles.warningPillBadge}>
+                <Text style={att.tone === 'success' ? styles.successPillText : styles.warningPillText}>{att.text}</Text>
+              </View>
+            </View>
+
+            <View style={styles.metricRow}>
+              <Text style={styles.metricLabel}>
+                <Feather name="users" size={11} color={COLORS.primary} />  Total Students
+              </Text>
+              <View style={styles.redOutlineBadge}>
+                <Text style={styles.redOutlineBadgeText}>{item.studentCount || 0} Students</Text>
+              </View>
+            </View>
+
+            <View style={[styles.metricRow, { justifyContent: 'flex-start', gap: SPACING.sm }]}>
+              <View style={styles.blueBadge}>
+                <Feather name="user" size={10} color={COLORS.info} />
+                <Text style={styles.blueBadgeText}>Boys: {item.boysCount || 0}</Text>
+              </View>
+              <View style={styles.pinkLightBadge}>
+                <Feather name="user" size={10} color={COLORS.pink} />
+                <Text style={styles.pinkLightBadgeText}>Girls: {item.girlsCount || 0}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Structured action grid — mirrors the web card's Students /
+              Attendance / Results / Timetable buttons */}
+          <View style={styles.cardActionsGrid}>
+            <View style={styles.actionGridRow}>
+              <TouchableOpacity
+                style={[styles.gridBtn, styles.gridBtnPrimary]}
+                activeOpacity={0.9}
+                onPress={() =>
+                  navigation.navigate('Add Student', {
+                    classId,
+                    className: item.className,
+                    division: item.division,
+                  })
+                }
+              >
+                <Feather name="user-plus" size={13} color="#fff" />
+                <Text style={styles.gridBtnTextLight} numberOfLines={1}>
+                  Students ({item.studentCount || 0})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.gridBtn, styles.gridBtnSuccess]}
+                activeOpacity={0.9}
+                onPress={() => navigation.navigate('Class Attendance', { classId })}
+              >
+                <Feather name="clipboard" size={13} color="#fff" />
+                <Text style={styles.gridBtnTextLight} numberOfLines={1}>
+                  Attendance
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.actionGridRow}>
+              <TouchableOpacity
+                style={styles.resultsIconBtn}
+                activeOpacity={0.9}
+                onPress={() => navigation.navigate('Results', { classId })}
+                accessibilityLabel="Class results"
+              >
+                <Feather name="bar-chart-2" size={15} color={COLORS.primary} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.gridBtn, styles.gridBtnOutline, { flex: 1 }]}
+                activeOpacity={0.9}
+                onPress={() => navigation.navigate('Timetable', { classId })}
+              >
+                <Feather name="calendar" size={13} color={COLORS.secondary} />
+                <Text style={styles.gridBtnTextDark} numberOfLines={1}>
+                  Class Timetable & Schedule
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  // --- Render Row (compact List mode) ---
+  const renderRow = ({ item }: { item: ClassObj }) => {
+    const classId = item._id || item.id;
+    const teacherIsPopulated = typeof item.classTeacher === 'object' && item.classTeacher;
+    const teacherName = teacherIsPopulated ? item.classTeacher.name : item.classTeacher ? 'Assigned' : 'Unassigned';
+    const att = attendanceLabel(classId);
+
+    return (
+      <View style={styles.rowCard}>
+        <View style={styles.rowTop}>
+          <View style={styles.rowTitleGroup}>
+            <View style={styles.primaryBadgeSm}>
+              <Text style={styles.primaryBadgeSmText}>{item.className}</Text>
             </View>
             {item.division ? (
-              <View style={styles.darkBadge}>
-                <Text style={styles.darkBadgeText}>DIV {item.division}</Text>
+              <View style={styles.darkBadgeSm}>
+                <Text style={styles.darkBadgeSmText}>{item.division}</Text>
               </View>
             ) : null}
-          </View>
-          <View style={styles.syllabusBadge}>
-            <Feather name="book-open" size={12} color={COLORS.secondary} />
-            <Text style={styles.syllabusBadgeText} numberOfLines={1}>
-              {item.syllabus || 'N/A'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.teacherSection}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{(teacherName || 'U').charAt(0).toUpperCase()}</Text>
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.metaLabel}>CLASS TEACHER</Text>
-            <Text style={styles.teacherName} numberOfLines={1}>
+            <Text style={styles.rowTeacherText} numberOfLines={1}>
               {teacherName}
             </Text>
-            {teacherId ? <Text style={styles.teacherId}>{teacherId}</Text> : null}
           </View>
-        </View>
-
-        <View style={styles.statsGrid}>
-          <View style={styles.statBox}>
-            <Text style={styles.metaLabel}>EVALUATION MODE</Text>
-            <View style={styles.pinkBadge}>
-              <Text style={styles.pinkBadgeText} numberOfLines={1}>
-                {item.evaluationType || 'N/A'}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.statBox}>
-            <Text style={styles.metaLabel}>TOTAL STUDENTS</Text>
-            <View style={styles.redOutlineBadge}>
-              <Text style={styles.redOutlineBadgeText}>{item.studentCount || 0} Students</Text>
-            </View>
-          </View>
-          <View style={styles.statBox}>
-            <View style={styles.blueBadge}>
-              <Feather name="user" size={10} color={COLORS.info} />
-              <Text style={styles.blueBadgeText}>Boys: {item.boysCount || 0}</Text>
-            </View>
-          </View>
-          <View style={styles.statBox}>
-            <View style={styles.pinkLightBadge}>
-              <Feather name="user" size={10} color={COLORS.pink} />
-              <Text style={styles.pinkLightBadgeText}>Girls: {item.girlsCount || 0}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.cardActions}>
-          <TouchableOpacity
-            style={styles.studentsBtn}
-            activeOpacity={0.85}
-            onPress={() =>
-              navigation.navigate('Add Student', {
-                classId: item._id || item.id,
-                className: item.className,
-                division: item.division,
-              })
-            }
-          >
-            <Feather name="users" size={14} color="#fff" />
-            <Text style={styles.studentsBtnText} numberOfLines={1}>
-              Students ({item.studentCount || 0})
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.actionBtnGroup}>
+          <View style={styles.rowIconGroup}>
             {hasPermission('read') && (
-              <TouchableOpacity
-                style={styles.iconBtnPrimary}
-                accessibilityLabel="View class details"
-                onPress={() => {
-                  setViewingClass(item);
-                  setViewVisible(true);
-                }}
-              >
-                <Feather name="eye" size={16} color="#fff" />
+              <TouchableOpacity style={styles.quickIconBtn} onPress={() => { setViewingClass(item); setViewVisible(true); }}>
+                <Feather name="eye" size={13} color={COLORS.info} />
               </TouchableOpacity>
             )}
             {hasPermission('update') && (
-              <TouchableOpacity style={styles.iconBtnEdit} accessibilityLabel="Edit class" onPress={() => openEditForm(item)}>
-                <Feather name="edit-2" size={16} color={COLORS.success} />
+              <TouchableOpacity style={styles.quickIconBtn} onPress={() => openEditForm(item)}>
+                <Feather name="edit-2" size={13} color={COLORS.secondary} />
               </TouchableOpacity>
             )}
             {hasPermission('delete') && (
-              <TouchableOpacity style={styles.iconBtnDelete} accessibilityLabel="Delete class" onPress={() => handleDelete(item._id || item.id)}>
-                <Feather name="trash-2" size={16} color={COLORS.primary} />
+              <TouchableOpacity style={styles.quickIconBtn} onPress={() => handleDelete(classId)}>
+                <Feather name="trash-2" size={13} color={COLORS.primary} />
               </TouchableOpacity>
             )}
           </View>
+        </View>
+
+        <View style={styles.rowMetaLine}>
+          <Text style={styles.rowMetaText}>
+            <Feather name="users" size={11} /> {item.studentCount || 0} students
+          </Text>
+          <Text style={styles.rowMetaText}>
+            <Feather name="book-open" size={11} /> {item.syllabus || 'N/A'}
+          </Text>
+          <View style={att.tone === 'success' ? styles.successPillBadgeSm : styles.warningPillBadgeSm}>
+            <Text style={att.tone === 'success' ? styles.successPillTextSm : styles.warningPillTextSm} numberOfLines={1}>
+              {att.text}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.rowActionBar}>
+          <TouchableOpacity style={styles.rowActionBtn} onPress={() => navigation.navigate('Add Student', { classId, className: item.className, division: item.division })}>
+            <Text style={styles.rowActionBtnText}>Students</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.rowActionBtn} onPress={() => navigation.navigate('Class Attendance', { classId })}>
+            <Text style={styles.rowActionBtnText}>Attendance</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.rowActionBtn} onPress={() => navigation.navigate('Results', { classId })}>
+            <Text style={styles.rowActionBtnText}>Results</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.rowActionBtn} onPress={() => navigation.navigate('Timetable', { classId })}>
+            <Text style={styles.rowActionBtnText}>Timetable</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -478,7 +734,51 @@ export default function ClassesScreen() {
             Manage sections, teachers & rosters
           </Text>
         </View>
+
+        {/* View mode toggle — Grid / List, matches the web page's toggle */}
+        <View style={styles.viewToggle}>
+          <TouchableOpacity
+            style={[styles.viewToggleBtn, viewMode === 'card' && styles.viewToggleBtnActive]}
+            onPress={() => setViewMode('card')}
+            accessibilityLabel="Grid view"
+          >
+            <Feather name="grid" size={14} color={viewMode === 'card' ? '#fff' : COLORS.muted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.viewToggleBtn, viewMode === 'list' && styles.viewToggleBtnActive]}
+            onPress={() => setViewMode('list')}
+            accessibilityLabel="List view"
+          >
+            <Feather name="list" size={14} color={viewMode === 'list' ? '#fff' : COLORS.muted} />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* No School banner — mirrors the web page's "No School Branch" warning */}
+      {!loading && schools.length === 0 && (
+        <View style={styles.warningBanner}>
+          <Feather name="alert-triangle" size={18} color={COLORS.warning} />
+          <View style={{ flex: 1, marginLeft: SPACING.sm }}>
+            <Text style={styles.warningTitle}>No School Created</Text>
+            <Text style={styles.warningSub}>Please create a school before adding classes.</Text>
+          </View>
+          <TouchableOpacity style={styles.warningBtn} onPress={() => navigation.navigate('Create School')}>
+            <Text style={styles.warningBtnText}>Create</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Inline dismissible alert */}
+      {alertState.message ? (
+        <View style={[styles.inlineAlert, alertState.type === 'success' ? styles.inlineAlertSuccess : styles.inlineAlertDanger]}>
+          <Text style={[styles.inlineAlertText, alertState.type === 'success' ? styles.inlineAlertTextSuccess : styles.inlineAlertTextDanger]} numberOfLines={2}>
+            {alertState.message}
+          </Text>
+          <TouchableOpacity onPress={() => setAlertState({ type: '', message: '' })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Feather name="x" size={16} color={alertState.type === 'success' ? COLORS.success : COLORS.primary} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {/* Overview Cards (Scrollable horizontally) */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.overviewScroll}>
@@ -518,7 +818,7 @@ export default function ClassesScreen() {
           <Feather name="search" size={16} color={COLORS.faint} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search classes by name, division..."
+            placeholder="Search classes by name, division, syllabus..."
             placeholderTextColor={COLORS.faint}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -531,7 +831,12 @@ export default function ClassesScreen() {
           )}
         </View>
         {hasPermission('create') && (
-          <TouchableOpacity style={[styles.addBtn, compact && styles.addBtnCompact]} onPress={openAddForm} activeOpacity={0.9}>
+          <TouchableOpacity
+            style={[styles.addBtn, compact && styles.addBtnCompact, schools.length === 0 && styles.addBtnDisabled]}
+            onPress={openAddForm}
+            activeOpacity={0.9}
+            disabled={schools.length === 0}
+          >
             <Feather name="plus" size={16} color="#fff" />
             <Text style={styles.addBtnText}>Add New Class</Text>
           </TouchableOpacity>
@@ -552,12 +857,35 @@ export default function ClassesScreen() {
         <FlatList
           data={filteredClasses}
           keyExtractor={(item, idx) => item._id || item.id || idx.toString()}
-          renderItem={renderCard}
-          numColumns={isTablet ? 2 : 1}
-          key={isTablet ? 'tablet' : 'phone'}
-          columnWrapperStyle={isTablet ? styles.columnWrapper : undefined}
+          renderItem={viewMode === 'card' ? renderCard : renderRow}
+          numColumns={viewMode === 'card' && isTablet ? 2 : 1}
+          key={`${viewMode}-${viewMode === 'card' && isTablet ? 'tablet' : 'phone'}`}
+          columnWrapperStyle={viewMode === 'card' && isTablet ? styles.columnWrapper : undefined}
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} tintColor={COLORS.primary} />}
+          ListFooterComponent={
+            totalPages > 1 ? (
+              <View style={styles.paginationBar}>
+                <TouchableOpacity
+                  style={[styles.pageBtn, currentPage === 1 && styles.pageBtnDisabled]}
+                  disabled={currentPage === 1}
+                  onPress={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                >
+                  <Feather name="chevron-left" size={16} color={currentPage === 1 ? COLORS.faint : COLORS.primary} />
+                </TouchableOpacity>
+                <Text style={styles.pageText}>
+                  Page {currentPage} of {totalPages}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.pageBtn, currentPage === totalPages && styles.pageBtnDisabled]}
+                  disabled={currentPage === totalPages}
+                  onPress={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  <Feather name="chevron-right" size={16} color={currentPage === totalPages ? COLORS.faint : COLORS.primary} />
+                </TouchableOpacity>
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <View style={styles.emptyIconWrap}>
@@ -644,6 +972,26 @@ export default function ClassesScreen() {
                         autoCapitalize="characters"
                       />
                     </View>
+                  </View>
+
+                  {/* Max Section Capacity — matches the web edit modal's capacity field */}
+                  <View style={styles.inputWrapper}>
+                    <Text style={styles.inputLabel}>
+                      Max Section Capacity <Text style={styles.asterisk}>*</Text>
+                    </Text>
+                    <TextInput
+                      style={[styles.input, errors.capacity && styles.inputError]}
+                      placeholder="35"
+                      placeholderTextColor={COLORS.faint}
+                      keyboardType="number-pad"
+                      value={formData.capacity}
+                      onChangeText={(t) => {
+                        setFormData({ ...formData, capacity: t.replace(/[^0-9]/g, '') });
+                        setErrors({ ...errors, capacity: undefined });
+                      }}
+                    />
+                    <Text style={styles.helperText}>Max students allowed before section auto-overflows.</Text>
+                    {errors.capacity && <Text style={styles.errorText}>{errors.capacity}</Text>}
                   </View>
 
                   {renderInlineDropdown('classTeacher', 'Class Teacher (Optional)', teacherOptions)}
@@ -758,6 +1106,12 @@ export default function ClassesScreen() {
                         {typeof viewingClass?.classTeacher === 'object' && <Text style={styles.viewLabel}>{viewingClass?.classTeacher?.staffId}</Text>}
                       </View>
                     </View>
+                    {typeof viewingClass?.classTeacher === 'object' && viewingClass?.classTeacher && (
+                      <TouchableOpacity style={[styles.teacherAttBtn, { marginTop: SPACING.sm, alignSelf: 'flex-start' }]} onPress={() => goToTeacherAttendance(viewingClass.classTeacher)}>
+                        <Feather name="user-check" size={12} color={COLORS.primary} />
+                        <Text style={styles.teacherAttBtnText}>Teacher Att.</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
                 <View style={compact ? styles.rowCompactItem : { flex: 1, marginLeft: SPACING.sm }}>
@@ -772,10 +1126,36 @@ export default function ClassesScreen() {
                 </View>
               </View>
 
+              <Text style={styles.sectionHeaderRed}>TODAY'S ATTENDANCE</Text>
+              <View style={[styles.viewDetailsBox]}>
+                {(() => {
+                  const att = attendanceLabel(viewingClass?._id || viewingClass?.id);
+                  return (
+                    <View style={att.tone === 'success' ? styles.successPillBadge : styles.warningPillBadge}>
+                      <Text style={att.tone === 'success' ? styles.successPillText : styles.warningPillText}>{att.text}</Text>
+                    </View>
+                  );
+                })()}
+              </View>
+
               <Text style={styles.sectionHeaderRed}>DESCRIPTION & NOTES</Text>
-              <View style={[styles.viewDetailsBox, { marginBottom: SPACING.xl }]}>
+              <View style={[styles.viewDetailsBox, { marginBottom: SPACING.md }]}>
                 <Text style={styles.viewText}>{viewingClass?.description || 'No description provided.'}</Text>
               </View>
+
+              {hasPermission('update') && (
+                <TouchableOpacity
+                  style={[styles.saveBtnFull, { marginBottom: SPACING.xl }]}
+                  onPress={() => {
+                    const target = viewingClass;
+                    setViewVisible(false);
+                    if (target) openEditForm(target);
+                  }}
+                >
+                  <Feather name="edit-2" size={16} color="#fff" style={{ marginRight: 8 }} />
+                  <Text style={styles.saveBtnFullText}>Edit Class</Text>
+                </TouchableOpacity>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -810,6 +1190,23 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: FONT.h1, fontWeight: '800', color: COLORS.ink },
   subtitle: { fontSize: FONT.tiny, color: COLORS.faint, marginTop: 2 },
+
+  viewToggle: { flexDirection: 'row', backgroundColor: COLORS.background, borderRadius: RADIUS.pill, padding: 3, borderWidth: 1, borderColor: COLORS.borderSoft, marginLeft: SPACING.sm },
+  viewToggleBtn: { width: 30, height: 30, borderRadius: RADIUS.pill, justifyContent: 'center', alignItems: 'center' },
+  viewToggleBtnActive: { backgroundColor: COLORS.primary },
+
+  warningBanner: { flexDirection: 'row', alignItems: 'center', marginHorizontal: SPACING.lg, marginTop: SPACING.lg, padding: SPACING.md, backgroundColor: COLORS.warningSoft, borderRadius: RADIUS.md, borderWidth: 1, borderColor: '#F5D98F' },
+  warningTitle: { fontSize: FONT.small, fontWeight: '800', color: COLORS.ink },
+  warningSub: { fontSize: FONT.tiny, color: COLORS.muted, marginTop: 2 },
+  warningBtn: { backgroundColor: COLORS.warning, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.pill },
+  warningBtnText: { fontSize: FONT.tiny, fontWeight: '800', color: '#fff' },
+
+  inlineAlert: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: SPACING.lg, marginTop: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1 },
+  inlineAlertSuccess: { backgroundColor: COLORS.successSoft, borderColor: COLORS.successSoftBorder },
+  inlineAlertDanger: { backgroundColor: COLORS.primarySoft, borderColor: COLORS.primarySoftBorder },
+  inlineAlertText: { flex: 1, fontSize: FONT.small, fontWeight: '700', marginRight: SPACING.sm },
+  inlineAlertTextSuccess: { color: '#065F46' },
+  inlineAlertTextDanger: { color: COLORS.primary },
 
   overviewScroll: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.lg, gap: SPACING.md },
   overviewCard: {
@@ -855,14 +1252,20 @@ const styles = StyleSheet.create({
     ...SHADOW.button,
   },
   addBtnCompact: { marginTop: SPACING.sm },
+  addBtnDisabled: { opacity: 0.5 },
   addBtnText: { color: '#fff', fontSize: FONT.small, fontWeight: '700' },
   showingText: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, fontSize: FONT.tiny, color: COLORS.muted, fontWeight: '500', textAlign: 'right' },
 
   listContent: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xl, paddingTop: SPACING.sm },
   columnWrapper: { gap: SPACING.lg },
-  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.lg, borderWidth: 1, borderColor: COLORS.borderSoft, ...SHADOW.card },
+
+  card: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, marginBottom: SPACING.lg, borderWidth: 1, borderColor: COLORS.borderSoft, overflow: 'hidden', ...SHADOW.card },
   cardTablet: { flex: 1, maxWidth: '49%' },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg, gap: SPACING.sm, flexWrap: 'wrap' },
+  accentStrip: { flexDirection: 'row', height: 4, width: '100%' },
+  accentSegment: { flex: 1 },
+  cardBody: { padding: SPACING.lg },
+
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: SPACING.lg, gap: SPACING.sm, flexWrap: 'wrap' },
   cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', flex: 1, gap: SPACING.sm },
   primaryBadge: { backgroundColor: COLORS.primary, paddingHorizontal: 14, paddingVertical: 6, borderRadius: RADIUS.pill },
   primaryBadgeText: { color: '#fff', fontSize: FONT.small, fontWeight: '800' },
@@ -871,40 +1274,80 @@ const styles = StyleSheet.create({
   syllabusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.secondarySoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.xs, gap: 4, maxWidth: 150 },
   syllabusBadgeText: { color: COLORS.secondary, fontSize: FONT.tiny, fontWeight: '800' },
 
+  quickIconGroup: { flexDirection: 'row', gap: 6, backgroundColor: COLORS.background, padding: 3, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.borderSoft },
+  quickIconBtn: { width: 26, height: 26, borderRadius: 13, backgroundColor: COLORS.surface, justifyContent: 'center', alignItems: 'center', ...SHADOW.card },
+
   teacherSection: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: COLORS.background,
     padding: SPACING.md,
     borderRadius: RADIUS.md,
     borderWidth: 1,
     borderColor: COLORS.borderSoft,
     marginBottom: SPACING.lg,
+    gap: SPACING.sm,
   },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.success, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.md },
+  teacherLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
+  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.md },
   avatarText: { fontSize: FONT.h2, fontWeight: '800', color: '#fff' },
   metaLabel: { fontSize: FONT.micro, fontWeight: '800', color: COLORS.faint, marginBottom: 2, letterSpacing: 0.3 },
   teacherName: { fontSize: FONT.h3, fontWeight: '800', color: COLORS.ink },
   teacherId: { fontSize: FONT.tiny, color: COLORS.muted, fontWeight: '500' },
+  teacherAttBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: COLORS.primarySoftBorder, backgroundColor: COLORS.primarySoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.pill },
+  teacherAttBtnText: { fontSize: FONT.tiny, fontWeight: '800', color: COLORS.primary },
 
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginBottom: SPACING.lg },
-  statBox: { width: '48%' },
-  pinkBadge: { backgroundColor: COLORS.pinkSoft, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.xs, alignSelf: 'flex-start', marginTop: 4 },
-  pinkBadgeText: { color: '#DB2777', fontSize: FONT.tiny, fontWeight: '700' },
-  redOutlineBadge: { backgroundColor: COLORS.primarySoft, borderWidth: 1, borderColor: COLORS.primarySoftBorder, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.xs, alignSelf: 'flex-start', marginTop: 4 },
+  metricsList: { gap: SPACING.sm, marginBottom: SPACING.lg },
+  metricRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  metricLabel: { fontSize: FONT.small, color: COLORS.muted, fontWeight: '600' },
+  secondaryPillBadge: { backgroundColor: COLORS.borderSoft, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.xs },
+  secondaryPillText: { fontSize: FONT.tiny, fontWeight: '700', color: COLORS.body },
+  successPillBadge: { backgroundColor: COLORS.successSoft, borderWidth: 1, borderColor: COLORS.successSoftBorder, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.xs },
+  successPillText: { fontSize: FONT.tiny, fontWeight: '800', color: '#065F46' },
+  warningPillBadge: { backgroundColor: COLORS.warningSoft, borderWidth: 1, borderColor: '#F5D98F', paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.xs },
+  warningPillText: { fontSize: FONT.tiny, fontWeight: '800', color: '#92650A' },
+  redOutlineBadge: { backgroundColor: COLORS.primarySoft, borderWidth: 1, borderColor: COLORS.primarySoftBorder, paddingHorizontal: 10, paddingVertical: 5, borderRadius: RADIUS.xs },
   redOutlineBadgeText: { color: COLORS.primary, fontSize: FONT.tiny, fontWeight: '700' },
-  blueBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.infoSoft, paddingHorizontal: 8, paddingVertical: 5, borderRadius: RADIUS.xs, alignSelf: 'flex-start', gap: 4 },
+  blueBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.infoSoft, paddingHorizontal: 8, paddingVertical: 5, borderRadius: RADIUS.xs, gap: 4 },
   blueBadgeText: { color: COLORS.info, fontSize: FONT.tiny, fontWeight: '700' },
-  pinkLightBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.pinkSoft, paddingHorizontal: 8, paddingVertical: 5, borderRadius: RADIUS.xs, alignSelf: 'flex-start', gap: 4 },
+  pinkLightBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.pinkSoft, paddingHorizontal: 8, paddingVertical: 5, borderRadius: RADIUS.xs, gap: 4 },
   pinkLightBadgeText: { color: COLORS.pink, fontSize: FONT.tiny, fontWeight: '700' },
 
-  cardActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: COLORS.borderSoft, paddingTop: SPACING.lg, gap: SPACING.sm },
-  studentsBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.primary, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: RADIUS.pill, gap: 6, flexShrink: 1 },
-  studentsBtnText: { color: '#fff', fontSize: FONT.small, fontWeight: '700' },
-  actionBtnGroup: { flexDirection: 'row', gap: SPACING.sm },
-  iconBtnPrimary: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.secondary, borderRadius: RADIUS.xs },
-  iconBtnEdit: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.successSoft, borderRadius: RADIUS.xs, borderWidth: 1, borderColor: COLORS.successSoftBorder },
-  iconBtnDelete: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.primarySoft, borderRadius: RADIUS.xs, borderWidth: 1, borderColor: COLORS.primarySoftBorder },
+  cardActionsGrid: { borderTopWidth: 1, borderTopColor: COLORS.borderSoft, paddingTop: SPACING.md, gap: SPACING.sm },
+  actionGridRow: { flexDirection: 'row', gap: SPACING.sm },
+  gridBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: SPACING.sm, borderRadius: RADIUS.pill, gap: 6 },
+  gridBtnPrimary: { backgroundColor: COLORS.primary },
+  gridBtnSuccess: { backgroundColor: COLORS.success },
+  gridBtnOutline: { backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border },
+  gridBtnTextLight: { color: '#fff', fontSize: FONT.tiny, fontWeight: '800' },
+  gridBtnTextDark: { color: COLORS.secondary, fontSize: FONT.tiny, fontWeight: '800' },
+  resultsIconBtn: { width: TOUCH_TARGET - 8, height: TOUCH_TARGET - 8, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.primarySoftBorder, backgroundColor: COLORS.primarySoft, justifyContent: 'center', alignItems: 'center' },
+
+  // Compact List row (List view)
+  rowCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.borderSoft, ...SHADOW.card },
+  rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  rowTitleGroup: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flex: 1, minWidth: 0 },
+  primaryBadgeSm: { backgroundColor: COLORS.primary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: RADIUS.pill },
+  primaryBadgeSmText: { color: '#fff', fontSize: FONT.tiny, fontWeight: '800' },
+  darkBadgeSm: { backgroundColor: COLORS.ink, paddingHorizontal: 8, paddingVertical: 4, borderRadius: RADIUS.pill },
+  darkBadgeSmText: { color: '#fff', fontSize: FONT.micro, fontWeight: '700' },
+  rowTeacherText: { fontSize: FONT.small, color: COLORS.muted, fontWeight: '600', flexShrink: 1 },
+  rowIconGroup: { flexDirection: 'row', gap: 6 },
+  rowMetaLine: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: SPACING.sm, marginTop: SPACING.sm },
+  rowMetaText: { fontSize: FONT.tiny, color: COLORS.muted, fontWeight: '600' },
+  successPillBadgeSm: { backgroundColor: COLORS.successSoft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADIUS.xs },
+  successPillTextSm: { fontSize: FONT.micro, fontWeight: '800', color: '#065F46' },
+  warningPillBadgeSm: { backgroundColor: COLORS.warningSoft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADIUS.xs },
+  warningPillTextSm: { fontSize: FONT.micro, fontWeight: '800', color: '#92650A' },
+  rowActionBar: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginTop: SPACING.md, paddingTop: SPACING.sm, borderTopWidth: 1, borderTopColor: COLORS.borderSoft },
+  rowActionBtn: { paddingHorizontal: SPACING.md, paddingVertical: 6, borderRadius: RADIUS.pill, backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border },
+  rowActionBtnText: { fontSize: FONT.tiny, fontWeight: '700', color: COLORS.body },
+
+  paginationBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.lg, paddingVertical: SPACING.lg },
+  pageBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, justifyContent: 'center', alignItems: 'center' },
+  pageBtnDisabled: { opacity: 0.4 },
+  pageText: { fontSize: FONT.small, fontWeight: '700', color: COLORS.body },
 
   emptyState: { alignItems: 'center', padding: SPACING.xxl, marginTop: SPACING.lg },
   emptyIconWrap: { width: 60, height: 60, borderRadius: 30, backgroundColor: COLORS.surface, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.borderSoft },
@@ -942,6 +1385,7 @@ const styles = StyleSheet.create({
 
   inputWrapper: { marginBottom: SPACING.lg, position: 'relative' },
   inputLabel: { fontSize: FONT.small, fontWeight: '700', color: COLORS.body, marginBottom: 6, marginLeft: 2 },
+  helperText: { fontSize: FONT.tiny, color: COLORS.muted, marginTop: 4, marginLeft: 2 },
   asterisk: { color: COLORS.primary },
   input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingHorizontal: SPACING.md, height: TOUCH_TARGET + 4, backgroundColor: COLORS.background, fontSize: FONT.body, color: COLORS.ink },
   textArea: { height: 84, paddingTop: 12, textAlignVertical: 'top' },
@@ -997,5 +1441,5 @@ const styles = StyleSheet.create({
   viewDetailsBox: { backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: SPACING.lg, borderWidth: 1, borderColor: COLORS.border, marginBottom: SPACING.md },
   viewLabel: { fontSize: FONT.tiny, color: COLORS.faint, fontWeight: '700', marginBottom: 4 },
   viewVal: { fontSize: FONT.body, color: COLORS.ink, fontWeight: '700' },
-  viewText: { fontSize: FONT.body, color: COLORS.body, lineHeight: 22, fontWeight: '500' },
+  viewText: { fontSize: FONT.body, color: COLORS.body, lineHeight: 23, fontWeight: '500' },
 })

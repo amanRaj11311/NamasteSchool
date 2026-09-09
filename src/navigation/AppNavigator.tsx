@@ -62,24 +62,12 @@ import LibraryCatalogScreen from '../screens/Libarary Management/LibraryCatalogS
 import LibraryIssueScreen from '../screens/Libarary Management/LibraryIssuesScreen';
 import LibraryReturnsScreen from '../screens/Libarary Management/LibraryReportScreen';
 import LibraryReportsScreen from '../screens/Libarary Management/LibraryReturnScreen';
-
-// Local school logo — adjust the relative path if this file ever moves.
-// From src/navigation/AppNavigator.tsx this resolves to src/assets/logo.png
+import ClassResultsScreen from '../screens/ClassManagement/ResultScreen';
 import SchoolLogo from '../assets/logo.png';
 
 const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
 
-
-const PlaceholderScreen = ({ route }: any) => (
-  <View style={styles.loadingContainer}>
-    <Feather name="box" size={40} color="#D1D5DB" style={{ marginBottom: 10 }} />
-    <Text style={{ fontSize: 18, fontWeight: '800', color: '#374151' }}>{route.name}</Text>
-    <Text style={{ color: '#6B7280', marginTop: 4, fontWeight: '500' }}>Module screen coming soon</Text>
-  </View>
-);
-
-// --- Types ---
 type Permission = { module: string; action: string };
 type MenuItem = { routeName?: string; label: string; icon: string; component?: React.ComponentType<any>; module: string; children?: MenuItem[]; };
 type MenuSection = { section: string; items: MenuItem[]; };
@@ -105,6 +93,7 @@ const MENU_STRUCTURE: MenuSection[] = [
           { routeName: "Homework", label: "Homework", icon: "edit-3", component: ClassHomeworkScreen, module: "homework" },
           { routeName: "Exams", label: "Exams", icon: "award", component: ClassExamsScreen, module: "exams" },
           { routeName: "Diary", label: "Class Diary", icon: "book-open", component: ClassDiaryScreen, module: "diary" },
+          { routeName: "Results", label: "Results", icon: "bar-chart-2", component: ClassResultsScreen, module: "results" },
         ]
       },
       { routeName: "Subjects", label: "Subjects", icon: "book", component: SubjectsScreen, module: "subjects" },
