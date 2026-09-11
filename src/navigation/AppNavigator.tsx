@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -37,6 +37,7 @@ import ClassHomeworkScreen from "../screens/ClassManagement/HomeworkScreen";
 import ClassDiaryScreen from "../screens/ClassManagement/ClassDiary";
 import ClassAttendanceScreen from '../screens/ClassManagement/ClassAttendanceScreen';
 import ClassExamsScreen from "../screens/ClassManagement/ClassExamScreen";
+import ClassResultsScreen from '../screens/ClassManagement/ResultScreen';
 import ApplyLeaveScreen from '../screens/Leave Management/ApplyLeavesScreen';
 import LeaveTypesScreen from '../screens/Leave Management/LeaveTypeScreen';
 import LeaveBalancesScreen from '../screens/Leave Management/LeavesBalanceScreen';
@@ -58,11 +59,18 @@ import ExpenseCategoriesScreen from '../screens/Expense Management/ExpenseCatego
 import ExpenseReportsScreen from '../screens/Expense Management/ExpensesReport';
 import GalleryEventsScreen from '../screens/GalleryScreen';
 import CertificatesScreen from '../screens/Certificate';
+
+// Library Imports
 import LibraryCatalogScreen from '../screens/Libarary Management/LibraryCatalogScreen';
 import LibraryIssueScreen from '../screens/Libarary Management/LibraryIssuesScreen';
 import LibraryReturnsScreen from '../screens/Libarary Management/LibraryReportScreen';
 import LibraryReportsScreen from '../screens/Libarary Management/LibraryReturnScreen';
-import ClassResultsScreen from '../screens/ClassManagement/ResultScreen';
+
+// Hostel Imports
+import HostelBlocksRoomsScreen from '../screens/Hostel Management/HostelBlocksRoomsScreen';
+import HostelAllocationScreen from '../screens/Hostel Management/HostelAllocationScreen';
+import HostelReportsScreen from '../screens/Hostel Management/HostelReportsScreen';
+
 import SchoolLogo from '../assets/logo.png';
 
 const Stack = createNativeStackNavigator();
@@ -85,7 +93,7 @@ const MENU_STRUCTURE: MenuSection[] = [
     items: [
       { routeName: "Schools", label: "School Branches", icon: "git-branch", component: SchoolsScreen, module: "schools" },
       {
-        label: "Classes Manager", icon: "monitor", module: "classes_group", // Group wrappers don't need exact modules, children dictate visibility
+        label: "Classes Manager", icon: "monitor", module: "classes_group",
         children: [
           { routeName: "Classes", label: "Classes Overview", icon: "layers", component: ClassesScreen, module: "classes" },
           { routeName: "Class TimeTable", label: "Class Timetable", icon: "calendar", component: ClassTimetableScreen, module: "timetable" },
@@ -98,8 +106,8 @@ const MENU_STRUCTURE: MenuSection[] = [
       },
       { routeName: "Subjects", label: "Subjects", icon: "book", component: SubjectsScreen, module: "subjects" },
       { routeName: "Students", label: "Students Directory", icon: "users", component: AddStudentScreen, module: "students" },
-      {routeName: "Gallery", label: "Gallery & Events", icon: "layers", component: GalleryEventsScreen, module: "classlevels"},
-      {routeName: "Certificates", label: "Certificates", icon: "award", component: CertificatesScreen, module: "classlevels"},
+      { routeName: "Gallery", label: "Gallery & Events", icon: "layers", component: GalleryEventsScreen, module: "classlevels" },
+      { routeName: "Certificates", label: "Certificates", icon: "award", component: CertificatesScreen, module: "classlevels" },
 
       {
         label: "Staff Management", icon: "user-check", module: "staff_group",
@@ -110,68 +118,34 @@ const MENU_STRUCTURE: MenuSection[] = [
         ]
       },
       {
-        label: "Library Manager", 
+        label: "Library Management", 
         icon: "book", 
         module: "library_group", 
         children: [
-          { 
-            routeName: "LibraryCatalog", 
-            label: "Book Catalog", 
-            icon: "list", 
-            component: LibraryCatalogScreen, 
-            module: "library" 
-          },
-          { 
-            routeName: "LibraryIssue", 
-            label: "Issue Book", 
-            icon: "external-link", 
-            component: LibraryIssueScreen, 
-            module: "libraryIssue" 
-          },
-          { 
-            routeName: "LibraryReturns", 
-            label: "Returns & Fines", 
-            icon: "rotate-ccw", 
-            component: LibraryReturnsScreen, 
-            module: "libraryIssue" 
-          },
-          { 
-            routeName: "LibraryReports", 
-            label: "Analytics & Reports", 
-            icon: "pie-chart", 
-            component: LibraryReportsScreen, 
-            module: "library" 
-          }
+          { routeName: "LibraryCatalog", label: "Book Catalog", icon: "list", component: LibraryCatalogScreen, module: "library" },
+          { routeName: "LibraryIssue", label: "Issue Book", icon: "external-link", component: LibraryIssueScreen, module: "libraryIssue" },
+          { routeName: "LibraryReturns", label: "Returns & Fines", icon: "rotate-ccw", component: LibraryReturnsScreen, module: "libraryIssue" },
+          { routeName: "LibraryReports", label: "Analytics & Reports", icon: "pie-chart", component: LibraryReportsScreen, module: "library" }
         ]
       },
       {
-        
+        label: "Hostel Management",
+        icon: "home",
+        module: "hostel_group",
+        children: [
+          { routeName: "HostelBlocksRooms", label: "Blocks & Rooms", icon: "box", component: HostelBlocksRoomsScreen, module: "hostel" },
+          { routeName: "HostelAllocation", label: "Room Allocation", icon: "log-in", component: HostelAllocationScreen, module: "hostelAllocation" },
+          { routeName: "HostelReports", label: "Hostel Reports", icon: "pie-chart", component: HostelReportsScreen, module: "hostel" }
+        ]
+      },
+      {
         label: "Academic & Promotion",
         icon: "compass",
         module: "Academic_group",
         children: [
-          {
-            routeName: "academic",
-            label: "Academic Sessions",
-            icon: "calendar",
-            component: AcademicSessionsScreen,
-            module: "Academic",
-          },
-          {
-            routeName: "class-level-orders",
-            label: "Class Level Orders",
-            icon: "layers",
-            component: ClassLevelsScreen,
-            module: "Academic",
-          },
-          {
-            routeName: "student-promotion",
-            label: "Student Promotion",
-            icon: "arrow-up-circle",
-            component: PromotionsDashboardScreen,
-            module: "Academic",
-          },
-          
+          { routeName: "academic", label: "Academic Sessions", icon: "calendar", component: AcademicSessionsScreen, module: "Academic" },
+          { routeName: "class-level-orders", label: "Class Level Orders", icon: "layers", component: ClassLevelsScreen, module: "Academic" },
+          { routeName: "student-promotion", label: "Student Promotion", icon: "arrow-up-circle", component: PromotionsDashboardScreen, module: "Academic" },
         ],
       },
       {
@@ -183,7 +157,6 @@ const MENU_STRUCTURE: MenuSection[] = [
         ]
       },
       {
-       
         label: "Financials",
         icon: "dollar-sign",
         module: "finance_group",
@@ -201,14 +174,13 @@ const MENU_STRUCTURE: MenuSection[] = [
           },
           {
             label: "Salary Management",
-            
             icon: "trending-up",
             module: "salary",
             children: [
               { routeName: "Payroll", label: "Payroll", icon: "credit-card", component: SalaryScreen, module: "salary" },
               { routeName: "SalaryStructure", label: "Salary Structure", icon: "sliders", component: SalaryStructureScreen, module: "salary" },
               { routeName: "Advances", label: "Advances", icon: "dollar-sign", component: AdvancesScreen, module: "salary" },
-              { routeName: "SalaryReports", label: "Salary Reports", icon: "bar-chart-2", component:SalaryReportsScreen, module: "salary" },
+              { routeName: "SalaryReports", label: "Salary Reports", icon: "bar-chart-2", component: SalaryReportsScreen, module: "salary" },
             ],
           },
           {
@@ -223,7 +195,6 @@ const MENU_STRUCTURE: MenuSection[] = [
           },
         ],
       },
-      
       {
         label: "Communication", icon: "message-square", module: "communication_group",
         children: [
@@ -271,7 +242,6 @@ function hasReadPermission(permissions: Permission[], isSuperAdmin: boolean, mod
   if (isSuperAdmin) return true;
   return permissions.some((p) => p.module === module && (p.action === 'read' || p.action === 'readOwn'));
 }
-
 
 function containsRoute(item: MenuItem, routeName: string): boolean {
   if (item.routeName === routeName) return true;
@@ -473,9 +443,7 @@ function CustomDrawerContent(props: any) {
       if (name) setUserName(name); 
       if (role) setUserRole(role);
 
-      // Auto-expand every ancestor group (at any depth) that leads to the
-      // currently active route — e.g. opening a screen under
-      // Financials -> Fees Management now expands BOTH levels, not just one.
+      // Auto-expand every ancestor group (at any depth) that leads to the currently active route
       const toExpand: Record<string, boolean> = {};
       const walk = (items: MenuItem[], path: string) => {
         items.forEach((node) => {
@@ -537,7 +505,6 @@ function CustomDrawerContent(props: any) {
         </View>
       </DrawerContentScrollView>
 
-    
       <View style={[styles.footerContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={styles.footerTextContainer}>
           <Text style={styles.footerName} numberOfLines={1}>{userName}</Text>
@@ -575,15 +542,10 @@ function NoModulesAssignedScreen({ navigation }: { navigation: any }) {
 }
 
 // ---------------------------------------------------------------------
-// 4. Drawer Root (Evaluates RBAC dynamically)
+// Drawer Root (Evaluates RBAC dynamically)
 // ---------------------------------------------------------------------
 function DrawerRoot() {
   const navigation = useNavigation<any>();
-
-  // menuLoading distinguishes "still resolving permissions" from
-  // "resolved, and it's genuinely empty" — the old code used
-  // `!filteredMenu || visibleRoutes.length === 0` for both cases, which is
-  // why an empty-permissions user never left the loading spinner.
   const [menuLoading, setMenuLoading] = useState(true);
   const [filteredMenu, setFilteredMenu] = useState<MenuSection[] | null>(null);
   const [visibleRoutes, setVisibleRoutes] = useState<MenuItem[]>([]);
@@ -597,7 +559,6 @@ function DrawerRoot() {
         ]);
 
         let permissions: Permission[] = [];
-
         try {
           permissions = permsRaw ? JSON.parse(permsRaw) : [];
         } catch (error) {
@@ -610,21 +571,17 @@ function DrawerRoot() {
         const filterMenuItems = (items: MenuItem[]): MenuItem[] => {
           return items
             .map((item) => {
-              // If the item has children, recursively filter them
               if (item.children && item.children.length > 0) {
                 const validChildren = filterMenuItems(item.children);
-
                 if (validChildren.length === 0) {
                   return null;
                 }
-
                 return {
                   ...item,
                   children: validChildren,
                 };
               }
 
-              // Only actual screens with routeName + component are valid routes
               if (
                 item.routeName &&
                 item.component &&
@@ -645,7 +602,6 @@ function DrawerRoot() {
         const finalMenu: MenuSection[] = MENU_STRUCTURE
           .map((section) => {
             const validItems = filterMenuItems(section.items);
-
             return {
               section: section.section,
               items: validItems,
@@ -653,10 +609,8 @@ function DrawerRoot() {
           })
           .filter((section) => section.items.length > 0);
 
-        // Get only valid leaf routes (works at any nesting depth)
         const getVisibleRoutes = (items: MenuItem[]): MenuItem[] => {
           const routes: MenuItem[] = [];
-
           items.forEach((item) => {
             if (item.children && item.children.length > 0) {
               routes.push(...getVisibleRoutes(item.children));
@@ -664,7 +618,6 @@ function DrawerRoot() {
               routes.push(item);
             }
           });
-
           return routes;
         };
 
@@ -683,9 +636,6 @@ function DrawerRoot() {
         setFilteredMenu([]);
         setVisibleRoutes([]);
       } finally {
-        // Always stop "loading" once resolution finishes — whether or not
-        // any routes came out of it. An empty result is a valid, final
-        // state, not a reason to keep spinning.
         setMenuLoading(false);
       }
     };
@@ -715,15 +665,15 @@ function DrawerRoot() {
       screenOptions={{
         headerStyle: { 
           backgroundColor: "#ffffff",
-          elevation: 2, // Android shadow
-          shadowColor: '#000', // iOS shadow
+          elevation: 2,
+          shadowColor: '#000',
           shadowOffset: { width: 0, height: 2 },
           shadowOpacity: 0.05,
           shadowRadius: 3,
         },
         headerTintColor: "#111827",
         headerTitleStyle: { fontWeight: '800', fontSize: 18 },
-        headerRight: () => <HeaderRightAvatar />, // Red avatar integrated securely inside the native App Bar
+        headerRight: () => <HeaderRightAvatar />,
         drawerStyle: { width: 320, backgroundColor: '#ffffff' }
       }}
     >
@@ -783,15 +733,15 @@ const styles = StyleSheet.create({
   
   // --- Menu Styling ---
   menuContainer: { paddingHorizontal: 16, paddingBottom: 40 },
-sectionHeaderTitle: {
-  fontSize: 10,
-  fontWeight: '800',
-  color: '#9CA3AF',
-  letterSpacing: 1,
-  marginTop: 8, // 20 se kam
-  marginBottom: 10,
-  marginLeft: 12,
-},  
+  sectionHeaderTitle: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#9CA3AF',
+    letterSpacing: 1,
+    marginTop: 8,
+    marginBottom: 10,
+    marginLeft: 12,
+  },  
   drawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, marginBottom: 4 },
   drawerItemActive: { backgroundColor: '#FEF2F2' },
   drawerIconBox: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#F9FAFB', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
@@ -806,17 +756,17 @@ sectionHeaderTitle: {
   childDrawerItemTextActive: { color: '#ef4444', fontWeight: '800' },
   childActiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#ef4444' },
 
-  
-footerContainer: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  paddingHorizontal: 16, // 20 → 16
-  paddingTop: 16,
-  borderTopWidth: 1,
-  marginLeft:24,
-  borderTopColor: '#F3F4F6',
-  backgroundColor: '#F9FAFB',
-},  footerTextContainer: { flex: 1 },
+  footerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    marginLeft: 24,
+    borderTopColor: '#F3F4F6',
+    backgroundColor: '#F9FAFB',
+  },
+  footerTextContainer: { flex: 1 },
   footerName: { fontSize: 15, fontWeight: '800', color: '#111827' },
   footerRoleBadge: { backgroundColor: '#E0F2FE', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 6 },
   footerRole: { fontSize: 10, fontWeight: '800', color: '#ef4444', textTransform: 'uppercase' },
