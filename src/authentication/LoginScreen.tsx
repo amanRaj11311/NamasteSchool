@@ -206,12 +206,6 @@ export default function LoginScreen({ navigation }: any) {
         return Alert.alert("Login Error", "User data not received from server");
       }
 
-      // Backend currently doesn't issue a JWT/session token on login — it
-      // just confirms success and returns the user object (with permissions
-      // already embedded in user.permissions / user.roleId.permissions).
-      // We store a simple logged-in marker instead of a real bearer token.
-      // If any screen later needs authenticated API calls, that's a
-      // separate backend change — not required for login/navigation to work.
       const sessionMarker = String(user.id || user._id || "logged-in");
 
       let extractedRole = "EMPLOYEE";
@@ -237,34 +231,20 @@ export default function LoginScreen({ navigation }: any) {
         String(user.employeeId || user.id || "")
       );
 
-      // API returns a single `name` field ("Super Admin"),
-      // not separate firstName/lastName.
       const displayName = user.name
         ? user.name
         : `${user.firstName || ""} ${user.lastName || ""}`.trim();
       await AsyncStorage.setItem("userName", displayName || "User");
 
-      // FIX: email was never persisted before, so AppBar/Drawer always
-      // read null for it. Prefer whatever the API returns for the user's
-      // email, falling back to the address they just logged in with.
       await AsyncStorage.setItem("userEmail", String(user.email || loginEmail));
 
       // Save the correct role
       await AsyncStorage.setItem("userRole", extractedRole.toUpperCase());
 
-      // Persist the Super Admin flag — AppNavigator uses this to
-      // bypass per-module permission checks entirely for Super Admins.
       await AsyncStorage.setItem(
         "isSuperAdmin",
         user.isSuperAdmin ? "true" : "false"
       );
-
-      // FIX: `schoolId` was never persisted before. On the backend it comes
-      // back as a *populated object* ({_id, name, code, city, board}) for a
-      // normal school-scoped user, and as `null` for a Super Admin (who
-      // isn't tied to one school and picks from a list instead). Store just
-      // the `_id` string — that's what feature screens (e.g. Notice Board)
-      // send back to the API — plus the name separately for display use.
       const schoolIdValue = user.schoolId?._id || user.school?._id || "";
       const schoolNameValue = user.schoolId?.name || user.school?.name || "";
       await AsyncStorage.setItem("userSchoolId", schoolIdValue);
@@ -442,13 +422,10 @@ export default function LoginScreen({ navigation }: any) {
               style={[
                 styles.loginBtn,
                 { width: buttonWidth },
-                // @ts-ignore — experimental_backgroundImage is a valid RN style prop
-                // (RN 0.76+, New Architecture) that renders a native CSS-style gradient
-                // without needing any third-party library like react-native-linear-gradient.
                 {
                   experimental_backgroundImage:
                     loginStatus === "success"
-                      ? "linear-gradient(135deg, #16A34A, #15803D)"
+                      ? "linear-gradient(135deg, #DC2626, #DC2626)"
                       : `linear-gradient(135deg, ${BRAND.primaryLight}, ${BRAND.primaryDark})`,
                 },
               ]}

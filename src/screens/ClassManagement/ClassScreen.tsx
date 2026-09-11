@@ -24,6 +24,7 @@ import { API_BASE } from '../../network/api';
 import { useNavigation } from '@react-navigation/native';
 import { COLORS, RADIUS, SPACING, FONT, SHADOW, TOUCH_TARGET, isSmallDevice } from '../../constants/theme';
 
+
 // --- Types ---
 interface Permission {
   module: string;
@@ -631,7 +632,7 @@ export default function ClassesScreen() {
               <TouchableOpacity
                 style={[styles.gridBtn, styles.gridBtnOutline, { flex: 1 }]}
                 activeOpacity={0.9}
-                onPress={() => navigation.navigate('Timetable', { classId })}
+                onPress={() => navigation.navigate('ClassTimetableScreen', { classId })}
               >
                 <Feather name="calendar" size={13} color={COLORS.secondary} />
                 <Text style={styles.gridBtnTextDark} numberOfLines={1}>
@@ -781,36 +782,80 @@ export default function ClassesScreen() {
       ) : null}
 
       {/* Overview Cards (Scrollable horizontally) */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.overviewScroll}>
-        <View style={[styles.overviewCard, isTablet && styles.overviewCardTablet]}>
-          <View style={[styles.overviewIconWrap, { backgroundColor: COLORS.secondarySoft }]}>
-            <Feather name="grid" size={14} color={COLORS.secondary} />
-          </View>
-          <Text style={styles.overviewLabel}>TOTAL CLASSES</Text>
-          <Text style={styles.overviewValue}>{totalClasses}</Text>
-        </View>
-        <View style={[styles.overviewCard, isTablet && styles.overviewCardTablet]}>
-          <View style={[styles.overviewIconWrap, { backgroundColor: COLORS.primarySoft }]}>
-            <Feather name="layers" size={14} color={COLORS.primary} />
-          </View>
-          <Text style={styles.overviewLabel}>DIVISIONS</Text>
-          <Text style={styles.overviewValue}>{totalDivisions}</Text>
-        </View>
-        <View style={[styles.overviewCard, isTablet && styles.overviewCardTablet]}>
-          <View style={[styles.overviewIconWrap, { backgroundColor: COLORS.successSoft }]}>
-            <Feather name="user-check" size={14} color={COLORS.success} />
-          </View>
-          <Text style={styles.overviewLabel}>ASSIGNED TEACHERS</Text>
-          <Text style={styles.overviewValue}>{assignedTeachers}</Text>
-        </View>
-        <View style={[styles.overviewCard, isTablet && styles.overviewCardTablet]}>
-          <View style={[styles.overviewIconWrap, { backgroundColor: COLORS.warningSoft }]}>
-            <Feather name="zap" size={14} color={COLORS.warning} />
-          </View>
-          <Text style={styles.overviewLabel}>SYLLABUS ENGINE</Text>
-          <Text style={styles.overviewValueText}>Auto-Detected</Text>
-        </View>
-      </ScrollView>
+      {/* Overview Cards — premium 2x2 grid, fixed-height, no layout shift */}
+<View style={styles.overviewGrid}>
+  <View style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
+    <View style={styles.kpiTopRow}>
+      <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.secondarySoft }]}>
+        <Feather name="grid" size={15} color={COLORS.secondary} />
+      </View>
+      <View style={styles.kpiTrendDot} />
+    </View>
+    <Text style={styles.kpiLabel} numberOfLines={1}>TOTAL CLASSES</Text>
+    <Text
+      style={styles.kpiValue}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.6}
+    >
+      {loading ? '—' : totalClasses}
+    </Text>
+  </View>
+
+  <View style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
+    <View style={styles.kpiTopRow}>
+      <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.primarySoft }]}>
+        <Feather name="layers" size={15} color={COLORS.primary} />
+      </View>
+      <View style={styles.kpiTrendDot} />
+    </View>
+    <Text style={styles.kpiLabel} numberOfLines={1}>DIVISIONS</Text>
+    <Text
+      style={styles.kpiValue}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.6}
+    >
+      {loading ? '—' : totalDivisions}
+    </Text>
+  </View>
+
+  <View style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
+    <View style={styles.kpiTopRow}>
+      <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.successSoft }]}>
+        <Feather name="user-check" size={15} color={COLORS.success} />
+      </View>
+      <View style={styles.kpiTrendDot} />
+    </View>
+    <Text style={styles.kpiLabel} numberOfLines={1}>ASSIGNED TEACHERS</Text>
+    <Text
+      style={styles.kpiValue}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.6}
+    >
+      {loading ? '—' : assignedTeachers}
+    </Text>
+  </View>
+
+  <View style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
+    <View style={styles.kpiTopRow}>
+      <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.warningSoft }]}>
+        <Feather name="zap" size={15} color={COLORS.warning} />
+      </View>
+      <View style={styles.kpiTrendDot} />
+    </View>
+    <Text style={styles.kpiLabel} numberOfLines={1}>SYLLABUS ENGINE</Text>
+    <Text
+      style={styles.kpiValueText}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.7}
+    >
+      Auto-Detected
+    </Text>
+  </View>
+</View>
 
       {/* Action Bar */}
       <View style={[styles.actionBar, compact && styles.actionBarCompact]}>
@@ -1208,22 +1253,68 @@ const styles = StyleSheet.create({
   inlineAlertTextSuccess: { color: '#065F46' },
   inlineAlertTextDanger: { color: COLORS.primary },
 
-  overviewScroll: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.lg, gap: SPACING.md },
-  overviewCard: {
-    backgroundColor: COLORS.surface,
-    padding: SPACING.md,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.borderFaint,
-    minWidth: isSmallDevice ? 120 : 140,
-    ...SHADOW.card,
-  },
-  overviewCardTablet: { minWidth: 170, paddingVertical: SPACING.lg },
-  overviewIconWrap: { width: 26, height: 26, borderRadius: RADIUS.xs, justifyContent: 'center', alignItems: 'center', marginBottom: SPACING.sm },
-  overviewLabel: { fontSize: FONT.micro, fontWeight: '800', color: COLORS.muted, letterSpacing: 0.5, marginBottom: 6 },
-  overviewValue: { fontSize: 26, fontWeight: '800', color: COLORS.ink },
-  overviewValueText: { fontSize: FONT.h3, fontWeight: '700', color: COLORS.success, marginTop: 2 },
-
+ overviewGrid: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  paddingHorizontal: SPACING.lg,
+  paddingTop: SPACING.lg,
+  paddingBottom: SPACING.sm,
+  gap: SPACING.md,
+},
+kpiCard: {
+  flexBasis: '47%',
+  flexGrow: 1,
+  height: 100,              // fixed height — kills the "jump then settle" bug
+  backgroundColor: COLORS.surface,
+  borderRadius: RADIUS.lg,
+  borderWidth: 1,
+  borderColor: COLORS.borderFaint,
+  padding: SPACING.md,
+  justifyContent: 'space-between',
+  overflow: 'hidden',
+  ...SHADOW.card,
+},
+kpiCardTablet: {
+  flexBasis: '23%',
+  height: 108,
+},
+kpiTopRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+},
+kpiIconWrap: {
+  width: 28,
+  height: 28,
+  borderRadius: RADIUS.xs,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+kpiTrendDot: {
+  width: 6,
+  height: 6,
+  borderRadius: 3,
+  backgroundColor: COLORS.borderSoft,
+},
+kpiLabel: {
+  fontSize: FONT.micro,
+  fontWeight: '800',
+  color: COLORS.muted,
+  letterSpacing: 0.6,
+  marginTop: SPACING.sm,
+},
+kpiValue: {
+  fontSize: 24,
+  fontWeight: '800',
+  color: COLORS.ink,
+  includeFontPadding: false,   // Android: stops icon-font style clipping/offset
+},
+kpiValueText: {
+  fontSize: FONT.h3,
+  fontWeight: '800',
+  color: COLORS.success,
+  includeFontPadding: false,
+},
   actionBar: { flexDirection: 'row', paddingHorizontal: SPACING.lg, alignItems: 'center', gap: SPACING.md, zIndex: 10 },
   actionBarCompact: { flexDirection: 'column', alignItems: 'stretch' },
   searchContainer: {

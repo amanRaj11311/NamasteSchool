@@ -90,7 +90,7 @@ const buildAttendanceItem = (student: any, status: string) => ({
   rollNo: student.rollNo?.toString() || '',
   studentName: student.name || '',
   photo: student.photo || '/default-avatar.png',
-  status: status && VALID_STATUSES.includes(status) ? status : 'Present',
+  status: status && VALID_STATUSES.includes(status) ? status : 'Absent',
 });
 
 const validateAttendancePayload = (
@@ -132,10 +132,11 @@ type StudentRowProps = {
   dayCellWidth: number;
   stickyColWidth: number;
   onCellPress: (student: any, dateStr: string) => void;
+  onCellLongPress: (student: any, dateStr: string) => void;
 };
 
 const StudentRow = memo(
-  ({ student, year, month, daysArray, attendanceForStudent, canEdit, pct, todayStr, dayCellWidth, stickyColWidth, onCellPress }: StudentRowProps) => {
+  ({ student, year, month, daysArray, attendanceForStudent, canEdit, pct, todayStr, dayCellWidth, stickyColWidth, onCellPress, onCellLongPress }: StudentRowProps) => {
     const pctColor = pct === null ? C.textFaint : pct >= 85 ? C.green : pct >= 60 ? C.amber : C.primary;
     return (
       <View style={styles.matrixDataRow}>
@@ -179,11 +180,21 @@ const StudentRow = memo(
               ]}
               activeOpacity={canPress ? 0.6 : 1}
               onPress={() => canPress && onCellPress(student, dateStr)}
+              onLongPress={() => canPress && onCellLongPress(student, dateStr)}
+              delayLongPress={350}
               disabled={!canPress}
             >
               {isFuture ? (
                 <Feather name="lock" size={11} color={C.textFaint} />
-              ) : meta ? (
+              ) : status === 'Present' ? (
+                // Present — filled checkbox (this is the normal tap target)
+                <View style={styles.cellCheckboxActive}>
+                  <Feather name="check" size={13} color="#fff" />
+                </View>
+              ) : meta && status !== 'Absent' ? (
+                // Leave / Half-Day / Holiday — set via long-press, shown as a
+                // small status pill so it stays visually distinct from a
+                // plain present/absent checkbox.
                 <View style={[styles.statusPill, { backgroundColor: meta.bg, borderColor: meta.color + '33' }]}>
                   <Text style={[styles.statusPillText, { color: meta.color }]}>{meta.abbr}</Text>
                 </View>
@@ -192,7 +203,8 @@ const StudentRow = memo(
                   <Text style={[styles.statusPillText, { color: C.slate }]}>H</Text>
                 </View>
               ) : (
-                <Text style={styles.unmarkedText}>·</Text>
+                // Absent or not yet marked — empty checkbox (default state)
+                <View style={styles.cellCheckboxEmpty} />
               )}
             </TouchableOpacity>
           );
@@ -200,6 +212,19 @@ const StudentRow = memo(
       </View>
     );
   }
+);
+
+const SkeletonRow = ({ delay = 0 }: { delay?: number }) => (
+  <View style={[styles.skeletonRow, { opacity: 1 - Math.min(delay * 0.06, 0.4) }]}>
+    <View style={styles.skeletonAvatar} />
+    <View style={{ flex: 1, marginLeft: 12 }}>
+      <View style={styles.skeletonLineWide} />
+      <View style={styles.skeletonLineNarrow} />
+    </View>
+    <View style={styles.skeletonPillGroup}>
+      {[0, 1, 2, 3, 4, 5].map(i => <View key={i} style={styles.skeletonPill} />)}
+    </View>
+  </View>
 );
 
 export default function ClassAttendanceScreen() {
@@ -243,6 +268,7 @@ export default function ClassAttendanceScreen() {
   // UI States
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -294,22 +320,52 @@ export default function ClassAttendanceScreen() {
     } catch (e) { console.error(e); setLoading(false); }
   };
 
-  const fetchGridData = async (token: string | null, classId: string, monthDate: Date, isRefresh = false) => {
-    if (isRefresh) setRefreshing(true); else setLoading(true);
-    setSelectedStatDate(null); // reset KPI drill-down whenever the underlying data changes
-    try {
-      const year = monthDate.getFullYear();
-      const month = String(monthDate.getMonth() + 1).padStart(2, '0');
+  // Cache key per class + month, so switching back to a class/month you've
+  // already opened this session shows the matrix instantly.
+  const gridCacheKey = (classId: string, year: number, month: string) => `attendance_grid_cache_${classId}_${year}-${month}`;
 
+  const fetchGridData = async (token: string | null, classId: string, monthDate: Date, isRefresh = false) => {
+    setSelectedStatDate(null); // reset KPI drill-down whenever the underlying data changes
+    const year = monthDate.getFullYear();
+    const month = String(monthDate.getMonth() + 1).padStart(2, '0');
+    const cacheKey = gridCacheKey(classId, year, month);
+
+    // Cache-first: paint the last known matrix immediately (if any) so
+    // students never sit on a blank/spinner screen while we go fetch the
+    // latest data in the background. Pull-to-refresh always skips this.
+    let paintedFromCache = false;
+    if (!isRefresh) {
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          setStudents(parsed.students || []);
+          setAttendanceRecords(parsed.attendanceRecords || []);
+          setLoading(false);
+          paintedFromCache = true;
+        }
+      } catch (e) { /* ignore corrupt cache, fall through to network */ }
+    }
+
+    if (isRefresh) setRefreshing(true);
+    else if (!paintedFromCache) setLoading(true);
+    else setSyncing(true);
+
+    try {
       const [stuRes, attRes] = await Promise.all([
         axios.get(`${API_BASE}/students?classId=${classId}&limit=500`, authHeaders(token)),
         axios.get(`${API_BASE}/attendance?classId=${classId}&month=${year}-${month}`, authHeaders(token)),
       ]);
 
-      setStudents(stuRes.data?.data || []);
-      setAttendanceRecords(attRes.data?.data || []);
+      const freshStudents = stuRes.data?.data || [];
+      const freshAttendance = attRes.data?.data || [];
+
+      setStudents(freshStudents);
+      setAttendanceRecords(freshAttendance);
+
+      AsyncStorage.setItem(cacheKey, JSON.stringify({ students: freshStudents, attendanceRecords: freshAttendance })).catch(() => {});
     } catch (e) { console.error(e); }
-    finally { setLoading(false); setRefreshing(false); }
+    finally { setLoading(false); setRefreshing(false); setSyncing(false); }
   };
 
   const hasPermission = useCallback((action: string) => {
@@ -586,11 +642,25 @@ export default function ClassAttendanceScreen() {
   const openDailyModal = () => {
     setDailyDate(new Date());
     setDailySearch('');
+    // Default everyone to Absent — the teacher ticks a student to mark them
+    // Present, which is faster than unticking a room full of present kids.
     const draft: Record<string, string> = {};
-    students.forEach(s => { draft[s._id] = 'Present'; });
+    students.forEach(s => { draft[s._id] = 'Absent'; });
     setDailyDraft(draft);
     setDailyModalVisible(true);
   };
+
+  const toggleDailyPresent = useCallback((studentId: string) => {
+    setDailyDraft(prev => ({ ...prev, [studentId]: (prev[studentId] || 'Absent') === 'Present' ? 'Absent' : 'Present' }));
+  }, []);
+
+  const markAllDaily = useCallback((status: 'Present' | 'Absent') => {
+    setDailyDraft(() => {
+      const draft: Record<string, string> = {};
+      students.forEach(s => { draft[s._id] = status; });
+      return draft;
+    });
+  }, [students]);
 
   const toggleStatDate = useCallback((dateStr: string) => {
     setSelectedStatDate(prev => (prev === dateStr ? null : dateStr));
@@ -611,7 +681,7 @@ export default function ClassAttendanceScreen() {
     }
 
     // Build attendanceList first, in its own variable.
-    const attendanceList = students.map(s => buildAttendanceItem(s, dailyDraft[s._id] || 'Present'));
+    const attendanceList = students.map(s => buildAttendanceItem(s, dailyDraft[s._id] || 'Absent'));
 
     // Validate everything before calling the API.
     const errors = validateAttendancePayload(selectedClassId, selectedSchoolId, dateStr, attendanceList);
@@ -702,8 +772,56 @@ export default function ClassAttendanceScreen() {
     }
   };
 
-  const onCellPress = useCallback((student: any, dateStr: string) => {
+  // Tapping a day cell now behaves like a plain checkbox: Present <-> Absent,
+  // saved immediately — no picker, no modal. Long-press still opens the full
+  // status editor for the rarer Leave / Half-Day / Holiday cases.
+  const [pendingCellKeys, setPendingCellKeys] = useState<Set<string>>(new Set());
+
+  const onCellPress = useCallback(async (student: any, dateStr: string) => {
     if (isFutureDateStr(dateStr)) return; // defensive — cell is already disabled for future dates
+    if (!selectedClassId || !selectedSchoolId) {
+      Alert.alert('Missing info', 'Could not determine the school for this class. Try reselecting the class.');
+      return;
+    }
+
+    const key = student.rollNo?.toString() || student.name;
+    const cellKey = `${key}__${dateStr}`;
+    if (pendingCellKeys.has(cellKey)) return; // ignore double taps while saving
+
+    const existing = attendanceMap[key]?.[dateStr];
+    const nextStatus = existing === 'Present' ? 'Absent' : 'Present';
+    const attendanceList = [buildAttendanceItem(student, nextStatus)];
+
+    const errors = validateAttendancePayload(selectedClassId, selectedSchoolId, dateStr, attendanceList);
+    if (errors.length > 0) {
+      Alert.alert('Cannot update status', errors.slice(0, 5).join('\n'));
+      return;
+    }
+
+    // Optimistic update so the checkbox flips instantly.
+    setAttendanceRecords(prev => {
+      const withoutThisCell = prev.filter(r => {
+        const rKey = r.rollNo?.toString() || r.studentName;
+        return !(rKey === key && r.date.split('T')[0] === dateStr);
+      });
+      return [...withoutThisCell, { rollNo: student.rollNo, studentName: student.name, date: dateStr, status: nextStatus }];
+    });
+
+    setPendingCellKeys(prev => new Set(prev).add(cellKey));
+    try {
+      const payload = { classId: selectedClassId, schoolId: selectedSchoolId, date: dateStr, attendanceList };
+      await axios.post(CLASS_ATTENDANCE_URL, payload, authHeaders(authToken));
+    } catch (error: any) {
+      // Revert by re-pulling from the server if the save failed.
+      Alert.alert('Error', error.response?.data?.message || error.response?.data?.error || 'Failed to update status.');
+      fetchGridData(authToken, selectedClassId, selectedMonth, true);
+    } finally {
+      setPendingCellKeys(prev => { const next = new Set(prev); next.delete(cellKey); return next; });
+    }
+  }, [attendanceMap, isFutureDateStr, selectedClassId, selectedSchoolId, authToken, selectedMonth, pendingCellKeys]);
+
+  const onCellLongPress = useCallback((student: any, dateStr: string) => {
+    if (isFutureDateStr(dateStr)) return;
     const key = student.rollNo?.toString() || student.name;
     const existing = attendanceMap[key]?.[dateStr] || 'Present';
     setSingleEditData({ student, dateStr, status: existing });
@@ -731,9 +849,10 @@ export default function ClassAttendanceScreen() {
         dayCellWidth={dayCellWidth}
         stickyColWidth={stickyColWidth}
         onCellPress={onCellPress}
+        onCellLongPress={onCellLongPress}
       />
     );
-  }, [selectedMonth, daysArray, attendanceMap, canEditCells, studentPctMap, todayStr, dayCellWidth, stickyColWidth, onCellPress]);
+  }, [selectedMonth, daysArray, attendanceMap, canEditCells, studentPctMap, todayStr, dayCellWidth, stickyColWidth, onCellPress, onCellLongPress]);
 
   const renderInlineDropdown = (fieldKey: string, label: string, options: Option[], value: string, onSelect: (v: string) => void) => {
     const isOpen = activeDropdown === fieldKey;
@@ -771,8 +890,16 @@ export default function ClassAttendanceScreen() {
         <View style={styles.headerIconBadge}><Feather name="check-square" size={20} color={C.primary} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Class Attendance</Text>
-          <Text style={styles.subtitle}>Interactive monthly matrix and daily marking</Text>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {selectedClass?.className ? `${selectedClass.className} · ` : ''}
+            {selectedMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
+          </Text>
         </View>
+        {syncing && (
+          <View style={styles.syncPulse}>
+            <ActivityIndicator size="small" color={C.primary} />
+          </View>
+        )}
         <View style={styles.headerCountBadge}>
           <Feather name="users" size={12} color={C.primary} />
           <Text style={styles.headerCountText}>{students.length}</Text>
@@ -908,7 +1035,15 @@ export default function ClassAttendanceScreen() {
       {/* Status legend — parity with the web page's P/A/L/HD/H legend */}
       {!loading && students.length > 0 && (
         <View style={styles.legendRow}>
-          {STATUS_ORDER.map(st => {
+          <View style={styles.legendItem}>
+            <View style={styles.cellCheckboxActive}><Feather name="check" size={9} color="#fff" /></View>
+            <Text style={styles.legendText}>Present</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={styles.cellCheckboxEmpty} />
+            <Text style={styles.legendText}>Absent / Not marked</Text>
+          </View>
+          {STATUS_ORDER.filter(st => st === 'Leave' || st === 'Half-Day').map(st => {
             const meta = STATUS_META[st];
             return (
               <View key={st} style={styles.legendItem}>
@@ -917,18 +1052,14 @@ export default function ClassAttendanceScreen() {
               </View>
             );
           })}
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: C.textFaint }]} />
-            <Text style={styles.legendText}>·: Not Marked</Text>
-          </View>
+          <Text style={styles.legendHintText}>Tap a day to tick Present/Absent · hold to set Leave/Half-Day/Holiday</Text>
         </View>
       )}
 
       {/* Matrix Data Area */}
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={C.primary} />
-          <Text style={styles.loadingText}>Loading attendance...</Text>
+        <View style={styles.skeletonContainer}>
+          {Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} delay={i} />)}
         </View>
       ) : filteredStudents.length === 0 ? (
         <View style={styles.emptyState}>
@@ -1034,12 +1165,24 @@ export default function ClassAttendanceScreen() {
                 )}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>DEFAULT STATUS</Text>
-                <View style={styles.defaultStatusRow}>
-                  <TouchableOpacity style={[styles.defBtn, { backgroundColor: C.greenSoft }]} onPress={() => { const draft = { ...dailyDraft }; students.forEach(s => draft[s._id] = 'Present'); setDailyDraft(draft); }}><Text style={[styles.defBtnText, { color: C.green }]}>P</Text></TouchableOpacity>
-                  <TouchableOpacity style={[styles.defBtn, { backgroundColor: C.primarySoft }]} onPress={() => { const draft = { ...dailyDraft }; students.forEach(s => draft[s._id] = 'Absent'); setDailyDraft(draft); }}><Text style={[styles.defBtnText, { color: C.primary }]}>A</Text></TouchableOpacity>
-                  <TouchableOpacity style={[styles.defBtn, { backgroundColor: C.primarySoft }]} onPress={() => { const draft = { ...dailyDraft }; students.forEach(s => draft[s._id] = 'Leave'); setDailyDraft(draft); }}><Text style={[styles.defBtnText, { color: C.slate}]}>L</Text></TouchableOpacity>
-                  <TouchableOpacity style={[styles.defBtn, { backgroundColor: C.primarySoft }]} onPress={() => { const draft = { ...dailyDraft }; students.forEach(s => draft[s._id] = 'Half-Day'); setDailyDraft(draft); }}><Text style={[styles.defBtnText, { color: C.blue }]}>HD</Text></TouchableOpacity>
+                <Text style={styles.inputLabel}>QUICK ACTIONS</Text>
+                <View style={styles.quickActionsRow}>
+                  <TouchableOpacity
+                    style={[styles.quickActionBtn, { backgroundColor: C.greenSoft, borderColor: C.green + '40' }]}
+                    onPress={() => markAllDaily('Present')}
+                    activeOpacity={0.85}
+                  >
+                    <Feather name="check-circle" size={14} color={C.green} />
+                    <Text style={[styles.quickActionText, { color: C.green }]}>All Present</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.quickActionBtn, { backgroundColor: C.primarySoft, borderColor: C.primary + '40' }]}
+                    onPress={() => markAllDaily('Absent')}
+                    activeOpacity={0.85}
+                  >
+                    <Feather name="x-circle" size={14} color={C.primary} />
+                    <Text style={[styles.quickActionText, { color: C.primary }]}>All Absent</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             </View>
@@ -1063,29 +1206,29 @@ export default function ClassAttendanceScreen() {
               windowSize={7}
               removeClippedSubviews={Platform.OS === 'android'}
               renderItem={({ item }) => {
-                const currentStatus = dailyDraft[item._id] || 'Present';
+                const isPresent = (dailyDraft[item._id] || 'Absent') === 'Present';
                 return (
-                  <View style={styles.dailyStudentRow}>
-                    <View style={{ flex: 1 }}>
+                  <TouchableOpacity
+                    style={styles.dailyStudentRow}
+                    activeOpacity={0.7}
+                    onPress={() => toggleDailyPresent(item._id)}
+                  >
+                    <View style={[styles.dailyAvatar, { backgroundColor: isPresent ? C.greenSoft : C.surfaceSoft, borderColor: isPresent ? C.green + '55' : C.border }]}>
+                      <Text style={[styles.dailyAvatarText, { color: isPresent ? C.green : C.textFaint }]}>{getInitials(item.name)}</Text>
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
                       <Text style={styles.marksStudentName} numberOfLines={1}>{item.name}</Text>
-                      <Text style={styles.marksStudentRoll}>Roll: {item.rollNo || 'N/A'}</Text>
+                      <Text style={styles.marksStudentRoll}>Roll {item.rollNo || 'N/A'}</Text>
                     </View>
-                    <View style={styles.statusToggleGroup}>
-                      {['Present', 'Absent', 'Leave', 'Half-Day'].map(st => {
-                        const meta = STATUS_META[st];
-                        const isActive = currentStatus === st;
-                        return (
-                          <TouchableOpacity
-                            key={st}
-                            style={[styles.statusToggleBtn, isActive && { backgroundColor: meta.color, borderColor: meta.color }]}
-                            onPress={() => setDailyDraft({ ...dailyDraft, [item._id]: st })}
-                          >
-                            <Text style={[styles.statusToggleText, isActive && { color: '#fff' }]}>{meta.abbr}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
+                    <View style={styles.presentCheckboxWrap}>
+                      <Text style={[styles.presentCheckboxLabel, { color: isPresent ? C.green : C.textFaint }]}>
+                        {isPresent ? 'Present' : 'Absent'}
+                      </Text>
+                      <View style={[styles.checkboxBox, isPresent && styles.checkboxBoxActive]}>
+                        {isPresent && <Feather name="check" size={14} color="#fff" />}
+                      </View>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               }}
             />
@@ -1197,6 +1340,18 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12, color: C.textMuted, marginTop: 2 },
   headerCountBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.primarySoft, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: C.primary + '22' },
   headerCountText: { fontSize: 12.5, fontWeight: '800', color: C.primary },
+  syncPulse: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+
+  // Skeleton loading state — shown briefly on a first-ever visit while
+  // cached data (see gridCacheKey) isn't yet available, so the screen never
+  // sits on a blank spinner.
+  skeletonContainer: { flex: 1, backgroundColor: C.surface, paddingHorizontal: 16, paddingTop: 14 },
+  skeletonRow: { flexDirection: 'row', alignItems: 'center', height: ROW_HEIGHT, borderBottomWidth: 1, borderColor: C.border },
+  skeletonAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: C.surfaceSoft },
+  skeletonLineWide: { width: '55%', height: 10, borderRadius: 5, backgroundColor: C.surfaceSoft, marginBottom: 8 },
+  skeletonLineNarrow: { width: '30%', height: 8, borderRadius: 4, backgroundColor: C.surfaceSoft },
+  skeletonPillGroup: { flexDirection: 'row', gap: 6 },
+  skeletonPill: { width: 20, height: 20, borderRadius: 6, backgroundColor: C.surfaceSoft },
 
   filterSection: { backgroundColor: C.surface, padding: 16, borderBottomWidth: 1, borderColor: C.border, zIndex: 50 },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12, zIndex: 1 },
@@ -1224,7 +1379,8 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 17, fontWeight: '800', color: C.text },
   statLabel: { fontSize: 10.5, color: C.textMuted, fontWeight: '700', marginTop: 3, letterSpacing: 0.2 },
 
-  legendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.bg },
+  legendRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.bg },
+  legendHintText: { fontSize: 10, color: C.textFaint, fontWeight: '600', fontStyle: 'italic' },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 10.5, color: C.textMuted, fontWeight: '700' },
@@ -1264,7 +1420,8 @@ const styles = StyleSheet.create({
   matrixFutureBg: { backgroundColor: C.futureBg },
   statusPill: { width: 26, height: 26, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
   statusPillText: { fontSize: 10, fontWeight: '800' },
-  unmarkedText: { color: C.textFaint, fontWeight: '800' },
+  cellCheckboxActive: { width: 22, height: 22, borderRadius: 7, backgroundColor: C.green, justifyContent: 'center', alignItems: 'center' },
+  cellCheckboxEmpty: { width: 22, height: 22, borderRadius: 7, borderWidth: 1.6, borderColor: C.border, backgroundColor: C.surfaceSoft },
 
   // Modals & Forms
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.6)' },
@@ -1274,20 +1431,23 @@ const styles = StyleSheet.create({
   closeBtnIcon: { padding: 4 },
 
   dailyConfigBar: { flexDirection: 'row', padding: 16, backgroundColor: C.surfaceSoft, borderBottomWidth: 1, borderColor: C.border },
-  defaultStatusRow: { flexDirection: 'row', gap: 8, height: 44, alignItems: 'center' },
-  defBtn: { flex: 1, height: 36, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
-  defBtnText: { fontSize: 12, fontWeight: '800' },
+  quickActionsRow: { flexDirection: 'row', gap: 8, height: 44 },
+  quickActionBtn: { flex: 1, flexDirection: 'row', gap: 6, borderRadius: 11, borderWidth: 1.2, justifyContent: 'center', alignItems: 'center' },
+  quickActionText: { fontSize: 11.5, fontWeight: '800' },
   helperText: { fontSize: 10, color: C.textFaint, marginTop: 5, fontWeight: '600' },
 
   dailySearchWrap: { paddingHorizontal: 16, paddingTop: 14, gap: 8 },
   dailyCountText: { fontSize: 11.5, color: C.textMuted, fontWeight: '700' },
 
-  dailyStudentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderColor: C.border },
-  marksStudentName: { fontSize: 14, fontWeight: '700', color: C.text, maxWidth: 140 },
+  dailyStudentRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 4, borderBottomWidth: 1, borderColor: C.border },
+  dailyAvatar: { width: 38, height: 38, borderRadius: 19, borderWidth: 1.4, justifyContent: 'center', alignItems: 'center' },
+  dailyAvatarText: { fontSize: 13.5, fontWeight: '800' },
+  marksStudentName: { fontSize: 14, fontWeight: '700', color: C.text, maxWidth: 160 },
   marksStudentRoll: { fontSize: 11.5, color: C.textMuted, marginTop: 2 },
-  statusToggleGroup: { flexDirection: 'row', gap: 6 },
-  statusToggleBtn: { width: 36, height: 36, borderRadius: 9, borderWidth: 1, borderColor: C.border, justifyContent: 'center', alignItems: 'center', backgroundColor: C.surfaceSoft },
-  statusToggleText: { fontSize: 11, fontWeight: '800', color: C.textMuted },
+  presentCheckboxWrap: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  presentCheckboxLabel: { fontSize: 11.5, fontWeight: '800', minWidth: 48, textAlign: 'right' },
+  checkboxBox: { width: 25, height: 25, borderRadius: 8, borderWidth: 1.6, borderColor: C.border, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center' },
+  checkboxBoxActive: { backgroundColor: C.green, borderColor: C.green },
 
   modalFooter: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, padding: 16, borderTopWidth: 1, borderColor: C.border, backgroundColor: C.surface },
 
@@ -1305,7 +1465,7 @@ const styles = StyleSheet.create({
   editStatusText: { fontSize: 13, fontWeight: '600', color: C.textMuted },
 
   // Upload Modal
-  uploadInfoText: { fontSize: 12.5, color: C.textMuted, lineHeight: 18, marginBottom: 16 },
+  uploadInfoText: { fontSize: 11.5, color: C.textMuted, lineHeight: 18, marginBottom: 16 },
   uploadDropZone: { alignItems: 'center', borderWidth: 1.4, borderStyle: 'dashed', borderColor: C.border, borderRadius: 16, paddingVertical: 26, backgroundColor: C.surfaceSoft, marginBottom: 16 },
   uploadDropTitle: { fontSize: 13.5, fontWeight: '800', color: C.text, marginTop: 8 },
   uploadDropSubtitle: { fontSize: 11, color: C.textFaint, marginTop: 3, marginBottom: 14 },

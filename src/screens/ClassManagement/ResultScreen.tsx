@@ -11,16 +11,15 @@ import axios from 'axios';
 
 const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
 
-// Premium Color Palette aligning with Web's "Danger" (Red) theme
 const C = {
-  bg: '#F8FAFC',          // Soft slate background
-  surface: '#FFFFFF',     // Clean white cards
-  surfaceSoft: '#F1F5F9', // Subtle gray for inputs
-  border: '#E2E8F0',      // Soft borders
-  text: '#0F172A',        // Deep slate for primary text
-  textMuted: '#64748B',   // Muted slate
+  bg: '#F8FAFC',
+  surface: '#FFFFFF',
+  surfaceSoft: '#F1F5F9',
+  border: '#E2E8F0',
+  text: '#0F172A',
+  textMuted: '#64748B',
   textFaint: '#94A3B8',
-  primary: '#E11D48',     // Rose/Red matching web's btn-danger
+  primary: '#E11D48',
   primaryDark: '#BE123C',
   primarySoft: '#FFE4E6',
   blue: '#0284C7',
@@ -74,7 +73,11 @@ export default function ClassResultsScreen() {
   const authHeaders = (token: string | null) => ({ headers: { Authorization: `Bearer ${token}` } });
 
   const fetchResults = async (token: string | null = authToken, isRefresh = false) => {
-    if (!classId) return;
+    if (!classId) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     if (isRefresh) setRefreshing(true); else setLoading(true);
 
     try {
@@ -90,6 +93,7 @@ export default function ClassResultsScreen() {
       setExams(Array.isArray(examList) ? examList : []);
     } catch (err) {
       console.error(err);
+      Alert.alert('Error', 'Failed to load class results');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -178,8 +182,6 @@ export default function ClassResultsScreen() {
   const handleExcelUpload = async () => {
     if (!selectedExamId) { Alert.alert('Error', 'Please select an exam first'); return; }
     try {
-      // Matches web's accept=".xlsx,.xls,.csv" — the previous mobile version
-      // only allowed xls/xlsx and silently rejected CSV uploads.
       const res = await DocumentPicker.pick({
         type: [
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
@@ -461,9 +463,6 @@ export default function ClassResultsScreen() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Premium Styles
-// ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
