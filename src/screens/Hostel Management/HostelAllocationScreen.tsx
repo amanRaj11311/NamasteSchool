@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList,
   KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, RefreshControl
@@ -21,6 +21,8 @@ const C = {
   primary: '#E11D2E',
   primaryDark: '#B91424',
   primarySoft: '#FEECEC',
+  blue: '#0EA5E9',
+  blueSoft: '#E0F2FE',
   success: '#0F9D58',
   successSoft: '#E9F9EF',
 };
@@ -104,6 +106,16 @@ export default function HostelAllocationScreen() {
     }
   };
 
+  // Premium top stat strip
+  const stats = useMemo(() => {
+    const availableRooms = rooms.filter(r => (r.occupied || 0) < (r.capacity || 0)).length;
+    return {
+      studentsCount: students.length,
+      availableRooms,
+      activeAllocations: allocations.length,
+    };
+  }, [students, rooms, allocations]);
+
   const renderInlineDropdown = (
     fieldKey: string,
     label: string,
@@ -158,6 +170,40 @@ export default function HostelAllocationScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+
+      {/* PAGE HEADER */}
+      <View style={styles.pageHeader}>
+        <Text style={styles.pageTitle}>Bed Allocation</Text>
+        <Text style={styles.pageSubtitle}>Assign students to available rooms</Text>
+      </View>
+
+      {/* PREMIUM STAT STRIP */}
+      <View style={styles.statStrip}>
+        <View style={styles.statCard}>
+          <View style={[styles.statIconBadge, { backgroundColor: C.blueSoft }]}>
+            <Feather name="users" size={15} color={C.blue} />
+          </View>
+          <Text style={styles.statValue}>{stats.studentsCount}</Text>
+          <Text style={styles.statLabel}>Students</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statCard}>
+          <View style={[styles.statIconBadge, { backgroundColor: C.successSoft }]}>
+            <Feather name="grid" size={15} color={C.success} />
+          </View>
+          <Text style={styles.statValue}>{stats.availableRooms}</Text>
+          <Text style={styles.statLabel}>Rooms Free</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statCard}>
+          <View style={[styles.statIconBadge, { backgroundColor: C.primarySoft }]}>
+            <Feather name="key" size={15} color={C.primary} />
+          </View>
+          <Text style={styles.statValue}>{stats.activeAllocations}</Text>
+          <Text style={styles.statLabel}>Allocated</Text>
+        </View>
+      </View>
+
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         {loading ? (
           <View style={styles.loadingState}>
@@ -286,14 +332,30 @@ const shadow = {
   shadowRadius: 12,
   elevation: 2,
 };
+const shadowSm = {
+  shadowColor: '#101828', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 1,
+};
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
 
+  // Header
+  pageHeader: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10, backgroundColor: C.surface },
+  pageTitle: { fontSize: 19, fontWeight: '800', color: C.text, letterSpacing: -0.3 },
+  pageSubtitle: { fontSize: 12.5, color: C.textMuted, fontWeight: '500', marginTop: 2 },
+
+  // Stat strip
+  statStrip: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: 14, marginBottom: 4, backgroundColor: C.surface, borderRadius: 18, borderWidth: 1, borderColor: C.border, paddingVertical: 14, ...shadowSm },
+  statCard: { flex: 1, alignItems: 'center', gap: 4 },
+  statIconBadge: { width: 30, height: 30, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 2 },
+  statValue: { fontSize: 17, fontWeight: '800', color: C.text },
+  statLabel: { fontSize: 10.5, fontWeight: '700', color: C.textMuted, letterSpacing: 0.3 },
+  statDivider: { width: 1, height: 34, backgroundColor: C.border },
+
   loadingState: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 10 },
   loadingText: { fontSize: 13, color: C.textMuted, fontWeight: '600' },
 
-  listContent: { padding: 16, paddingTop: 20, paddingBottom: 40 },
+  listContent: { padding: 16, paddingTop: 16, paddingBottom: 40 },
 
   formCard: { backgroundColor: C.surface, padding: 20, borderRadius: 20, borderWidth: 1, borderColor: C.border, marginBottom: 18, ...shadow },
   formCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
@@ -335,12 +397,12 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: 12, color: C.textMuted, fontWeight: '500' },
 
   allocationCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: C.border, marginBottom: 10, ...shadow },
-  avatar: { width: 44, height: 44, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
+  avatar: { width: 44, height: 44, borderRadius: 13, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: C.surface, shadowColor: '#101828', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 2 },
   avatarText: { color: '#fff', fontSize: 14, fontWeight: '800' },
   studentName: { fontSize: 14.5, fontWeight: '800', color: C.text, marginBottom: 5 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
   metaText: { fontSize: 11.5, color: C.textMuted, fontWeight: '600' },
   feeBadge: { backgroundColor: C.successSoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, flexDirection: 'row', alignItems: 'baseline', gap: 2 },
   feeText: { fontSize: 13.5, fontWeight: '800', color: C.success },
-  feePeriod: { fontSize: 10, fontWeight: '700', color: C.success, opacity: 0.8 },
+  feePeriod: { fontSize: 11, fontWeight: '700', color: C.success, opacity: 0.8 },
 });

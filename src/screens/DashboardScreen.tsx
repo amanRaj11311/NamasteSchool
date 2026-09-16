@@ -382,6 +382,14 @@ interface DashboardData {
   finance: FinanceSummary;
 }
 
+// --- Brand palette (kept consistent with the Hostel screens) ---
+const C = {
+  primary: '#E11D2E',
+  primaryDark: '#B91424',
+  primarySoft: '#FEECEC',
+  primaryBorder: '#F6C6C9',
+};
+
 // --- Helpers ---
 
 // Notice `description` fields contain raw HTML from a rich-text editor
@@ -485,7 +493,7 @@ const PrimaryStatCard = ({
 }) => {
   const Wrapper: any = onPress ? TouchableOpacity : View;
   return (
-    <Wrapper style={styles.primaryCard} onPress={onPress} activeOpacity={0.8}>
+    <Wrapper style={[styles.primaryCard, { borderTopColor: color }]} onPress={onPress} activeOpacity={0.8}>
       <View style={[styles.primaryCardIcon, { backgroundColor: bgColor }]}>
         <Feather name={icon as any} size={20} color={color} />
       </View>
@@ -549,7 +557,7 @@ const SectionHeader = ({
     <View style={styles.sectionHeaderLeft}>
       {icon ? (
         <View style={styles.sectionHeaderIcon}>
-          <Feather name={icon as any} size={15} color="#ef4444" />
+          <Feather name={icon as any} size={15} color={C.primary} />
         </View>
       ) : null}
       <View style={{ flex: 1 }}>
@@ -600,7 +608,7 @@ const StaffTypeRow = ({ type, total }: { type: StaffByType; total: number }) => 
         </Text>
       </View>
       <View style={styles.trendTrack}>
-        <View style={[styles.trendFill, { width: `${pct}%`, backgroundColor: '#ef4444' }]} />
+        <View style={[styles.trendFill, { width: `${pct}%`, backgroundColor: C.primary }]} />
       </View>
     </View>
   );
@@ -610,7 +618,7 @@ const NoticeCard = ({ notice, onPress }: { notice: Notice; onPress: () => void }
   <TouchableOpacity style={styles.noticeCard} onPress={onPress} activeOpacity={0.7}>
     <View style={styles.noticeIconCol}>
       <View style={styles.noticeIconCircle}>
-        <Feather name="volume-2" size={15} color="#ef4444" />
+        <Feather name="volume-2" size={15} color={C.primary} />
       </View>
     </View>
     <View style={{ flex: 1 }}>
@@ -727,10 +735,10 @@ const FeeSummary = ({ fees }: { fees: StudentFees }) => {
         </View>
         <View style={styles.financeDivider} />
         <View style={styles.financeItem}>
-          <View style={[styles.financeIcon, { backgroundColor: '#FEF2F2' }]}>
-            <Feather name="alert-circle" size={16} color="#ef4444" />
+          <View style={[styles.financeIcon, { backgroundColor: C.primarySoft }]}>
+            <Feather name="alert-circle" size={16} color={C.primary} />
           </View>
-          <Text style={[styles.financeValue, { color: fees.dueAmount > 0 ? '#ef4444' : '#111827' }]}>
+          <Text style={[styles.financeValue, { color: fees.dueAmount > 0 ? C.primary : '#111827' }]}>
             {formatCurrency(fees.dueAmount)}
           </Text>
           <Text style={styles.financeLabel}>Balance Due</Text>
@@ -790,7 +798,7 @@ const NoticeDetailModal = ({
 
             <View style={styles.modalInfoBox}>
               <View style={styles.modalInfoItem}>
-                <Feather name="calendar" size={14} color="#ef4444" />
+                <Feather name="calendar" size={14} color={C.primary} />
                 <Text style={styles.modalInfoLabel}>Publish:</Text>
                 <Text style={styles.modalInfoValue}>{notice.noticeDate}</Text>
               </View>
@@ -894,7 +902,7 @@ const DashboardScreen: React.FC = () => {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#ef4444" />
+        <ActivityIndicator size="large" color={C.primary} />
         <Text style={styles.loadingText}>Loading your dashboard...</Text>
       </View>
     );
@@ -904,7 +912,7 @@ const DashboardScreen: React.FC = () => {
     return (
       <View style={styles.centerContainer}>
         <View style={styles.errorIconCircle}>
-          <Feather name="wifi-off" size={26} color="#ef4444" />
+          <Feather name="wifi-off" size={26} color={C.primary} />
         </View>
         <Text style={styles.errorText}>{error || 'No data available'}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={() => fetchDashboardStats(false)}>
@@ -975,7 +983,7 @@ const DashboardScreen: React.FC = () => {
     <>
       <View style={styles.primaryGrid}>
         <PrimaryStatCard icon="users" title="Students" value={data.totalStudents} color="#2563EB" bgColor="#EFF6FF" onPress={go('Students')} />
-        <PrimaryStatCard icon="user-check" title="Staff" value={data.totalStaff} color="#ef4444" bgColor="#FEF2F2" onPress={go('Staff')} />
+        <PrimaryStatCard icon="user-check" title="Staff" value={data.totalStaff} color={C.primary} bgColor={C.primarySoft} onPress={go('Staff')} />
         <PrimaryStatCard icon="layers" title="Classes" value={data.totalClasses} color="#8b5cf6" bgColor="#F5F3FF" onPress={go('Classes')} />
         <PrimaryStatCard icon="book-open" title="Subjects" value={data.totalSubjects} color="#f59e0b" bgColor="#FFFBEB" onPress={go('Subjects')} />
       </View>
@@ -989,7 +997,7 @@ const DashboardScreen: React.FC = () => {
         <MetricChip icon="git-branch" label="Branches" value={data.totalSchools} color="#db2777" bgColor="#FDF2F8" />
         <MetricChip icon="edit-3" label="Homework" value={data.totalHomework} color="#14b8a6" bgColor="#F0FDFA" />
         <MetricChip icon="award" label="Exams" value={data.totalExams} color="#e11d48" bgColor="#FFF1F2" />
-        <MetricChip icon="bell" label="Notices" value={data.totalNotices} color="#ef4444" bgColor="#FEF2F2" />
+        <MetricChip icon="bell" label="Notices" value={data.totalNotices} color={C.primary} bgColor={C.primarySoft} />
         <MetricChip icon="shield" label="Roles" value={data.totalRoles} color="#0891b2" bgColor="#ECFEFF" />
         <MetricChip icon="trending-up" label="Promotions" value={data.totalPromotions} color="#7c3aed" bgColor="#F5F3FF" />
         <MetricChip
@@ -1015,8 +1023,8 @@ const DashboardScreen: React.FC = () => {
           </View>
           <View style={styles.financeDivider} />
           <View style={styles.financeItem}>
-            <View style={[styles.financeIcon, { backgroundColor: '#FEF2F2' }]}>
-              <Feather name="arrow-up-right" size={16} color="#ef4444" />
+            <View style={[styles.financeIcon, { backgroundColor: C.primarySoft }]}>
+              <Feather name="arrow-up-right" size={16} color={C.primary} />
             </View>
             <Text style={styles.financeValue}>{formatCurrency(data.finance?.totalExpense ?? 0)}</Text>
             <Text style={styles.financeLabel}>Expenses</Text>
@@ -1029,7 +1037,7 @@ const DashboardScreen: React.FC = () => {
             <Text
               style={[
                 styles.financeValue,
-                { color: (data.finance?.netBalance ?? 0) < 0 ? '#ef4444' : '#111827' },
+                { color: (data.finance?.netBalance ?? 0) < 0 ? C.primary : '#111827' },
               ]}
             >
               {formatCurrency(data.finance?.netBalance ?? 0)}
@@ -1046,7 +1054,7 @@ const DashboardScreen: React.FC = () => {
         <SectionHeader icon="check-square" title="Today's Attendance" onViewAll={go('Class Attendance')} />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
           <AttendanceCard icon="check-circle" title="Present" value={data.attendance.todayPresent} color="#22c55e" bgColor="#F0FDF4" />
-          <AttendanceCard icon="x-circle" title="Absent" value={data.attendance.todayAbsent} color="#ef4444" bgColor="#FEF2F2" />
+          <AttendanceCard icon="x-circle" title="Absent" value={data.attendance.todayAbsent} color={C.primary} bgColor={C.primarySoft} />
           <AttendanceCard icon="clock" title="Half-Day" value={data.attendance.todayHalfDay} color="#f59e0b" bgColor="#FFFBEB" />
           <AttendanceCard icon="log-out" title="On Leave" value={data.attendance.todayOnLeave} color="#8b5cf6" bgColor="#F5F3FF" />
           <AttendanceCard icon="users" title="Total" value={data.attendance.todayTotal} color="#06b6d4" bgColor="#ECFEFF" />
@@ -1119,10 +1127,10 @@ const DashboardScreen: React.FC = () => {
             </View>
             <View style={styles.financeDivider} />
             <View style={styles.financeItem}>
-              <View style={[styles.financeIcon, { backgroundColor: '#FEF2F2' }]}>
-                <Feather name="alert-circle" size={16} color="#ef4444" />
+              <View style={[styles.financeIcon, { backgroundColor: C.primarySoft }]}>
+                <Feather name="alert-circle" size={16} color={C.primary} />
               </View>
-              <Text style={[styles.financeValue, { color: '#ef4444' }]}>
+              <Text style={[styles.financeValue, { color: C.primary }]}>
                 {formatCurrency(data.accountantData.fees.totalDueAmount)}
               </Text>
               <Text style={styles.financeLabel}>Outstanding</Text>
@@ -1139,7 +1147,7 @@ const DashboardScreen: React.FC = () => {
         <View style={styles.sectionHeader}>
           <View style={styles.sectionHeaderLeft}>
             <View style={styles.sectionHeaderIcon}>
-              <Feather name="user-check" size={15} color="#ef4444" />
+              <Feather name="user-check" size={15} color={C.primary} />
             </View>
             <Text style={styles.sectionTitle}>Staff by Type</Text>
           </View>
@@ -1224,7 +1232,7 @@ const DashboardScreen: React.FC = () => {
             <AttendanceCard icon="copy" title="Copies" value={data.librarianData.totalCopies} color="#8b5cf6" bgColor="#F5F3FF" />
             <AttendanceCard icon="check-circle" title="Available" value={data.librarianData.availableCopies} color="#22c55e" bgColor="#F0FDF4" />
             <AttendanceCard icon="log-out" title="Issued" value={data.librarianData.issuedBooks} color="#f59e0b" bgColor="#FFFBEB" />
-            <AttendanceCard icon="alert-circle" title="Overdue" value={data.librarianData.overdueBooks} color="#ef4444" bgColor="#FEF2F2" />
+            <AttendanceCard icon="alert-circle" title="Overdue" value={data.librarianData.overdueBooks} color={C.primary} bgColor={C.primarySoft} />
           </ScrollView>
         </View>
       ) : null}
@@ -1238,7 +1246,7 @@ const DashboardScreen: React.FC = () => {
             <AttendanceCard icon="star" title="New" value={data.receptionistData.newEnquiries} color="#f59e0b" bgColor="#FFFBEB" />
             <AttendanceCard icon="map-pin" title="Visits" value={data.receptionistData.campusVisits} color="#8b5cf6" bgColor="#F5F3FF" />
             <AttendanceCard icon="check-circle" title="Admitted" value={data.receptionistData.admitted} color="#22c55e" bgColor="#F0FDF4" />
-            <AttendanceCard icon="phone" title="Follow-ups" value={data.receptionistData.todayFollowUpsCount} color="#ef4444" bgColor="#FEF2F2" />
+            <AttendanceCard icon="phone" title="Follow-ups" value={data.receptionistData.todayFollowUpsCount} color={C.primary} bgColor={C.primarySoft} />
           </ScrollView>
         </View>
       ) : null}
@@ -1453,15 +1461,15 @@ const DashboardScreen: React.FC = () => {
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.classAction, styles.classActionGhost]} onPress={go('Homework')} activeOpacity={0.85}>
-                    <Feather name="edit-3" size={13} color="#ef4444" />
+                    <Feather name="edit-3" size={13} color={C.primary} />
                     <Text style={styles.classActionGhostText}>Homework</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.classAction, styles.classActionGhost]} onPress={go('Class Diary')} activeOpacity={0.85}>
-                    <Feather name="book" size={13} color="#ef4444" />
+                    <Feather name="book" size={13} color={C.primary} />
                     <Text style={styles.classActionGhostText}>Class Diary</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.classAction, styles.classActionGhost]} onPress={go('Class Timetable')} activeOpacity={0.85}>
-                    <Feather name="calendar" size={13} color="#ef4444" />
+                    <Feather name="calendar" size={13} color={C.primary} />
                     <Text style={styles.classActionGhostText}>Timetable</Text>
                   </TouchableOpacity>
                 </View>
@@ -1617,8 +1625,8 @@ const DashboardScreen: React.FC = () => {
             title="Fee Balance"
             value={formatCurrency(fees.dueAmount)}
             caption={fees.status}
-            color={fees.dueAmount > 0 ? '#ef4444' : '#16a34a'}
-            bgColor={fees.dueAmount > 0 ? '#FEF2F2' : '#F0FDF4'}
+            color={fees.dueAmount > 0 ? C.primary : '#16a34a'}
+            bgColor={fees.dueAmount > 0 ? C.primarySoft : '#F0FDF4'}
             onPress={go('Fees & Payment')}
           />
         </View>
@@ -1659,7 +1667,7 @@ const DashboardScreen: React.FC = () => {
           <SectionHeader icon="check-square" title="Attendance Summary" onViewAll={go('Student Attendance')} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
             <AttendanceCard icon="check-circle" title="Present" value={attendance.presentDays} color="#22c55e" bgColor="#F0FDF4" />
-            <AttendanceCard icon="x-circle" title="Absent" value={attendance.absentDays} color="#ef4444" bgColor="#FEF2F2" />
+            <AttendanceCard icon="x-circle" title="Absent" value={attendance.absentDays} color={C.primary} bgColor={C.primarySoft} />
             <AttendanceCard icon="clock" title="Half-Day" value={attendance.halfDays || 0} color="#f59e0b" bgColor="#FFFBEB" />
             <AttendanceCard icon="log-out" title="On Leave" value={attendance.leaveDays || 0} color="#8b5cf6" bgColor="#F5F3FF" />
             <AttendanceCard icon="calendar" title="Marked" value={markedDays} color="#06b6d4" bgColor="#ECFEFF" />
@@ -1853,10 +1861,10 @@ const DashboardScreen: React.FC = () => {
             </View>
             <View style={styles.financeDivider} />
             <View style={styles.financeItem}>
-              <View style={[styles.financeIcon, { backgroundColor: '#FEF2F2' }]}>
-                <Feather name="alert-circle" size={16} color="#ef4444" />
+              <View style={[styles.financeIcon, { backgroundColor: C.primarySoft }]}>
+                <Feather name="alert-circle" size={16} color={C.primary} />
               </View>
-              <Text style={[styles.financeValue, { color: '#ef4444' }]}>
+              <Text style={[styles.financeValue, { color: C.primary }]}>
                 {formatCurrency(data.accountantData.fees.totalDueAmount)}
               </Text>
               <Text style={styles.financeLabel}>Outstanding</Text>
@@ -1872,7 +1880,7 @@ const DashboardScreen: React.FC = () => {
             <AttendanceCard icon="book" title="Titles" value={data.librarianData.totalBooks} color="#2563EB" bgColor="#EFF6FF" />
             <AttendanceCard icon="check-circle" title="Available" value={data.librarianData.availableCopies} color="#22c55e" bgColor="#F0FDF4" />
             <AttendanceCard icon="log-out" title="Issued" value={data.librarianData.issuedBooks} color="#f59e0b" bgColor="#FFFBEB" />
-            <AttendanceCard icon="alert-circle" title="Overdue" value={data.librarianData.overdueBooks} color="#ef4444" bgColor="#FEF2F2" />
+            <AttendanceCard icon="alert-circle" title="Overdue" value={data.librarianData.overdueBooks} color={C.primary} bgColor={C.primarySoft} />
           </ScrollView>
         </View>
       ) : null}
@@ -1884,7 +1892,7 @@ const DashboardScreen: React.FC = () => {
             <AttendanceCard icon="inbox" title="Total" value={data.receptionistData.totalEnquiries} color="#2563EB" bgColor="#EFF6FF" />
             <AttendanceCard icon="star" title="New" value={data.receptionistData.newEnquiries} color="#f59e0b" bgColor="#FFFBEB" />
             <AttendanceCard icon="check-circle" title="Admitted" value={data.receptionistData.admitted} color="#22c55e" bgColor="#F0FDF4" />
-            <AttendanceCard icon="phone" title="Follow-ups" value={data.receptionistData.todayFollowUpsCount} color="#ef4444" bgColor="#FEF2F2" />
+            <AttendanceCard icon="phone" title="Follow-ups" value={data.receptionistData.todayFollowUpsCount} color={C.primary} bgColor={C.primarySoft} />
           </ScrollView>
         </View>
       ) : null}
@@ -1910,35 +1918,41 @@ const DashboardScreen: React.FC = () => {
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#ef4444']} tintColor="#ef4444" />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[C.primary]} tintColor={C.primary} />}
       >
-        {/* Header — same shell for every role, different subtitle */}
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.welcomeText} numberOfLines={1}>Welcome back, {displayName}</Text>
-            <View style={styles.headerMetaRow}>
-              <Text style={styles.dateText}>
-                {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
-              </Text>
-              {!!data.activeAcademicYear && data.activeAcademicYear !== 'N/A' && (
-                <View style={styles.sessionPill}>
-                  <Feather name="calendar" size={11} color="#4f46e5" />
-                  <Text style={styles.sessionPillText}>{data.activeAcademicYear}</Text>
-                </View>
-              )}
+        {/* Header — colorful brand banner, same shell for every role */}
+        <View style={styles.headerBanner}>
+          <View style={styles.headerBannerGlowTop} />
+          <View style={styles.headerBannerGlowBottom} />
+          <View style={styles.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.welcomeText} numberOfLines={1}>Welcome back, {displayName}</Text>
+              <View style={styles.headerMetaRow}>
+                <Text style={styles.dateText}>
+                  {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                </Text>
+                {!!data.activeAcademicYear && data.activeAcademicYear !== 'N/A' && (
+                  <View style={styles.sessionPill}>
+                    <Feather name="calendar" size={11} color="#fff" />
+                    <Text style={styles.sessionPillText}>{data.activeAcademicYear}</Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.rolePill}>
+                <Feather name="shield" size={11} color="#fff" />
+                <Text style={styles.rolePillText}>{workspaceLabel}</Text>
+              </View>
             </View>
-            <View style={styles.rolePill}>
-              <Feather name="shield" size={11} color="#ef4444" />
-              <Text style={styles.rolePillText}>{workspaceLabel}</Text>
+            <View style={styles.liveIndicator}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveIndicatorText}>Live</Text>
             </View>
-          </View>
-          <View style={styles.liveIndicator}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveIndicatorText}>Live</Text>
           </View>
         </View>
 
-        {renderByRole()}
+        <View style={styles.contentBody}>
+          {renderByRole()}
+        </View>
       </ScrollView>
 
       <NoticeDetailModal
@@ -1952,34 +1966,42 @@ const DashboardScreen: React.FC = () => {
 
 // --- Styles ---
 
+const shadowSoft = {
+  shadowColor: '#111827', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2,
+};
+
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F7F8FA' },
   container: { flex: 1 },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F7F8FA', paddingHorizontal: 32 },
-  contentContainer: { padding: 18, paddingBottom: 40 },
+  contentContainer: { paddingBottom: 40 },
+  contentBody: { padding: 18, paddingTop: 16 },
 
-  // --- Header ---
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 22, paddingHorizontal: 2 },
-  welcomeText: { fontSize: 21, fontWeight: '800', color: '#111827', letterSpacing: -0.4 },
+  // --- Header banner (brand-colored, sits above the scroll content) ---
+  headerBanner: { backgroundColor: C.primary, paddingTop: 14, paddingBottom: 26, paddingHorizontal: 18, overflow: 'hidden' },
+  headerBannerGlowTop: { position: 'absolute', width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,255,255,0.07)', top: -70, right: -40 },
+  headerBannerGlowBottom: { position: 'absolute', width: 140, height: 140, borderRadius: 70, backgroundColor: 'rgba(255,255,255,0.05)', bottom: -60, left: -30 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  welcomeText: { fontSize: 21, fontWeight: '800', color: '#fff', letterSpacing: -0.4 },
   headerMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 8 },
-  dateText: { fontSize: 13, color: '#6B7280', fontWeight: '500' },
-  sessionPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EEF2FF', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 10, gap: 4 },
-  sessionPillText: { color: '#4f46e5', fontSize: 11, fontWeight: '700' },
-  rolePill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#FEF2F2', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 5, marginTop: 8 },
-  rolePillText: { color: '#ef4444', fontSize: 11, fontWeight: '700' },
-  liveIndicator: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0FDF4', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, marginLeft: 10, marginTop: 2 },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e', marginRight: 5 },
-  liveIndicatorText: { color: '#16a34a', fontWeight: '700', fontSize: 11 },
+  dateText: { fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: '500' },
+  sessionPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 10, gap: 4 },
+  sessionPillText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  rolePill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, gap: 5, marginTop: 8 },
+  rolePillText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  liveIndicator: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, marginLeft: 10, marginTop: 2 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#4ADE80', marginRight: 5 },
+  liveIndicatorText: { color: '#fff', fontWeight: '700', fontSize: 11 },
 
   // --- Identity hero (teacher / student / ward) ---
-  heroCard: { backgroundColor: '#FFFFFF', borderRadius: 22, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#FDE7E7', shadowColor: '#111827', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 2 },
+  heroCard: { backgroundColor: '#FFFFFF', borderRadius: 22, padding: 18, marginTop: -14, marginBottom: 16, borderWidth: 1, borderColor: C.primaryBorder, shadowColor: '#111827', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 4 },
   heroTopRow: { flexDirection: 'row', alignItems: 'center' },
-  heroAvatar: { width: 58, height: 58, borderRadius: 18, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' },
+  heroAvatar: { width: 58, height: 58, borderRadius: 18, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
   heroAvatarImg: { width: 58, height: 58, borderRadius: 18, backgroundColor: '#F3F4F6' },
-  heroAvatarText: { fontSize: 20, fontWeight: '800', color: '#ef4444' },
+  heroAvatarText: { fontSize: 20, fontWeight: '800', color: C.primary },
   heroName: { fontSize: 19, fontWeight: '800', color: '#111827', letterSpacing: -0.3 },
   heroBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  heroBadgeDark: { backgroundColor: '#ef4444', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 8 },
+  heroBadgeDark: { backgroundColor: C.primary, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 8 },
   heroBadgeDarkText: { color: '#fff', fontSize: 10, fontWeight: '800' },
   heroBadgeSoft: { backgroundColor: '#F3F4F6', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 8 },
   heroBadgeSoftText: { color: '#4B5563', fontSize: 10, fontWeight: '700' },
@@ -1989,21 +2011,21 @@ const styles = StyleSheet.create({
   heroStatusPillText: { fontSize: 11, fontWeight: '700' },
   heroGhostPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 12, backgroundColor: '#F3F4F6' },
   heroGhostPillText: { fontSize: 11, fontWeight: '700', color: '#6B7280' },
-  heroCta: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#ef4444', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14 },
+  heroCta: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.primary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 3 },
   heroCtaText: { color: '#fff', fontSize: 12, fontWeight: '800' },
 
   // --- Ward switcher ---
   wardSwitchRow: { gap: 10, paddingRight: 18 },
   wardChip: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFFFF', borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12, borderWidth: 1, borderColor: '#F1F2F4', maxWidth: 220 },
-  wardChipActive: { backgroundColor: '#ef4444', borderColor: '#ef4444' },
-  wardChipAvatar: { width: 34, height: 34, borderRadius: 12, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' },
-  wardChipAvatarText: { fontSize: 12, fontWeight: '800', color: '#ef4444' },
+  wardChipActive: { backgroundColor: C.primary, borderColor: C.primary },
+  wardChipAvatar: { width: 34, height: 34, borderRadius: 12, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
+  wardChipAvatarText: { fontSize: 12, fontWeight: '800', color: C.primary },
   wardChipName: { fontSize: 13, fontWeight: '800', color: '#111827' },
   wardChipMeta: { fontSize: 11, fontWeight: '600', color: '#9CA3AF', marginTop: 1 },
 
   // --- Primary KPI grid ---
   primaryGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 4 },
-  primaryCard: { backgroundColor: '#FFFFFF', width: '48%', padding: 18, borderRadius: 20, marginBottom: 12, shadowColor: '#111827', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2 },
+  primaryCard: { backgroundColor: '#FFFFFF', width: '48%', padding: 18, borderRadius: 20, marginBottom: 12, borderTopWidth: 3, ...shadowSoft },
   primaryCardIcon: { width: 42, height: 42, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
   primaryCardValue: { fontSize: 26, fontWeight: '800', color: '#111827' },
   primaryCardTitle: { fontSize: 13, color: '#6B7280', fontWeight: '600', marginTop: 2 },
@@ -2018,13 +2040,13 @@ const styles = StyleSheet.create({
   metricChipLabel: { fontSize: 11, color: '#6B7280', fontWeight: '600' },
 
   // --- Section shells ---
-  cardContainer: { backgroundColor: '#FFFFFF', borderRadius: 22, padding: 20, marginBottom: 16, shadowColor: '#111827', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 2 },
+  cardContainer: { backgroundColor: '#FFFFFF', borderRadius: 22, padding: 20, marginBottom: 16, ...shadowSoft },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   sectionHeaderLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 10 },
-  sectionHeaderIcon: { width: 30, height: 30, borderRadius: 10, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  sectionHeaderIcon: { width: 30, height: 30, borderRadius: 10, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
   sectionSubtitle: { fontSize: 11, color: '#9CA3AF', fontWeight: '500', marginTop: 2 },
-  viewAllText: { color: '#ef4444', fontSize: 13, fontWeight: '700' },
+  viewAllText: { color: C.primary, fontSize: 13, fontWeight: '700' },
 
   // --- Finance / fees ---
   financeRow: { flexDirection: 'row', alignItems: 'center' },
@@ -2045,10 +2067,10 @@ const styles = StyleSheet.create({
   // --- Teacher: allotted class cards ---
   classCard: { borderWidth: 1, borderColor: '#F1F2F4', borderRadius: 18, padding: 14, marginBottom: 12 },
   classCardTop: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
-  classPill: { backgroundColor: '#ef4444', paddingHorizontal: 11, paddingVertical: 4, borderRadius: 10 },
+  classPill: { backgroundColor: C.primary, paddingHorizontal: 11, paddingVertical: 4, borderRadius: 10 },
   classPillText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  classSyllabusPill: { backgroundColor: '#FEF2F2', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10 },
-  classSyllabusText: { color: '#ef4444', fontSize: 10, fontWeight: '800' },
+  classSyllabusPill: { backgroundColor: C.primarySoft, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10 },
+  classSyllabusText: { color: C.primary, fontSize: 10, fontWeight: '800' },
   classTeacherPill: { backgroundColor: '#EEF2FF', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 10 },
   classTeacherPillText: { color: '#4f46e5', fontSize: 10, fontWeight: '800' },
   classCountBox: { backgroundColor: '#FEF7F7', borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
@@ -2061,9 +2083,9 @@ const styles = StyleSheet.create({
   classAction: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
   classActionPrimary: { backgroundColor: '#22c55e' },
   classActionDone: { backgroundColor: '#9CA3AF' },
-  classActionGhost: { backgroundColor: '#FEF2F2' },
+  classActionGhost: { backgroundColor: C.primarySoft },
   classActionText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  classActionGhostText: { color: '#ef4444', fontSize: 11, fontWeight: '800' },
+  classActionGhostText: { color: C.primary, fontSize: 11, fontWeight: '800' },
 
   // --- Admin: branch cards ---
   branchCard: { borderWidth: 1, borderColor: '#F1F2F4', borderRadius: 18, padding: 14, marginBottom: 12 },
@@ -2088,9 +2110,9 @@ const styles = StyleSheet.create({
 
   // --- Loading / error states ---
   loadingText: { marginTop: 12, fontSize: 15, color: '#6B7280', fontWeight: '500' },
-  errorIconCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  errorIconCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   errorText: { fontSize: 15, color: '#374151', marginBottom: 18, textAlign: 'center', fontWeight: '500' },
-  retryButton: { flexDirection: 'row', backgroundColor: '#ef4444', paddingHorizontal: 22, paddingVertical: 12, borderRadius: 20, alignItems: 'center' },
+  retryButton: { flexDirection: 'row', backgroundColor: C.primary, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 20, alignItems: 'center' },
   retryButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
   emptyState: { paddingVertical: 24, alignItems: 'center', justifyContent: 'center' },
   emptyStateText: { color: '#9CA3AF', fontSize: 13, fontWeight: '500' },
@@ -2107,10 +2129,10 @@ const styles = StyleSheet.create({
   // --- Notices list ---
   noticeCard: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F5F5F6', gap: 12 },
   noticeIconCol: { justifyContent: 'center' },
-  noticeIconCircle: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' },
+  noticeIconCircle: { width: 38, height: 38, borderRadius: 12, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
   noticeTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   noticeCategoryBadge: { backgroundColor: '#FEE2E2', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
-  noticeCategoryText: { color: '#ef4444', fontSize: 9, fontWeight: '800' },
+  noticeCategoryText: { color: C.primary, fontSize: 9, fontWeight: '800' },
   noticeDate: { fontSize: 11, color: '#9CA3AF', fontWeight: '600' },
   noticeTitle: { fontSize: 14, fontWeight: '700', color: '#111827' },
   noticeDesc: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
@@ -2119,13 +2141,13 @@ const styles = StyleSheet.create({
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(17,24,39,0.55)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalCard: { width: '100%', maxWidth: 440, maxHeight: '82%', backgroundColor: '#FFFFFF', borderRadius: 24, paddingTop: 22, overflow: 'hidden' },
   modalHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 22 },
-  modalHeaderIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: '#ef4444', justifyContent: 'center', alignItems: 'center' },
+  modalHeaderIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: C.primary, justifyContent: 'center', alignItems: 'center' },
   modalHeaderTitle: { fontSize: 17, fontWeight: '800', color: '#111827' },
   modalHeaderSubtitle: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
   modalDivider: { height: 1, backgroundColor: '#F1F2F4', marginTop: 18 },
   modalScroll: { paddingHorizontal: 22, paddingTop: 18 },
   modalPillsRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  modalStatusPill: { backgroundColor: '#ef4444', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18 },
+  modalStatusPill: { backgroundColor: C.primary, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18 },
   modalStatusPillText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   modalCategoryPill: { backgroundColor: '#F3F4F6', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18 },
   modalCategoryPillText: { color: '#4B5563', fontSize: 12, fontWeight: '700' },

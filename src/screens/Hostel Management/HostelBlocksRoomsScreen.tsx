@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList, TextInput, Modal,
   KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, RefreshControl
@@ -16,11 +16,15 @@ const C = {
   primary: '#E11D2E', primaryDark: '#B91424', primarySoft: '#FEECEC',
   blue: '#0EA5E9', blueSoft: '#E0F2FE',
   green: '#10B981', greenSoft: '#D1FAE5',
+  amber: '#F59E0B', amberSoft: '#FEF3C7',
   slate: '#64748B', slateSoft: '#F1F5F9',
 };
 
 const shadow = {
   shadowColor: '#101828', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2,
+};
+const shadowSm = {
+  shadowColor: '#101828', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 1,
 };
 
 export default function HostelBlocksRoomsScreen() {
@@ -113,6 +117,25 @@ export default function HostelBlocksRoomsScreen() {
     finally { setSaving(false); }
   };
 
+  // Summary stats for the top premium stat strip
+  const stats = useMemo(() => {
+    const totalCapacity = rooms.reduce((s, r) => s + (r.capacity || 0), 0);
+    const totalOccupied = rooms.reduce((s, r) => s + (r.occupied || 0), 0);
+    const occPct = totalCapacity ? Math.round((totalOccupied / totalCapacity) * 100) : 0;
+    return {
+      blocksCount: blocks.length,
+      roomsCount: rooms.length,
+      occPct,
+    };
+  }, [blocks, rooms]);
+
+  const QUICK_ACTIONS = [
+    { key: 'allocate', label: 'Allocate Student', icon: 'log-in', kind: 'outline', onPress: () => navigation.navigate('HostelAllocation') },
+    { key: 'reports', label: 'Occupancy Reports', icon: 'pie-chart', kind: 'outline', onPress: () => navigation.navigate('HostelReports') },
+    { key: 'addBlock', label: 'Add Block', icon: 'layers', kind: 'solid', onPress: () => { setBlockForm({ name: '', type: 'Boys' }); setBlockModal(true); } },
+    { key: 'addRoom', label: 'Add Room', icon: 'plus-square', kind: 'solid', onPress: () => { setRoomForm({ blockId: '', roomNumber: '', capacity: '', type: 'Double Shared', monthlyFee: '' }); setRoomModal(true); } },
+  ];
+
   const renderInlineDropdown = (fieldKey: string, label: string, icon: string, options: any[], value: string, onSelect: (v: string) => void) => {
     const isOpen = activeDropdown === fieldKey;
     const selectedObj = options.find(o => o.value === value);
@@ -146,21 +169,62 @@ export default function HostelBlocksRoomsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.actionScrollerWrap}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.actionScroller}>
-          <TouchableOpacity style={styles.actionBtnOutline} onPress={() => navigation.navigate('HostelAllocation')} activeOpacity={0.85}>
-            <Feather name="log-in" size={14} color={C.primary} /><Text style={styles.actionBtnOutlineText}>Allocate Student</Text>
+
+      {/* PAGE HEADER */}
+      <View style={styles.pageHeader}>
+        <View>
+          <Text style={styles.pageTitle}>Hostel Management</Text>
+          <Text style={styles.pageSubtitle}>Blocks, rooms & occupancy</Text>
+        </View>
+      </View>
+
+      {/* PREMIUM STAT STRIP */}
+      <View style={styles.statStrip}>
+        <View style={styles.statCard}>
+          <View style={[styles.statIconBadge, { backgroundColor: C.blueSoft }]}>
+            <Feather name="layers" size={15} color={C.blue} />
+          </View>
+          <Text style={styles.statValue}>{stats.blocksCount}</Text>
+          <Text style={styles.statLabel}>Blocks</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statCard}>
+          <View style={[styles.statIconBadge, { backgroundColor: C.primarySoft }]}>
+            <Feather name="grid" size={15} color={C.primary} />
+          </View>
+          <Text style={styles.statValue}>{stats.roomsCount}</Text>
+          <Text style={styles.statLabel}>Rooms</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statCard}>
+          <View style={[styles.statIconBadge, { backgroundColor: C.greenSoft }]}>
+            <Feather name="pie-chart" size={15} color={C.green} />
+          </View>
+          <Text style={styles.statValue}>{stats.occPct}%</Text>
+          <Text style={styles.statLabel}>Occupied</Text>
+        </View>
+      </View>
+
+      {/* QUICK ACTIONS — responsive 2x2 grid, never clipped/hidden */}
+      <View style={styles.quickActionsGrid}>
+        {QUICK_ACTIONS.map(a => (
+          <TouchableOpacity
+            key={a.key}
+            style={[styles.actionCard, a.kind === 'solid' ? styles.actionCardSolid : styles.actionCardOutline]}
+            onPress={a.onPress}
+            activeOpacity={0.85}
+          >
+            <View style={[styles.actionIconCircle, a.kind === 'solid' && styles.actionIconCircleSolid]}>
+              <Feather name={a.icon} size={15} color={a.kind === 'solid' ? '#fff' : C.primary} />
+            </View>
+            <Text
+              style={[styles.actionCardText, a.kind === 'solid' && styles.actionCardTextSolid]}
+              numberOfLines={2}
+            >
+              {a.label}
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtnOutline} onPress={() => navigation.navigate('HostelReports')} activeOpacity={0.85}>
-            <Feather name="pie-chart" size={14} color={C.primary} /><Text style={styles.actionBtnOutlineText}>Occupancy Reports</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtnSolid} onPress={() => { setBlockForm({ name: '', type: 'Boys' }); setBlockModal(true); }} activeOpacity={0.9}>
-            <Feather name="plus" size={14} color="#fff" /><Text style={styles.actionBtnSolidText}>Add Block</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtnSolid} onPress={() => { setRoomForm({ blockId: '', roomNumber: '', capacity: '', type: 'Double Shared', monthlyFee: '' }); setRoomModal(true); }} activeOpacity={0.9}>
-            <Feather name="plus" size={14} color="#fff" /><Text style={styles.actionBtnSolidText}>Add Room</Text>
-          </TouchableOpacity>
-        </ScrollView>
+        ))}
       </View>
 
       <View style={styles.filterSection}>
@@ -188,7 +252,12 @@ export default function HostelBlocksRoomsScreen() {
             </View>
           }
           renderItem={({ item }) => {
-            const pct = item.capacity ? Math.min(100, Math.round(((item.occupied || 0) / item.capacity) * 100)) : 0;
+            const capacity = item.capacity || 0;
+            const occupied = item.occupied || 0;
+            const pct = capacity ? Math.min(100, Math.round((occupied / capacity) * 100)) : 0;
+            const isFull = capacity > 0 && occupied >= capacity;
+            const barColor = isFull ? C.primary : pct >= 70 ? C.amber : C.green;
+
             return (
               <View style={styles.card}>
                 <View style={styles.cardHeader}>
@@ -202,17 +271,30 @@ export default function HostelBlocksRoomsScreen() {
                       <Text style={styles.blockName}>{item.blockId?.name || 'Unknown Block'}</Text>
                     </View>
                   </View>
-                  <View style={styles.badge}><Text style={styles.badgeText}>{item.type}</Text></View>
+                  <View style={[styles.badge, isFull && styles.badgeFull]}>
+                    <Text style={[styles.badgeText, isFull && styles.badgeTextFull]}>{item.type}</Text>
+                  </View>
                 </View>
+
                 <View style={styles.metaRow}>
                   <View style={styles.metaCol}>
                     <Text style={styles.metaLbl}>CAPACITY</Text>
-                    <Text style={styles.metaVal}>{item.capacity} Beds</Text>
+                    <Text style={styles.metaVal}>{capacity} Beds</Text>
                   </View>
                   <View style={styles.metaDivider} />
                   <View style={styles.metaCol}>
                     <Text style={styles.metaLbl}>MONTHLY FEE</Text>
                     <Text style={[styles.metaVal, { color: C.green }]}>\u20b9{item.monthlyFee}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.occupancyBlock}>
+                  <View style={styles.occupancyLabelRow}>
+                    <Text style={styles.occupancyLabel}>Occupancy</Text>
+                    <Text style={[styles.occupancyPct, { color: barColor }]}>{occupied}/{capacity} \u2022 {pct}%</Text>
+                  </View>
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${pct}%`, backgroundColor: barColor }]} />
                   </View>
                 </View>
               </View>
@@ -301,15 +383,37 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 10 },
   loadingText: { fontSize: 13, color: C.textMuted, fontWeight: '600' },
 
-  actionScrollerWrap: { backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
-  actionScroller: { paddingHorizontal: 16, paddingVertical: 14, gap: 10 },
-  actionBtnOutline: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: C.primary, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 22, gap: 6, backgroundColor: C.primarySoft },
-  actionBtnOutlineText: { color: C.primaryDark, fontSize: 12, fontWeight: '800' },
-  actionBtnSolid: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.primary, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 22, gap: 6, shadowColor: C.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 3 },
-  actionBtnSolidText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  // Header
+  pageHeader: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10, backgroundColor: C.surface },
+  pageTitle: { fontSize: 19, fontWeight: '800', color: C.text, letterSpacing: -0.3 },
+  pageSubtitle: { fontSize: 12.5, color: C.textMuted, fontWeight: '500', marginTop: 2 },
 
-  filterSection: { padding: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
-  listContent: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 16 },
+  // Stat strip
+  statStrip: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginBottom: 14, backgroundColor: C.surface, borderRadius: 18, borderWidth: 1, borderColor: C.border, paddingVertical: 14, ...shadowSm },
+  statCard: { flex: 1, alignItems: 'center', gap: 4 },
+  statIconBadge: { width: 30, height: 30, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 2 },
+  statValue: { fontSize: 17, fontWeight: '800', color: C.text },
+  statLabel: { fontSize: 10.5, fontWeight: '700', color: C.textMuted, letterSpacing: 0.3 },
+  statDivider: { width: 1, height: 34, backgroundColor: C.border },
+
+  // Quick actions — responsive 2x2 grid (no clipping on any screen width)
+  quickActionsGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between',
+    paddingHorizontal: 16, marginBottom: 14, rowGap: 10,
+  },
+  actionCard: {
+    width: '48.5%', flexDirection: 'row', alignItems: 'center', gap: 9,
+    borderRadius: 16, paddingVertical: 12, paddingHorizontal: 12, borderWidth: 1.5,
+  },
+  actionCardOutline: { backgroundColor: C.primarySoft, borderColor: '#F6C6C9' },
+  actionCardSolid: { backgroundColor: C.primary, borderColor: C.primary, ...shadow, shadowColor: C.primary, shadowOpacity: 0.22 },
+  actionIconCircle: { width: 30, height: 30, borderRadius: 10, backgroundColor: 'rgba(225,29,46,0.12)', justifyContent: 'center', alignItems: 'center' },
+  actionIconCircleSolid: { backgroundColor: 'rgba(255,255,255,0.2)' },
+  actionCardText: { flex: 1, fontSize: 12, fontWeight: '800', color: C.primaryDark, lineHeight: 15 },
+  actionCardTextSolid: { color: '#fff' },
+
+  filterSection: { paddingHorizontal: 16, paddingBottom: 14, backgroundColor: C.bg },
+  listContent: { paddingHorizontal: 16, paddingBottom: 40 },
 
   emptyState: { alignItems: 'center', padding: 40, marginTop: 20, gap: 4 },
   emptyIconBadge: { width: 52, height: 52, borderRadius: 16, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center', marginBottom: 8, borderWidth: 1, borderColor: C.border },
@@ -323,13 +427,22 @@ const styles = StyleSheet.create({
   metaInlineRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
   blockName: { fontSize: 11.5, color: C.textMuted, fontWeight: '600' },
   badge: { backgroundColor: C.slateSoft, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8 },
+  badgeFull: { backgroundColor: C.primarySoft },
   badgeText: { fontSize: 10, fontWeight: '800', color: C.slate },
+  badgeTextFull: { color: C.primaryDark },
 
-  metaRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceSoft, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: C.border },
+  metaRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceSoft, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: C.border, marginBottom: 12 },
   metaCol: { flex: 1 },
   metaDivider: { width: 1, height: 28, backgroundColor: C.border, marginHorizontal: 12 },
   metaLbl: { fontSize: 9.5, fontWeight: '800', color: C.textMuted, letterSpacing: 0.5, marginBottom: 4 },
   metaVal: { fontSize: 14.5, fontWeight: '800', color: C.text },
+
+  occupancyBlock: { gap: 6 },
+  occupancyLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  occupancyLabel: { fontSize: 10.5, fontWeight: '800', color: C.textMuted, letterSpacing: 0.3 },
+  occupancyPct: { fontSize: 11, fontWeight: '800' },
+  progressTrack: { height: 7, borderRadius: 4, backgroundColor: C.slateSoft, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 4 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'center', padding: 16 },
   compactModalContainer: { backgroundColor: C.surface, borderRadius: 22, maxHeight: '90%', elevation: 10, overflow: 'hidden' },
@@ -359,5 +472,5 @@ const styles = StyleSheet.create({
   textBrand: { color: C.primary, fontWeight: '800' },
 
   saveBtnFull: { flexDirection: 'row', gap: 8, backgroundColor: C.primary, height: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 10, shadowColor: C.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.28, shadowRadius: 10, elevation: 4 },
-  saveBtnFullText: { color: '#fff', fontSize: 14.5, fontWeight: '800' },
+  saveBtnFullText: { color: '#fff', fontSize: 13.5, fontWeight: '800' },
 });
