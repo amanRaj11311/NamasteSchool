@@ -544,7 +544,6 @@ const C = {
   surface: '#FFFFFF',
   surfaceSoft: '#FBFBFD',
   surfaceSunken: '#F1F2F6',
-
   border: '#E8E9EF',
   borderStrong: '#DBDDE6',
 
@@ -560,14 +559,17 @@ const C = {
 
   ink: '#0D0F16',
   inkSoft: '#181B24',
+  inkFaint: 'rgba(255,255,255,0.62)',
+
+  gold: '#C7A466',
+  goldSoft: 'rgba(199,164,102,0.14)',
 
   blue: '#0EA5E9',
   blueSoft: '#E7F6FE',
-
   green: '#0F9D6B',
   greenSoft: '#E6F8F1',
-
-  gold: '#C7A466',
+  slate: '#475467',
+  slateSoft: '#F1F3F7',
 };
 
 const SHADOW_SM = {
