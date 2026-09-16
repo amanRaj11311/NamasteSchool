@@ -22,9 +22,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 import DocumentPicker from '@react-native-documents/picker';
-// NOTE: new dependency required for photo upload — run:
-//   npm install react-native-image-picker
-// and follow its iOS/Android permission setup (camera roll / photo library).
 import { launchImageLibrary } from 'react-native-image-picker';
 import { API_BASE } from '../network/api';
 import { COLORS, RADIUS, SPACING, FONT, SHADOW, TOUCH_TARGET } from '../constants/theme';
@@ -46,8 +43,6 @@ interface ClassObj {
   division?: string;
 }
 
-// A school branch — only super admins get to pick one; everyone else is
-// scoped to the schoolId resolved from their own login/profile.
 interface SchoolObj {
   _id: string;
   name: string;
@@ -109,9 +104,6 @@ const initialFormState: Student = {
   pincode: '',
 };
 
-// Separate, lighter-weight form for the "Register Student" flow — this one
-// hits /api/auth/register/student, which creates a User (login) + Student
-// in one go, so it only carries the fields that endpoint accepts.
 interface RegisterForm {
   name: string;
   email: string;
@@ -208,10 +200,6 @@ export default function StudentsScreen() {
   const [errors, setErrors] = useState<Partial<Student>>({});
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
-  // Register Student (creates User + Student, gives the student a login)
-  // schoolId: the logged-in user's own school (non-super-admins are always
-  // scoped to this — they never see a picker). Super admins have no fixed
-  // school, so they pick one per student via the "School" dropdown instead.
   const [schoolId, setSchoolId] = useState<string | null>(null);
   const [isRegisterVisible, setRegisterVisible] = useState(false);
   const [registerData, setRegisterData] = useState<RegisterForm>(initialRegisterState);
@@ -264,8 +252,6 @@ export default function StudentsScreen() {
     fetchClasses(token);
     fetchStudents(token, 1, '', '');
 
-    // Only super admins juggle multiple schools — everyone else is already
-    // pinned to resolvedSchoolId above, so skip the extra network call for them.
     if (superAdmin) {
       fetchSchools(token);
     }
@@ -328,13 +314,6 @@ export default function StudentsScreen() {
     fetchStudents(authToken, 1, searchQuery, classId);
   };
 
-  // Permission check: super admins pass everything. Everyone else is matched
-  // against their permissions array for module "students" — and because a
-  // user's array typically carries the "...Own" variant (createOwn, updateOwn,
-  // deleteOwn, readOwn) rather than the bare action, we treat "create" as
-  // satisfied by either "create" OR "createOwn" (and so on for the others).
-  // Without this, a normal user with only "...Own" permissions would never
-  // see the Add/Register/Edit/Delete buttons at all.
   const hasPermission = useCallback(
     (action: 'create' | 'read' | 'update' | 'delete') => {
       if (isSuperAdmin) return true;
@@ -776,9 +755,7 @@ export default function StudentsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Register / Add Student now live up here, top-right of the header —
-          "X Students Found" stays down in the stats row on its own, so
-          neither one crowds the other. */}
+     
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.headerIconWrap}>
@@ -912,11 +889,6 @@ export default function StudentsScreen() {
         </View>
       </View>
 
-      {/* --- ADD/EDIT FORM MODAL ---
-          Opens as a centered dialog card (not full screen) — same treatment
-          as the View Profile modal. Content still scrolls internally since
-          the form has more fields than any phone screen can show at once,
-          but the card itself is compact and sits in the middle of the screen. */}
       <Modal visible={isFormVisible} transparent animationType="fade" onRequestClose={() => setFormVisible(false)}>
         <View style={styles.overlay}>
           <View style={styles.formModalCard}>
@@ -954,9 +926,6 @@ export default function StudentsScreen() {
                   <Text style={styles.photoHint}>Tap the camera icon to upload photo</Text>
                 </View>
 
-                {/* Super admins manage multiple schools, so they pick one here.
-                    Everyone else is already scoped to their own school and
-                    never sees this field. */}
                 {isSuperAdmin &&
                   renderInlineDropdown(
                     'schoolId',
@@ -1254,9 +1223,6 @@ export default function StudentsScreen() {
         </View>
       </Modal>
 
-      {/* --- REGISTER STUDENT MODAL (creates User + Student, gives login access) ---
-          Same centered-dialog treatment as the Add/Edit form — opens in the
-          middle of the screen instead of taking over the whole display. */}
       <Modal visible={isRegisterVisible} transparent animationType="fade" onRequestClose={() => setRegisterVisible(false)}>
         <View style={styles.overlay}>
           <View style={styles.formModalCard}>
@@ -1673,9 +1639,6 @@ headerActions: {
   pageIndicator: { height: TOUCH_TARGET - 8, paddingHorizontal: SPACING.lg, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.primary, borderRadius: RADIUS.xs, ...SHADOW.card },
   pageIndicatorText: { color: '#fff', fontWeight: 'bold', fontSize: FONT.small },
 
-  // Add/Edit and Register now open as a centered dialog card (like the View
-  // Profile modal) instead of a full-screen page — stylish and self-contained
-  // rather than taking over the whole display.
 formModalCard: {
   backgroundColor: COLORS.background,
   width: '94%',
@@ -1689,9 +1652,7 @@ formModalCard: {
   formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.lg, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.border, ...SHADOW.card },
   formTitle: { fontSize: FONT.h2, fontWeight: '800', color: COLORS.ink },
   closeBtnIcon: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.borderSoft, borderRadius: 16 },
-  // Tighter padding/gaps than before so the whole form reads more compact —
-  // it still scrolls when content genuinely doesn't fit, but shows more of
-  // it per screen than the old full-page layout did.
+ 
   formScroll: { padding: SPACING.md, paddingBottom: SPACING.lg },
   formCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.md, marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.border, ...SHADOW.card },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: SPACING.sm },
