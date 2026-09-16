@@ -19,7 +19,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 import { API_BASE } from '../network/api';
-const ROLE_COLORS = ['#10B981', '#EF4444', '#8B5CF6', '#F59E0B', '#3B82F6', '#6366F1', '#14B8A6', '#F43F5E'];
+const ROLE_COLORS = [
+  '#0F9D6B',
+  '#B3122A',
+  '#7C3AED',
+  '#C7A466',
+  '#0EA5E9',
+  '#4F46E5',
+  '#0D9488',
+  '#E11D48',
+];
 
 // --- Types ---
 interface PermissionType {
@@ -410,14 +419,14 @@ export default function RolesScreen() {
       <Text style={styles.showingText}>{filteredRoles.length} results</Text>
 
       {loading ? (
-        <View style={styles.center}><ActivityIndicator size="large" color="#ef4444" /></View>
+        <View style={styles.center}><ActivityIndicator size="large" color={C.primary} /></View>
       ) : (
         <FlatList
           data={filteredRoles}
           keyExtractor={(item) => item._id || item.name}
           renderItem={renderCard}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#ef4444']} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[C.primary]} />}
           ListEmptyComponent={
             <View style={styles.center}>
               <Feather name="shield-off" size={40} color="#D1D5DB" />
@@ -530,101 +539,738 @@ export default function RolesScreen() {
 }
 
 // --- Styles ---
+const C = {
+  bg: '#F6F6F9',
+  surface: '#FFFFFF',
+  surfaceSoft: '#FBFBFD',
+  surfaceSunken: '#F1F2F6',
+
+  border: '#E8E9EF',
+  borderStrong: '#DBDDE6',
+
+  text: '#14161F',
+  textMuted: '#6B7280',
+  textFaint: '#9AA0AC',
+
+  primary: '#B3122A',
+  primaryBright: '#D2263F',
+  primaryDeep: '#7A0C1D',
+  primarySoft: '#FBEEEF',
+  primaryTint: '#F3D6D9',
+
+  ink: '#0D0F16',
+  inkSoft: '#181B24',
+
+  blue: '#0EA5E9',
+  blueSoft: '#E7F6FE',
+
+  green: '#0F9D6B',
+  greenSoft: '#E6F8F1',
+
+  gold: '#C7A466',
+};
+
+const SHADOW_SM = {
+  elevation: 1,
+  shadowColor: '#0F172A',
+  shadowOpacity: 0.05,
+  shadowRadius: 4,
+  shadowOffset: { width: 0, height: 1 },
+};
+
+const SHADOW_MD = {
+  elevation: 3,
+  shadowColor: '#0F172A',
+  shadowOpacity: 0.07,
+  shadowRadius: 14,
+  shadowOffset: { width: 0, height: 6 },
+};
+
+const SHADOW_LG = {
+  elevation: 6,
+  shadowColor: '#0F172A',
+  shadowOpacity: 0.12,
+  shadowRadius: 22,
+  shadowOffset: { width: 0, height: 10 },
+};
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F7F9' },
-  center: { padding: 40, justifyContent: 'center', alignItems: 'center' },
-  header: { padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  title: { fontSize: 24, fontWeight: '800', color: '#111827' },
-  subtitle: { fontSize: 13, color: '#6B7280', marginTop: 4 },
-  
-  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 16 },
-  kpiCard: { width: '48%', backgroundColor: '#fff', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 12, elevation: 1 },
-  kpiRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
-  iconCircle: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
-  kpiValue: { fontSize: 22, fontWeight: '800', color: '#111827' },
-  kpiLabel: { fontSize: 10, fontWeight: '800', color: '#6B7280', letterSpacing: 0.5 },
+  // =========================================================
+  // MAIN
+  // =========================================================
 
-  actionBar: { flexDirection: 'row', paddingHorizontal: 16, alignItems: 'center', gap: 10, zIndex: 10, marginTop: 4 },
-  searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 12, height: 46, elevation: 1 },
-  searchInput: { flex: 1, marginLeft: 8, fontSize: 14, color: '#111827' },
-  addBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ef4444', paddingHorizontal: 16, height: 46, borderRadius: 12, gap: 6, elevation: 2 },
-  addBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  showingText: { paddingHorizontal: 16, paddingTop: 12, fontSize: 12, color: '#6B7280', fontWeight: '600', textAlign: 'right' },
+  container: {
+    flex: 1,
+    backgroundColor: C.bg,
+  },
 
-  listContent: { paddingHorizontal: 16, paddingBottom: 20, paddingTop: 10 },
-  card: { backgroundColor: '#fff', borderRadius: 16, marginBottom: 16, borderWidth: 1, borderColor: '#F3F4F6', elevation: 2, overflow: 'hidden' },
-  cardTopAccent: { height: 6, width: '100%' },
-  cardBody: { padding: 16 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  roleTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginRight: 10 },
-  colorDot: { width: 12, height: 12, borderRadius: 6 },
-  roleName: { fontSize: 18, fontWeight: '800', color: '#111827' },
-  permBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  permBadgeText: { fontSize: 12, fontWeight: '800' },
-  roleDesc: { fontSize: 13, color: '#4B5563', lineHeight: 20, marginBottom: 12 },
-  
-  warningBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', padding: 8, borderRadius: 8, gap: 6, marginBottom: 12 },
-  warningText: { fontSize: 12, color: '#B45309', fontWeight: '600' },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    backgroundColor: C.bg,
+  },
 
-  modulesContainer: { marginTop: 4, marginBottom: 12 },
-  sectionOverline: { fontSize: 10, fontWeight: '800', color: '#9CA3AF', letterSpacing: 0.5, marginBottom: 8, textTransform: 'uppercase' },
-  tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
-  moduleTag: { backgroundColor: '#F9FAFB', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' },
-  moduleTagText: { fontSize: 11, color: '#374151', fontWeight: '700', textTransform: 'capitalize' },
-  
-  detailsToggleBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingVertical: 4, gap: 4 },
-  detailsToggleText: { fontSize: 13, fontWeight: '700', color: '#4B5563' },
+  // =========================================================
+  // HEADER
+  // Same clean white header as Settings
+  // =========================================================
 
-  breakdownContainer: { backgroundColor: '#F9FAFB', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#F3F4F6', marginBottom: 12, marginTop: 4 },
-  sectionOverlineDark: { fontSize: 11, fontWeight: '800', color: '#4B5563', letterSpacing: 0.5, marginBottom: 12, textTransform: 'uppercase' },
-  breakdownRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  breakdownModuleText: { width: 90, fontSize: 12, fontWeight: '800', color: '#111827', textTransform: 'capitalize', marginTop: 6 },
-  breakdownActionsWrap: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  actionChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB', gap: 6 },
-  actionDot: { width: 6, height: 6, borderRadius: 3 },
-  actionChipText: { fontSize: 11, color: '#4B5563', fontWeight: '700', textTransform: 'capitalize' },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
+    backgroundColor: C.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    ...SHADOW_SM,
+  },
 
-  cardActions: { flexDirection: 'row', justifyContent: 'flex-end', borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 12, gap: 10 },
-  actionBtn: { padding: 8, backgroundColor: '#F9FAFB', borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' },
+  title: {
+    fontSize: 21,
+    fontWeight: '800',
+    color: C.text,
+    letterSpacing: 0.2,
+  },
 
-  formContainer: { flex: 1, backgroundColor: '#F4F7F9' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', elevation: 2 },
-  formTitle: { fontSize: 20, fontWeight: '800', color: '#111827' },
-  closeBtnIcon: { padding: 6, backgroundColor: '#F3F4F6', borderRadius: 20 },
-  formScroll: { padding: 16, paddingBottom: 40 },
-  formCard: { backgroundColor: '#fff', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#E5E7EB', elevation: 1 },
-  sectionTitle: { fontSize: 16, fontWeight: '800', color: '#111827', marginBottom: 16 },
-  
-  inputWrapper: { marginBottom: 16 },
-  inputLabel: { fontSize: 12, fontWeight: '700', color: '#4B5563', marginBottom: 6, marginLeft: 2 },
-  asterisk: { color: '#ef4444' },
-  input: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, height: 48, backgroundColor: '#F9FAFB', fontSize: 14, color: '#111827' },
-  inputError: { borderColor: '#ef4444', backgroundColor: '#FEF2F2' },
-  errorText: { color: '#ef4444', fontSize: 12, marginTop: 4, fontWeight: '500' },
+  subtitle: {
+    fontSize: 12.5,
+    color: C.textMuted,
+    marginTop: 3,
+    fontWeight: '500',
+  },
 
-  colorCircle: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'transparent' },
-  colorCircleActive: { borderColor: '#111827' },
+  // =========================================================
+  // KPI CARDS
+  // =========================================================
 
-  permCounter: { fontSize: 12, fontWeight: '700', color: '#6B7280', backgroundColor: '#F3F4F6', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  autoGrantNotice: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0F2FE', padding: 12, borderRadius: 10, gap: 8, marginBottom: 16 },
-  autoGrantText: { fontSize: 12, color: '#0369A1', fontWeight: '600' },
-  
-  moduleAccordion: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, marginBottom: 10, overflow: 'hidden' },
-  moduleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, backgroundColor: '#F9FAFB' },
-  moduleHeaderActive: { backgroundColor: '#FEF2F2', borderBottomWidth: 1, borderBottomColor: '#FEE2E2' },
-  moduleHeaderText: { fontSize: 14, fontWeight: '700', color: '#374151' },
-  moduleCount: { fontSize: 12, color: '#6B7280', fontWeight: '600' },
-  
-  moduleBody: { padding: 14, backgroundColor: '#fff' },
-  selectAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12, paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  selectAllText: { fontSize: 13, fontWeight: '700', color: '#0ea5e9' },
-  
-  permChipsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  permChipForm: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
-  permChipFormActive: { backgroundColor: '#ECFDF5', borderColor: '#10B981' },
-  permChipFormText: { fontSize: 12, fontWeight: '600', color: '#4B5563', textTransform: 'capitalize' },
-  permChipFormTextActive: { color: '#047857' },
+  kpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
 
-  saveBtnFull: { backgroundColor: '#ef4444', height: 56, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 4 },
-  saveBtnFullText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
+  kpiCard: {
+    width: '48%',
+    backgroundColor: C.surface,
+    padding: 15,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    marginBottom: 12,
+    ...SHADOW_SM,
+  },
+
+  kpiRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 9,
+  },
+
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  kpiValue: {
+    fontSize: 21,
+    fontWeight: '800',
+    color: C.text,
+  },
+
+  kpiLabel: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: C.textMuted,
+    letterSpacing: 0.6,
+  },
+
+  // =========================================================
+  // SEARCH + ACTION BAR
+  // =========================================================
+
+  actionBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    gap: 10,
+    zIndex: 10,
+    marginTop: 4,
+  },
+
+  searchContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.surface,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 48,
+    ...SHADOW_SM,
+  },
+
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 14,
+    color: C.text,
+    fontWeight: '600',
+    height: '100%',
+  },
+
+  addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.primary,
+    paddingHorizontal: 16,
+    height: 48,
+    borderRadius: 12,
+    gap: 6,
+    ...SHADOW_SM,
+  },
+
+  addBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+
+  showingText: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    fontSize: 11.5,
+    color: C.textMuted,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+
+  // =========================================================
+  // LIST
+  // =========================================================
+
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 30,
+    paddingTop: 10,
+  },
+
+  // =========================================================
+  // ROLE CARD
+  // =========================================================
+
+  card: {
+    backgroundColor: C.surface,
+    borderRadius: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: 'hidden',
+    ...SHADOW_MD,
+  },
+
+  cardTopAccent: {
+    height: 3,
+    width: '100%',
+  },
+
+  cardBody: {
+    padding: 18,
+  },
+
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+
+  roleTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    flex: 1,
+    marginRight: 10,
+  },
+
+  colorDot: {
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+  },
+
+  roleName: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: C.text,
+    flexShrink: 1,
+  },
+
+  permBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+
+  permBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+
+  roleDesc: {
+    fontSize: 12,
+    color: C.textMuted,
+    lineHeight: 18,
+    marginBottom: 14,
+    fontWeight: '500',
+  },
+
+  // =========================================================
+  // WARNING
+  // =========================================================
+
+  warningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF8E7',
+    padding: 10,
+    borderRadius: 10,
+    gap: 7,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#F6E4B5',
+  },
+
+  warningText: {
+    fontSize: 11.5,
+    color: '#9A6700',
+    fontWeight: '700',
+  },
+
+  // =========================================================
+  // MODULES
+  // =========================================================
+
+  modulesContainer: {
+    marginTop: 4,
+    marginBottom: 12,
+  },
+
+  sectionOverline: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: C.textMuted,
+    letterSpacing: 0.6,
+    marginBottom: 9,
+    textTransform: 'uppercase',
+  },
+
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    marginBottom: 10,
+  },
+
+  moduleTag: {
+    backgroundColor: C.surfaceSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+
+  moduleTagText: {
+    fontSize: 10.5,
+    color: C.textMuted,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+
+  detailsToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingVertical: 5,
+    gap: 5,
+  },
+
+  detailsToggleText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: C.textMuted,
+  },
+
+  // =========================================================
+  // BREAKDOWN
+  // =========================================================
+
+  breakdownContainer: {
+    backgroundColor: C.surfaceSoft,
+    padding: 15,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    marginBottom: 12,
+    marginTop: 4,
+  },
+
+  sectionOverlineDark: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: C.textMuted,
+    letterSpacing: 0.6,
+    marginBottom: 12,
+    textTransform: 'uppercase',
+  },
+
+  breakdownRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+
+  breakdownModuleText: {
+    width: 90,
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: C.text,
+    textTransform: 'capitalize',
+    marginTop: 6,
+  },
+
+  breakdownActionsWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+
+  actionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: C.border,
+    gap: 6,
+  },
+
+  actionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+
+  actionChipText: {
+    fontSize: 10.5,
+    color: C.textMuted,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+
+  // =========================================================
+  // CARD ACTIONS
+  // =========================================================
+
+  cardActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 12,
+    gap: 8,
+  },
+
+  actionBtn: {
+    padding: 9,
+    backgroundColor: C.surfaceSoft,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+
+  // =========================================================
+  // MODAL
+  // =========================================================
+
+  formContainer: {
+    flex: 1,
+    backgroundColor: C.bg,
+  },
+
+  formHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    backgroundColor: C.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    ...SHADOW_SM,
+  },
+
+  formTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: C.text,
+  },
+
+  closeBtnIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: C.surfaceSunken,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  formScroll: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+
+  formCard: {
+    backgroundColor: C.surface,
+    borderRadius: 18,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    ...SHADOW_MD,
+  },
+
+  sectionTitle: {
+    fontSize: 15.5,
+    fontWeight: '800',
+    color: C.text,
+    marginBottom: 16,
+  },
+
+  // =========================================================
+  // FORM INPUTS
+  // =========================================================
+
+  inputWrapper: {
+    marginBottom: 16,
+  },
+
+  inputLabel: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: C.textMuted,
+    marginBottom: 7,
+    marginLeft: 2,
+    letterSpacing: 0.4,
+  },
+
+  asterisk: {
+    color: C.primary,
+  },
+
+  input: {
+    borderWidth: 1.5,
+    borderColor: C.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 50,
+    backgroundColor: C.surfaceSoft,
+    fontSize: 14,
+    color: C.text,
+    fontWeight: '600',
+  },
+
+  inputError: {
+    borderColor: C.primary,
+    backgroundColor: C.primarySoft,
+  },
+
+  errorText: {
+    color: C.primary,
+    fontSize: 11,
+    marginTop: 5,
+    fontWeight: '600',
+  },
+
+  // =========================================================
+  // ROLE COLORS
+  // =========================================================
+
+  colorCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+
+  colorCircleActive: {
+    borderColor: C.text,
+    transform: [{ scale: 1.08 }],
+  },
+
+  // =========================================================
+  // PERMISSIONS
+  // =========================================================
+
+  permCounter: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: C.textMuted,
+    backgroundColor: C.surfaceSunken,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+
+  autoGrantNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: C.blueSoft,
+    padding: 12,
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#CBEEFB',
+  },
+
+  autoGrantText: {
+    flex: 1,
+    fontSize: 11.5,
+    color: '#0369A1',
+    fontWeight: '600',
+    lineHeight: 16,
+  },
+
+  // =========================================================
+  // MODULE ACCORDION
+  // =========================================================
+
+  moduleAccordion: {
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 13,
+    marginBottom: 10,
+    overflow: 'hidden',
+    backgroundColor: C.surface,
+  },
+
+  moduleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: C.surfaceSoft,
+  },
+
+  moduleHeaderActive: {
+    backgroundColor: C.primarySoft,
+    borderBottomWidth: 1,
+    borderBottomColor: C.primaryTint,
+  },
+
+  moduleHeaderText: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: C.textMuted,
+    letterSpacing: 0.3,
+  },
+
+  moduleCount: {
+    fontSize: 11,
+    color: C.textMuted,
+    fontWeight: '700',
+  },
+
+  moduleBody: {
+    padding: 14,
+    backgroundColor: C.surface,
+  },
+
+  selectAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginBottom: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+
+  selectAllText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: C.blue,
+  },
+
+  permChipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+
+  permChipForm: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 9,
+    backgroundColor: C.surfaceSunken,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+
+  permChipFormActive: {
+    backgroundColor: C.greenSoft,
+    borderColor: '#A7E7D0',
+  },
+
+  permChipFormText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: C.textMuted,
+    textTransform: 'capitalize',
+  },
+
+  permChipFormTextActive: {
+    color: '#047857',
+    fontWeight: '800',
+  },
+
+  // =========================================================
+  // SAVE BUTTON
+  // =========================================================
+
+  saveBtnFull: {
+    backgroundColor: C.primary,
+    height: 52,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 4,
+    ...SHADOW_MD,
+  },
+
+  saveBtnFullText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
 });
