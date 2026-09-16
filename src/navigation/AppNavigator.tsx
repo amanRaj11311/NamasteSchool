@@ -362,6 +362,22 @@ const getMenuForMode = (mode: UserMode): MenuSection[] => {
   if (mode === 'parent') return PARENT_MENU;
   return ADMIN_MENU;
 };
+
+/* ------------------------------------------------------------------ */
+/*  SCHOOL BRANDING HELPERS                                            */
+/* ------------------------------------------------------------------ */
+
+// API_BASE typically points at ".../api" — branding/logo URLs returned by the
+// backend (e.g. "/uploads/file-xxx.png") are relative to the server root, not
+// the /api path, so strip a trailing /api before joining.
+const ASSET_BASE = API_BASE.replace(/\/api\/?$/, '');
+
+export const resolveAssetUrl = (path?: string | null): string | null => {
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${ASSET_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+};
+
 type SchoolContextType = {
   isSuperAdmin: boolean;
   schoolName: string;
@@ -375,15 +391,23 @@ type SchoolContextType = {
   closePicker: () => void;
   selectSchool: (school: SchoolLite) => void;
   refreshSession: () => void;
+  // Global school identity / branding (name, tagline, logo) — set from
+  // Settings > School Branding and reflected instantly across the app.
+  brandName: string;
+  brandTagline: string;
+  brandLogoUrl: string | null;
+  loadingBranding: boolean;
+  refreshBranding: () => void;
 };
 
-const SchoolContext = createContext<SchoolContextType>({
+export const SchoolContext = createContext<SchoolContextType>({
   isSuperAdmin: false, schoolName: '', sessionName: '', schools: [], selectedSchoolId: '',
   loadingSchools: false, loadingSession: false, pickerVisible: false,
   openPicker: () => {}, closePicker: () => {}, selectSchool: () => {}, refreshSession: () => {},
+  brandName: '', brandTagline: '', brandLogoUrl: null, loadingBranding: false, refreshBranding: () => {},
 });
 
-const useSchoolContext = () => useContext(SchoolContext);
+export const useSchoolContext = () => useContext(SchoolContext);
 
 const HeaderLayoutContext = createContext<{ headerBottom: number; reportHeaderBottom: (y: number) => void }>({
   headerBottom: 0, reportHeaderBottom: () => {},
@@ -418,6 +442,12 @@ function SchoolProvider({ children }: { children: React.ReactNode }) {
   const [loadingSession, setLoadingSession] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
 
+  // Global school identity / branding
+  const [brandName, setBrandName] = useState('');
+  const [brandTagline, setBrandTagline] = useState('');
+  const [brandLogoUrl, setBrandLogoUrl] = useState<string | null>(null);
+  const [loadingBranding, setLoadingBranding] = useState(false);
+
   const fetchActiveSession = useCallback(async (token: string | null, schoolId?: string) => {
     try {
       setLoadingSession(true);
@@ -432,6 +462,26 @@ function SchoolProvider({ children }: { children: React.ReactNode }) {
     finally { setLoadingSession(false); }
   }, []);
 
+  // Global school identity (name / tagline / logo), set in Settings > School
+  // Branding by a Super Admin. Loaded once for every signed-in user so the
+  // drawer header, app title, etc. always reflect the current branding.
+  const fetchBranding = useCallback(async (token: string | null) => {
+    try {
+      setLoadingBranding(true);
+      const res = await axios.get(`${API_BASE}/settings`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = res.data?.data;
+      if (data) {
+        setBrandName(data.schoolName || '');
+        setBrandTagline(data.tagline || '');
+        setBrandLogoUrl(data.logoUrl || null);
+      }
+    } catch (error) {
+      // Keep previous / fallback branding silently — this must never block app usage.
+    } finally {
+      setLoadingBranding(false);
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
       try {
@@ -439,6 +489,8 @@ function SchoolProvider({ children }: { children: React.ReactNode }) {
           AsyncStorage.getItem('school'), AsyncStorage.getItem('isSuperAdmin'),
           AsyncStorage.getItem('userToken'), AsyncStorage.getItem('selectedSchoolId'),
         ]);
+
+        fetchBranding(token);
 
         const superAdmin = superAdminRaw === 'true';
         setIsSuperAdmin(superAdmin);
@@ -468,7 +520,7 @@ function SchoolProvider({ children }: { children: React.ReactNode }) {
       } catch (error) { console.error('Failed to initialize school context:', error); }
       finally { setLoadingSchools(false); }
     })();
-  }, [fetchActiveSession]);
+  }, [fetchActiveSession, fetchBranding]);
 
   const selectSchool = useCallback(async (school: SchoolLite) => {
     setSelectedSchoolId(school._id); setSchoolName(school.name); setPickerVisible(false);
@@ -484,8 +536,17 @@ function SchoolProvider({ children }: { children: React.ReactNode }) {
     fetchActiveSession(token, selectedSchoolId || undefined);
   }, [fetchActiveSession, selectedSchoolId]);
 
+  const refreshBranding = useCallback(async () => {
+    const token = await AsyncStorage.getItem('userToken');
+    fetchBranding(token);
+  }, [fetchBranding]);
+
   return (
-    <SchoolContext.Provider value={{ isSuperAdmin, schoolName, sessionName, schools, selectedSchoolId, loadingSchools, loadingSession, pickerVisible, openPicker: () => setPickerVisible(true), closePicker: () => setPickerVisible(false), selectSchool, refreshSession }}>
+    <SchoolContext.Provider value={{
+      isSuperAdmin, schoolName, sessionName, schools, selectedSchoolId, loadingSchools, loadingSession,
+      pickerVisible, openPicker: () => setPickerVisible(true), closePicker: () => setPickerVisible(false), selectSchool, refreshSession,
+      brandName, brandTagline, brandLogoUrl, loadingBranding, refreshBranding,
+    }}>
       {children}
       <SchoolSwitcherModal />
     </SchoolContext.Provider>
@@ -750,16 +811,22 @@ function CustomDrawerContent(props: any) {
   const [userRole, setUserRole] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const insets = useSafeAreaInsets();
+  const { brandName, brandTagline, brandLogoUrl } = useSchoolContext();
 
   const currentRouteName = props.state.routeNames[props.state.index];
   const mode: UserMode = props.mode || 'admin';
 
+  // Admin/staff mode reflects the live "School Branding" settings (name, tagline,
+  // logo). Student/parent portals keep their own profile-derived header.
   const brandTitle = mode === 'student' ? (props.profileName || 'Student')
     : mode === 'parent' ? (props.profileName || 'Parent / Guardian')
-    : 'Namaste School';
+    : (brandName || 'Namaste School');
   const brandSubtitle = mode === 'student' ? (props.profileSubtitle || 'Student Portal')
     : mode === 'parent' ? (props.profileSubtitle || 'Parent Portal')
-    : 'MANAGEMENT SYSTEM';
+    : (brandTagline || 'MANAGEMENT SYSTEM');
+
+  const resolvedLogoUri = mode === 'admin' ? resolveAssetUrl(brandLogoUrl) : null;
+  const logoSource = resolvedLogoUri ? { uri: resolvedLogoUri } : SchoolLogo;
 
   useEffect(() => {
     (async () => {
@@ -790,7 +857,7 @@ function CustomDrawerContent(props: any) {
       <DrawerContentScrollView {...props} contentContainerStyle={{ paddingTop: 0 }} showsVerticalScrollIndicator={false}>
         <LinearGradient colors={['#ef4444', '#f87171']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.logoHeader, { paddingTop: insets.top + 18 }]}>
           <View style={styles.logoImageContainer}>
-            <Image source={SchoolLogo} style={styles.logoImage} resizeMode="contain" />
+            <Image source={logoSource} style={styles.logoImage} resizeMode="contain" />
           </View>
           <View style={styles.logoTextContainer}>
             <Text style={styles.logoTitle} numberOfLines={1}>{brandTitle}</Text>
@@ -1067,7 +1134,7 @@ const styles = StyleSheet.create({
   logoImage: { width: 36, height: 36, borderRadius: 8 },
   logoTextContainer: { marginLeft: 16, flex: 1 },
   logoTitle: { fontSize: 19, fontWeight: '800', color: '#ffffff' },
-  logoSubtitle: { fontSize: 10, color: 'rgba(255,255,255,0.85)', fontWeight: '800', marginTop: 3, letterSpacing: 0.8 },
+  logoSubtitle: { fontSize: 10, color: 'rgba(255,255,255,0.85)', fontWeight: '800', marginTop: 3, letterSpacing: 0.8, textTransform: 'uppercase' },
 
   menuContainer: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40 },
   sectionHeaderTitle: { fontSize: 10, fontWeight: '800', color: '#9CA3AF', letterSpacing: 1, marginTop: 8, marginBottom: 10, marginLeft: 12 },
@@ -1090,4 +1157,4 @@ const styles = StyleSheet.create({
   footerRoleBadge: { backgroundColor: '#E0F2FE', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 6 },
   footerRole: { fontSize: 10, fontWeight: '800', color: '#ef4444', textTransform: 'uppercase' },
   footerLogoutBtn: { padding: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#FEE2E2', shadowColor: '#ef4444', shadowOpacity: 0.1, shadowRadius: 4, elevation: 1 },
-}); 
+});
