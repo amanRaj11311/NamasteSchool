@@ -20,8 +20,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
-
-const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
+import { API_BASE } from '../../network/api';
 
 const AUDIENCES = ['All', 'Staff', 'Student', 'Guardian'];
 const CATEGORIES = ['General', 'Academic', 'Event', 'Urgent', 'Exam'];

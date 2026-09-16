@@ -7,8 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
+import { API_BASE } from '../../network/api';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
@@ -43,7 +43,7 @@ export default function EnquiryFunnelReportScreen() {
   const fetchFunnel = async (token: string | null = authToken, isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/enquiries/reports/funnel`, authHeaders(token));
+      const res = await axios.get(`${API_BASE}/enquiries/reports/funnel`, authHeaders(token));
       if (res.data?.success) setFunnel(res.data.data || []);
     } catch (err) { console.error('Failed to load funnel report'); } 
     finally { setLoading(false); setRefreshing(false); }

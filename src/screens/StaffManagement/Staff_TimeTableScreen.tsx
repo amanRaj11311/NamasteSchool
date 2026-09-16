@@ -1,29 +1,3 @@
-/**
- * TimetableScreen.tsx
- * ---------------------------------------------------------------
- * REQUIRED PACKAGES:
- *   npm install xlsx react-native-fs react-native-share react-native-print --legacy-peer-deps
- *   cd ios && pod install   (iOS only)
- *
- * Already installed in your project (used as-is, no reinstall):
- *   @react-native-documents/picker, @react-native-community/datetimepicker
- *
- * CONFIRMED BACKEND ENDPOINTS (from your Swagger docs):
- *   GET    /api/classes                 -> list of classes (for Class picker)
- *   GET    /api/staff                   -> list of staff              (already used)
- *   GET    /api/timetable?staffId=X     -> one staff's periods         (already used)
- *   GET    /api/timetable               -> ALL staff periods           (already used)
- *   GET    /api/timetable/class?classId=X -> class timetable matrix   (not used on this screen)
- *   POST   /api/timetable               -> create one period           (already used)
- *   PUT    /api/timetable/{id}          -> update one period           (already used)
- *   DELETE /api/timetable/{id}          -> delete one period           (already used)
- *   POST   /api/timetable/bulk          -> bulk upload periods from .xlsx (multipart file)
- *
- * IMPORTANT: the timetable record needs `classId` (a real class _id),
- * not a free-text class name — so the Add/Edit form now has a proper
- * Class picker (fetched from /api/classes) instead of a text box.
- * ---------------------------------------------------------------
- */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -55,9 +29,6 @@ const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'S
 const ALL_STAFF_ID = 'ALL_STAFF';
 const BRAND = '#ef4444';
 
-// ============================================================
-// TYPES
-// ============================================================
 interface Permission {
   module: string;
   action: string;

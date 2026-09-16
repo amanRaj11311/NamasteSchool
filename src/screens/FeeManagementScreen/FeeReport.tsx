@@ -7,12 +7,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
+import { API_BASE } from '../../network/api';
 
-const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
-// ---------------------------------------------------------------------------
-// Design tokens — shared premium palette (matches FeesScreen)
-// ---------------------------------------------------------------------------
 const C = {
   bg: '#F3F5F9',
   surface: '#FFFFFF',

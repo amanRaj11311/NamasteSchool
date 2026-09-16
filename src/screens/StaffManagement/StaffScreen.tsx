@@ -21,17 +21,12 @@ import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-// npm install @react-native-community/datetimepicker
-
-// =====================================================================================
-// DESIGN TOKENS — single source of truth so the whole screen reads as one product
-// =====================================================================================
 const COLORS = {
-  primary: '#E11D48', // deeper, more premium rose-red than the old flat #ef4444
+  primary: '#E11D48', 
   primaryDark: '#BE123C',
   primarySoft: '#FFF1F2',
   primarySoftBorder: '#FFE4E6',
-  ink: '#0F172A', // near-black, slightly blue — premium over pure #111827
+  ink: '#0F172A', 
   inkSoft: '#475569',
   muted: '#94A3B8',
   border: '#E7EAF0',

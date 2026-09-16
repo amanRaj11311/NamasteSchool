@@ -7,14 +7,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 import RNBlobUtil from 'react-native-blob-util';
+import { API_BASE } from '../network/api';
 
 import FileViewer from 'react-native-file-viewer';
 
-const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
-// ---------------------------------------------------------------------------
-// Design tokens — premium red/coral brand system
-// ---------------------------------------------------------------------------
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',

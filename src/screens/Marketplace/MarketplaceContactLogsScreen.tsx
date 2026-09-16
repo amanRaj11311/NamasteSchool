@@ -7,8 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
-
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+import { API_BASE } from '../../network/api';
 
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
@@ -70,7 +69,7 @@ export default function MarketplaceContactLogsScreen() {
       const params: any = { page: p, limit: pageSize };
       if (q) params.search = q;
 
-      const res = await axios.get(`${BASE_URL}/marketplace/admin/contact-logs`, { params, ...authHeaders(token) });
+      const res = await axios.get(`${API_BASE}/marketplace/admin/contact-logs`, { params, ...authHeaders(token) });
       if (res.data?.success) {
         setLogs(p === 1 ? res.data.data : [...logs, ...res.data.data]);
         setPagination(res.data.pagination || { page: 1, pages: 1, total: 0 });

@@ -7,8 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
+import { API_BASE } from '../../network/api';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 const C = {
   bg: '#F4F6F9',
@@ -66,9 +66,9 @@ export default function HostelAllocationScreen() {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const results = await Promise.allSettled([
-        axios.get(`${BASE_URL}/hostel/allocations?active=true`, authHeaders(token)),
-        axios.get(`${BASE_URL}/students?limit=500`, authHeaders(token)),
-        axios.get(`${BASE_URL}/hostel/rooms`, authHeaders(token)),
+        axios.get(`${API_BASE}/hostel/allocations?active=true`, authHeaders(token)),
+        axios.get(`${API_BASE}/students?limit=500`, authHeaders(token)),
+        axios.get(`${API_BASE}/hostel/rooms`, authHeaders(token)),
       ]);
       const [allocRes, stuRes, roomsRes] = results;
 
@@ -90,7 +90,7 @@ export default function HostelAllocationScreen() {
     if (!form.studentId || !form.roomId) { Alert.alert('Missing information', 'Please select a student and a room.'); return; }
     setAllocating(true);
     try {
-      await axios.post(`${BASE_URL}/hostel/allocations`, {
+      await axios.post(`${API_BASE}/hostel/allocations`, {
         studentId: form.studentId,
         roomId: form.roomId,
         allocatedDate: formatToYMD(form.allocatedDate)

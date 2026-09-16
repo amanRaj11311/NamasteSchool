@@ -16,18 +16,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import { API_BASE } from '../network/api';
-
-/* ------------------------------------------------------------------ *
- * GET /dashboard/stats returns ONE envelope for every role. The role  *
- * specific payload lives in exactly one of:                           *
- *   studentData | parentData | myTeachingProfile | accountantData |   *
- *   librarianData | receptionistData | supportStaffData              *
- * everything else (totals, attendance trend, recentX) is the shared   *
- * school-wide block that only admins are really meant to see.         *
- * ------------------------------------------------------------------ */
-
-// --- Types & Interfaces ---
-
 type UserType = 'admin' | 'staff' | 'student' | 'parent';
 
 interface Trend {

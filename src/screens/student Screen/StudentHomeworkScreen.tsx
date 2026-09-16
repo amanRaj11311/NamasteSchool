@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect,useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView,
   ActivityIndicator, RefreshControl, TextInput, Modal, KeyboardAvoidingView, Platform, FlatList, Alert
@@ -6,12 +6,8 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
+import { API_BASE } from '../../network/api';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
-
-// ---------------------------------------------------------------------------
-// Design tokens — premium brand system
-// ---------------------------------------------------------------------------
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -70,7 +66,7 @@ export default function StudentHomeworkScreen() {
 
     if (parentCheck) {
       try {
-        const childRes = await axios.get(`${BASE_URL}/parent/children`, { headers: { Authorization: `Bearer ${token}` } });
+        const childRes = await axios.get(`${API_BASE}/parent/children`, { headers: { Authorization: `Bearer ${token}` } });
         if (childRes.data?.data?.length > 0) {
           setChildrenList(childRes.data.data);
           setSelectedChildId(childRes.data.data[0]._id);
@@ -90,7 +86,7 @@ export default function StudentHomeworkScreen() {
     try {
       const params: any = {};
       if (childId) params.studentId = childId;
-      const res = await axios.get(`${BASE_URL}/homework/my-student-homework`, { params, ...authHeaders(token) });
+      const res = await axios.get(`${API_BASE}/homework/my-student-homework`, { params, ...authHeaders(token) });
       if (res.data?.success) setHomeworkData(res.data);
     } catch (err: any) { Alert.alert('Error', err.response?.data?.message || 'Failed to load homework'); } 
     finally { setLoading(false); setRefreshing(false); }
@@ -107,7 +103,7 @@ export default function StudentHomeworkScreen() {
 
     setIsSubmitting(true);
     try {
-      await axios.post(`${BASE_URL}/homework/${submittingHw._id}/student-submit`, {
+      await axios.post(`${API_BASE}/homework/${submittingHw._id}/student-submit`, {
         textAnswer, files: [], ...(selectedChildId ? { studentId: selectedChildId } : {})
       }, authHeaders(authToken));
       

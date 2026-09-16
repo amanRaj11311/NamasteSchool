@@ -7,12 +7,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
+import { API_BASE } from '../../network/api';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
 
-// ---------------------------------------------------------------------------
-// Design tokens — premium brand system
-// ---------------------------------------------------------------------------
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -68,7 +65,7 @@ export default function MarketplaceSellersScreen() {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const params = q ? { search: q } : {};
-      const res = await axios.get(`${BASE_URL}/sellers`, { params, ...authHeaders(token) });
+      const res = await axios.get(`${API_BASE}/sellers`, { params, ...authHeaders(token) });
       if (res.data?.success) {
         setSellers(res.data.data || []);
       }
@@ -99,10 +96,10 @@ export default function MarketplaceSellersScreen() {
       if (editingId && !payload.password) delete payload.password; // Don't send empty pwd on edit
 
       if (editingId) {
-        await axios.put(`${BASE_URL}/sellers/${editingId}`, payload, authHeaders(authToken));
+        await axios.put(`${API_BASE}/sellers/${editingId}`, payload, authHeaders(authToken));
         Alert.alert('Success', 'Seller updated successfully.');
       } else {
-        await axios.post(`${BASE_URL}/sellers`, payload, authHeaders(authToken));
+        await axios.post(`${API_BASE}/sellers`, payload, authHeaders(authToken));
         Alert.alert('Success', 'Seller created successfully.');
       }
       setShowModal(false);
@@ -116,7 +113,7 @@ export default function MarketplaceSellersScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
           try {
-            await axios.delete(`${BASE_URL}/sellers/${id}`, authHeaders(authToken));
+            await axios.delete(`${API_BASE}/sellers/${id}`, authHeaders(authToken));
             fetchSellers(authToken, searchQuery, true);
           } catch (e) { Alert.alert('Error', 'Failed to delete seller.'); }
       }}

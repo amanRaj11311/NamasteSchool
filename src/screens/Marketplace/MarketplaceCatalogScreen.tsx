@@ -1,18 +1,15 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback,} from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList, TextInput,
-  Modal, Platform, ScrollView, Alert, ActivityIndicator, RefreshControl, Image, Linking
+  Modal, ScrollView, Alert, ActivityIndicator, RefreshControl, Image, Linking
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
+import { API_BASE } from '../../network/api';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
 
-// ---------------------------------------------------------------------------
-// Design tokens — premium brand system
-// ---------------------------------------------------------------------------
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -27,7 +24,7 @@ const CATEGORIES = ['Uniform', 'Dress', 'Bag', 'Table', 'Furniture', 'Stationery
 const resolveImageUrl = (url?: string) => {
   if (!url) return null;
   if (url.startsWith("http") || url.startsWith("data:")) return url;
-  const base = BASE_URL.replace(/\/api\/?$/, "");
+  const base = API_BASE.replace(/\/api\/?$/, "");
   return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
 };
 
@@ -67,7 +64,7 @@ export default function MarketplaceCatalogScreen() {
       if (q) params.search = q;
       if (cat) params.category = cat;
 
-      const res = await axios.get(`${BASE_URL}/marketplace/catalog`, { params, ...authHeaders(token) });
+      const res = await axios.get(`${API_BASE}/marketplace/catalog`, { params, ...authHeaders(token) });
       if (res.data?.success) {
         setItems(p === 1 ? res.data.data : [...items, ...res.data.data]);
         setPagination(res.data.pagination || { page: 1, pages: 1, total: 0 });
@@ -92,7 +89,7 @@ export default function MarketplaceCatalogScreen() {
     setContactingId(id);
     try {
       // Must log contact first
-      const res = await axios.post(`${BASE_URL}/marketplace/catalog/${id}/contact`, {}, authHeaders(authToken));
+      const res = await axios.post(`${API_BASE}/marketplace/catalog/${id}/contact`, {}, authHeaders(authToken));
       const url = res.data?.data?.whatsappUrl;
       if (!url) throw new Error("WhatsApp link missing");
       

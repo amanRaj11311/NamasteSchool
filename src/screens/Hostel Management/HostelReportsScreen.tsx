@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, ActivityIndicator, RefreshControl, Alert
+  View, Text, StyleSheet,SafeAreaView, ScrollView, ActivityIndicator, RefreshControl, Alert
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
-
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
+import { API_BASE } from '../../network/api';
 
 const C = {
   bg: '#F4F6F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
@@ -39,7 +38,7 @@ export default function HostelReportsScreen() {
   const fetchReport = async (token: string | null = authToken, isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/hostel/reports/occupancy`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await axios.get(`${API_BASE}/hostel/reports/occupancy`, { headers: { Authorization: `Bearer ${token}` } });
       setReport(res.data?.data || null);
     } catch (err: any) {
       console.error('Occupancy report fetch failed:', err.response?.status, err.response?.data || err.message);

@@ -9,13 +9,13 @@ import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import DocumentPicker from '@react-native-documents/picker';
 import axios from 'axios';
+import { API_BASE } from '../../network/api';
 
 import RNFS from 'react-native-fs';
 import * as XLSX from 'xlsx';
 import { io, Socket } from 'socket.io-client';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
-const SOCKET_URL = BASE_URL.replace(/\/api\/?$/, '');
+const SOCKET_URL = API_BASE.replace(/\/api\/?$/, '');
 const ACADEMIC_YEAR_STORAGE_KEY = 'selectedAcademicYearId';
 
 // ---- Brand palette — matches the web app's red gradient (#e52e2e -> #c5221f) ----
@@ -160,7 +160,7 @@ export default function ClassResultsScreen() {
 
   const fetchAcademicYears = async (token: string | null): Promise<string> => {
     try {
-      const res = await axios.get(`${BASE_URL}/academic-years`, { headers: authHeaders(token) });
+      const res = await axios.get(`${API_BASE}/academic-years`, { headers: authHeaders(token) });
       const list = res.data?.data || [];
       setAcademicYears(Array.isArray(list) ? list : []);
       let currentId = (await AsyncStorage.getItem(ACADEMIC_YEAR_STORAGE_KEY)) || '';
@@ -212,10 +212,10 @@ export default function ClassResultsScreen() {
       const examsParams = { classId, ...(activeYear ? { academicYearId: activeYear } : {}) };
 
       const [clsRes, resData, examsRes] = await Promise.all([
-        axios.get(`${BASE_URL}/classes/${classId}`, { headers: authHeaders(token) })
+        axios.get(`${API_BASE}/classes/${classId}`, { headers: authHeaders(token) })
           .catch((e) => { console.error('Failed to load class info:', e); setClassInfoFailed(true); return { data: {} }; }),
-        axios.get(`${BASE_URL}/promotions/results/class/${classId}`, { headers: authHeaders(token), params: resultsParams }).catch(() => ({ data: {} })),
-        axios.get(`${BASE_URL}/exams`, { headers: authHeaders(token), params: examsParams }).catch(() => ({ data: {} })),
+        axios.get(`${API_BASE}/promotions/results/class/${classId}`, { headers: authHeaders(token), params: resultsParams }).catch(() => ({ data: {} })),
+        axios.get(`${API_BASE}/exams`, { headers: authHeaders(token), params: examsParams }).catch(() => ({ data: {} })),
       ]);
 
       if (clsRes.data?.data) setClassInfo(clsRes.data.data);
@@ -240,7 +240,7 @@ export default function ClassResultsScreen() {
     }
     try {
       const exam = exams.find((e) => String(e._id || e.id) === String(selectedExamId));
-      const res = await axios.get(`${BASE_URL}/results/sheet/${classId}`, {
+      const res = await axios.get(`${API_BASE}/results/sheet/${classId}`, {
         params: { examId: selectedExamId, subject: exam?.subject, division: classInfo?.division || undefined },
         headers: authHeaders(authToken),
       });
@@ -284,7 +284,7 @@ export default function ClassResultsScreen() {
     try {
       const effectiveYearId = selectedAcademicYearId || (await AsyncStorage.getItem(ACADEMIC_YEAR_STORAGE_KEY)) || '';
       await axios.post(
-        `${BASE_URL}/promotions/results/class/${classId}/compute`,
+        `${API_BASE}/promotions/results/class/${classId}/compute`,
         { academicYearId: effectiveYearId || undefined },
         { headers: authHeaders(authToken) },
       );
@@ -301,7 +301,7 @@ export default function ClassResultsScreen() {
     try {
       const effectiveYearId = selectedAcademicYearId || (await AsyncStorage.getItem(ACADEMIC_YEAR_STORAGE_KEY)) || '';
       const res = await axios.post(
-        `${BASE_URL}/promotions/results/class/${classId}/finalize`,
+        `${API_BASE}/promotions/results/class/${classId}/finalize`,
         { academicYearId: effectiveYearId || undefined, unlock },
         { headers: authHeaders(authToken) },
       );
@@ -320,7 +320,7 @@ export default function ClassResultsScreen() {
     setPublishing(true);
     try {
       const res = await axios.post(
-        `${BASE_URL}/results/publish`,
+        `${API_BASE}/results/publish`,
         { classId, examId: selectedExamId, division: classInfo?.division || undefined },
         { headers: authHeaders(authToken) },
       );
@@ -345,7 +345,7 @@ export default function ClassResultsScreen() {
       className: String(classInfo?.className || ''),
       token: String(authToken || ''),
     }).toString();
-    const url = `${BASE_URL}/results/format?${qs}`;
+    const url = `${API_BASE}/results/format?${qs}`;
     Linking.openURL(url).catch(() => setAlert({ type: 'danger', message: 'Failed to download format' }));
   };
 
@@ -416,7 +416,7 @@ export default function ClassResultsScreen() {
         onProgress: (p) => setBatchProgress(p),
         processBatch: async (batchRows) => {
           const res = await axios.post(
-            `${BASE_URL}/results/bulk`,
+            `${API_BASE}/results/bulk`,
             {
               classId,
               division: classInfo?.division || undefined,

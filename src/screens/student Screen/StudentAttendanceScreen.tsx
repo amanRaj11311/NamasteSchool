@@ -7,12 +7,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import LinearGradient from 'react-native-linear-gradient';
 import axios from 'axios';
+import {API_BASE} from '../../network/api';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
 
-// ---------------------------------------------------------------------------
-// Design tokens — premium red/coral brand system
-// ---------------------------------------------------------------------------
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -59,7 +56,7 @@ export default function StudentAttendanceScreen() {
     // If Parent, fetch children to populate selector
     if (userRole === 'Parent') {
       try {
-        const childRes = await axios.get(`${BASE_URL}/parent/children`, { headers: { Authorization: `Bearer ${token}` } });
+        const childRes = await axios.get(`${API_BASE}/parent/children`, { headers: { Authorization: `Bearer ${token}` } });
         if (childRes.data?.data?.length > 0) {
           setChildrenList(childRes.data.data);
           setSelectedChildId(childRes.data.data[0]._id);
@@ -84,7 +81,7 @@ export default function StudentAttendanceScreen() {
       else if (yMode === 'current') params.year = String(currentYearNum);
       else if (yMode === 'last') params.year = String(currentYearNum - 1);
 
-      const res = await axios.get(`${BASE_URL}/attendance/my-student-attendance`, { params, ...authHeaders(token) });
+      const res = await axios.get(`${API_BASE}/attendance/my-student-attendance`, { params, ...authHeaders(token) });
       if (res.data?.success) setAttendanceData(res.data);
     } catch (err) { console.error('Failed to load attendance'); } 
     finally { setLoading(false); setRefreshing(false); }

@@ -7,12 +7,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
+import { API_BASE } from '../../network/api';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
 
-// ---------------------------------------------------------------------------
-// Design tokens — premium brand system
-// ---------------------------------------------------------------------------
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -90,7 +87,7 @@ export default function HolidaysAdminScreen() {
   const fetchHolidays = async (token: string | null = authToken, isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/holidays`, authHeaders(token));
+      const res = await axios.get(`${API_BASE}/holidays`, authHeaders(token));
       if (res.data?.success) setHolidays(res.data.data || []);
     } catch (err) { console.error('Failed to load holidays'); } 
     finally { setLoading(false); setRefreshing(false); }
@@ -131,10 +128,10 @@ export default function HolidaysAdminScreen() {
       };
 
       if (editingId) {
-        await axios.put(`${BASE_URL}/holidays/${editingId}`, payload, authHeaders(authToken));
+        await axios.put(`${API_BASE}/holidays/${editingId}`, payload, authHeaders(authToken));
         Alert.alert('Success', 'Holiday updated successfully.');
       } else {
-        await axios.post(`${BASE_URL}/holidays`, payload, authHeaders(authToken));
+        await axios.post(`${API_BASE}/holidays`, payload, authHeaders(authToken));
         Alert.alert('Success', 'Holiday created successfully.');
       }
       setShowModal(false);
@@ -148,7 +145,7 @@ export default function HolidaysAdminScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
           try {
-            await axios.delete(`${BASE_URL}/holidays/${id}`, authHeaders(authToken));
+            await axios.delete(`${API_BASE}/holidays/${id}`, authHeaders(authToken));
             fetchHolidays(authToken, true);
           } catch (error) { Alert.alert('Error', 'Failed to delete holiday.'); }
       }}

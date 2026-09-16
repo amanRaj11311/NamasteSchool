@@ -7,12 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
-
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
-
-// ---------------------------------------------------------------------------
-// Design tokens — premium brand system
-// ---------------------------------------------------------------------------
+import { API_BASE } from '../../network/api';
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -59,7 +54,7 @@ export default function PromotionHistoryScreen() {
   const fetchHistory = async (token: string | null = authToken, isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/promotions/history/all`, authHeaders(token));
+      const res = await axios.get(`${API_BASE}/promotions/history/all`, authHeaders(token));
       const rows = res.data?.data;
       if (Array.isArray(rows)) setHistory(rows);
       else setHistory([]);

@@ -1,18 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView,
-  ActivityIndicator, RefreshControl, TextInput, Platform
+  ActivityIndicator, RefreshControl, TextInput,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import LinearGradient from 'react-native-linear-gradient';
 import axios from 'axios';
+import {API_BASE} from '../../network/api';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
-
-// ---------------------------------------------------------------------------
-// Design tokens — premium red/coral brand system
-// ---------------------------------------------------------------------------
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -65,7 +61,7 @@ export default function StudentHolidaysScreen() {
   const fetchHolidays = async (token: string | null = authToken, isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/holidays`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await axios.get(`${API_BASE}/holidays`, { headers: { Authorization: `Bearer ${token}` } });
       if (res.data?.success) setHolidays(res.data.data || []);
     } catch (err) { console.error('Failed to load holidays'); } 
     finally { setLoading(false); setRefreshing(false); }
@@ -214,9 +210,6 @@ export default function StudentHolidaysScreen() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { padding: 40, justifyContent: 'center', alignItems: 'center' },

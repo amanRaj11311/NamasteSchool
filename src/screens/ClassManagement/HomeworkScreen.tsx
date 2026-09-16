@@ -8,8 +8,8 @@ import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import DocumentPicker from '@react-native-documents/picker';
 import axios from 'axios';
+import { API_BASE } from '../../network/api';
 
-const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 const C = {
   bg: '#F4F6F9',

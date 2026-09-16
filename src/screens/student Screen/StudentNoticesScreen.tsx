@@ -6,12 +6,9 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
+import { API_BASE } from '../../network/api';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
 
-// ---------------------------------------------------------------------------
-// Design tokens — premium red/coral brand system
-// ---------------------------------------------------------------------------
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -61,7 +58,7 @@ export default function StudentNoticesScreen() {
   const fetchNotices = async (token: string | null = authToken, isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/notices`, authHeaders(token));
+      const res = await axios.get(`${API_BASE}/notices`, authHeaders(token));
       if (res.data?.success) setNotices(res.data.data || []);
     } catch (err) { console.error('Failed to load notices'); } 
     finally { setLoading(false); setRefreshing(false); }

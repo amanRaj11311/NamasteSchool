@@ -7,8 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
+import { API_BASE } from '../../network/api';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
@@ -74,7 +74,7 @@ export default function StudentLeaveScreen() {
 
     if (parentCheck) {
       try {
-        const childRes = await axios.get(`${BASE_URL}/parent/children`, { headers: { Authorization: `Bearer ${token}` } });
+        const childRes = await axios.get(`${API_BASE}/parent/children`, { headers: { Authorization: `Bearer ${token}` } });
         if (childRes.data?.data?.length > 0) {
           setChildrenList(childRes.data.data);
           setSelectedChildId(childRes.data.data[0]._id);
@@ -94,7 +94,7 @@ export default function StudentLeaveScreen() {
     try {
       const params: any = {};
       if (childId) params.studentId = childId;
-      const res = await axios.get(`${BASE_URL}/leave/my-student-leaves`, { params, ...authHeaders(token) });
+      const res = await axios.get(`${API_BASE}/leave/my-student-leaves`, { params, ...authHeaders(token) });
       if (res.data?.success) setLeaveData(res.data);
     } catch (err: any) { Alert.alert('Error', err.response?.data?.message || 'Failed to load leave history'); } 
     finally { setLoading(false); setRefreshing(false); }
@@ -114,7 +114,7 @@ export default function StudentLeaveScreen() {
         ...(selectedChildId ? { studentId: selectedChildId } : {})
       };
 
-      await axios.post(`${BASE_URL}/leave/student-apply`, payload, authHeaders(authToken));
+      await axios.post(`${API_BASE}/leave/student-apply`, payload, authHeaders(authToken));
       Alert.alert('Success', 'Leave application submitted successfully. Pending review.');
       
       setShowApplyModal(false);

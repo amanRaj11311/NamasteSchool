@@ -8,12 +8,9 @@ import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
+import { API_BASE } from '../../network/api';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
 
-// ---------------------------------------------------------------------------
-// Design tokens — premium brand system
-// ---------------------------------------------------------------------------
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -84,7 +81,7 @@ export default function EnquiriesScreen() {
 
   const fetchClassLevels = async (token: string | null) => {
     try {
-      const res = await axios.get(`${BASE_URL}/class-levels`, authHeaders(token));
+      const res = await axios.get(`${API_BASE}/class-levels`, authHeaders(token));
       if (res.data?.data) setClassLevels(res.data.data);
     } catch (err) { console.error('Failed to load class levels'); }
   };
@@ -92,7 +89,7 @@ export default function EnquiriesScreen() {
   const fetchEnquiries = async (token: string | null = authToken, isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/enquiries`, authHeaders(token));
+      const res = await axios.get(`${API_BASE}/enquiries`, authHeaders(token));
       if (res.data?.success) setEnquiries(res.data.data || []);
     } catch (err) { Alert.alert('Error', 'Failed to load admission enquiries'); } 
     finally { setLoading(false); setRefreshing(false); }
@@ -127,10 +124,10 @@ export default function EnquiriesScreen() {
     try {
       const payload = { ...form, followUpDate: formatToYMD(form.followUpDate) };
       if (editingId) {
-        await axios.put(`${BASE_URL}/enquiries/${editingId}`, payload, authHeaders(authToken));
+        await axios.put(`${API_BASE}/enquiries/${editingId}`, payload, authHeaders(authToken));
         Alert.alert('Success', 'Enquiry updated successfully');
       } else {
-        await axios.post(`${BASE_URL}/enquiries`, payload, authHeaders(authToken));
+        await axios.post(`${API_BASE}/enquiries`, payload, authHeaders(authToken));
         Alert.alert('Success', 'Enquiry recorded successfully');
       }
       setShowModal(false);
@@ -144,7 +141,7 @@ export default function EnquiriesScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
           try {
-            await axios.delete(`${BASE_URL}/enquiries/${id}`, authHeaders(authToken));
+            await axios.delete(`${API_BASE}/enquiries/${id}`, authHeaders(authToken));
             fetchEnquiries(authToken, true);
           } catch (error) { Alert.alert('Error', 'Failed to delete enquiry'); }
       }}
@@ -394,9 +391,6 @@ export default function EnquiriesScreen() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },

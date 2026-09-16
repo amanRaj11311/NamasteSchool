@@ -1,18 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView,
   ActivityIndicator, RefreshControl, Platform, TextInput, Modal, KeyboardAvoidingView, Alert, Linking
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
-import LinearGradient from 'react-native-linear-gradient';
 import axios from 'axios';
-
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
-
-// ---------------------------------------------------------------------------
-// Design tokens — premium red/coral brand system
-// ---------------------------------------------------------------------------
+import {API_BASE} from '../../network/api';
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -61,7 +55,7 @@ export default function StudentFeesScreen() {
 
     if (parentCheck) {
       try {
-        const childRes = await axios.get(`${BASE_URL}/parent/children`, { headers: { Authorization: `Bearer ${token}` } });
+        const childRes = await axios.get(`${API_BASE}/parent/children`, { headers: { Authorization: `Bearer ${token}` } });
         if (childRes.data?.data?.length > 0) {
           setChildrenList(childRes.data.data);
           setSelectedChildId(childRes.data.data[0]._id);
@@ -81,7 +75,7 @@ export default function StudentFeesScreen() {
     try {
       const params: any = {};
       if (childId) params.studentId = childId;
-      const res = await axios.get(`${BASE_URL}/fees/my-student-fees`, { params, ...authHeaders(token) });
+      const res = await axios.get(`${API_BASE}/fees/my-student-fees`, { params, ...authHeaders(token) });
       if (res.data?.success) setFeeData(res.data.data);
     } catch (err: any) { Alert.alert('Error', err.response?.data?.message || 'Failed to load fee details'); } 
     finally { setLoading(false); setRefreshing(false); }
@@ -109,7 +103,7 @@ export default function StudentFeesScreen() {
 
     setSubmittingPayment(true);
     try {
-      const res = await axios.post(`${BASE_URL}/fees/my-student-fees/${selectedFeeAssignment._id}/pay`, {
+      const res = await axios.post(`${API_BASE}/fees/my-student-fees/${selectedFeeAssignment._id}/pay`, {
         amount: amountNum, mode: payMode, referenceNo: refNo, remarks: remarks || 'Self-payment',
       }, authHeaders(authToken));
 
@@ -123,7 +117,7 @@ export default function StudentFeesScreen() {
   };
 
   const handleDownloadReceipt = async (paymentId: string) => {
-    const receiptUrl = `${BASE_URL}/fees/payments/${paymentId}/receipt?token=${authToken}`;
+    const receiptUrl = `${API_BASE}/fees/payments/${paymentId}/receipt?token=${authToken}`;
     const supported = await Linking.canOpenURL(receiptUrl);
     if (supported) await Linking.openURL(receiptUrl);
     else Alert.alert('Error', 'Unable to open receipt URL');

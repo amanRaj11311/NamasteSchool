@@ -7,12 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
+import { API_BASE } from '../../network/api';
 
-const API_BASE = 'https://mern.schoolapi.dcstechnosis.com/api';
-
-// ---------------------------------------------------------------------------
-// PREMIUM DESIGN TOKENS
-// ---------------------------------------------------------------------------
 const C = {
   bg: '#F5F6FA',
   surface: '#FFFFFF',

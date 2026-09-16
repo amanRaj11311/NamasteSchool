@@ -22,10 +22,6 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 import { API_BASE } from '../../network/api';
 
-
-// ---------------------------------------------------------------------------
-// Design tokens — premium, muted palette on top of the existing brand accent
-// ---------------------------------------------------------------------------
 const COLORS = {
   bg: '#F5F6FA',
   surface: '#FFFFFF',

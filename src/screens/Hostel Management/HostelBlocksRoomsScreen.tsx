@@ -7,8 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
+import { API_BASE } from '../../network/api';
 
-const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
 
 const C = {
   bg: '#F4F6F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
@@ -61,8 +61,8 @@ export default function HostelBlocksRoomsScreen() {
     try {
       const params = bFilter ? { blockId: bFilter } : {};
       const results = await Promise.allSettled([
-        axios.get(`${BASE_URL}/hostel/blocks`, authHeaders(token)),
-        axios.get(`${BASE_URL}/hostel/rooms`, { params, ...authHeaders(token) }),
+        axios.get(`${API_BASE}/hostel/blocks`, authHeaders(token)),
+        axios.get(`${API_BASE}/hostel/rooms`, { params, ...authHeaders(token) }),
       ]);
       const [bRes, rRes] = results;
 
@@ -91,7 +91,7 @@ export default function HostelBlocksRoomsScreen() {
     if (!blockForm.name.trim()) { Alert.alert('Error', 'Block name required'); return; }
     setSaving(true);
     try {
-      await axios.post(`${BASE_URL}/hostel/blocks`, blockForm, authHeaders(authToken));
+      await axios.post(`${API_BASE}/hostel/blocks`, blockForm, authHeaders(authToken));
       Alert.alert('Success', 'Block added successfully');
       setBlockModal(false);
       fetchData(authToken, filterBlock, true);
@@ -105,7 +105,7 @@ export default function HostelBlocksRoomsScreen() {
     }
     setSaving(true);
     try {
-      await axios.post(`${BASE_URL}/hostel/rooms`, {
+      await axios.post(`${API_BASE}/hostel/rooms`, {
         ...roomForm,
         capacity: Number(roomForm.capacity),
         monthlyFee: Number(roomForm.monthlyFee)
