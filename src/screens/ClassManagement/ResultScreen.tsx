@@ -18,24 +18,25 @@ const BASE_URL = 'https://mern.schoolapi.dcstechnosis.com/api';
 const SOCKET_URL = BASE_URL.replace(/\/api\/?$/, '');
 const ACADEMIC_YEAR_STORAGE_KEY = 'selectedAcademicYearId';
 
+// ---- Brand palette — matches the web app's red gradient (#e52e2e -> #c5221f) ----
 const C = {
-  bg: '#F8FAFC',
+  bg: '#F6F7FB',
   surface: '#FFFFFF',
-  surfaceSoft: '#F1F5F9',
-  border: '#E2E8F0',
-  text: '#0F172A',
-  textMuted: '#64748B',
-  textFaint: '#94A3B8',
-  primary: '#E11D48',
-  primaryDark: '#BE123C',
-  primarySoft: '#FFE4E6',
-  blue: '#0284C7',
+  surfaceSoft: '#F1F3F9',
+  border: '#E7E9F2',
+  text: '#12172B',
+  textMuted: '#5D6478',
+  textFaint: '#9AA0B4',
+  primary: '#E52E2E',
+  primaryDark: '#C5221F',
+  primarySoft: '#FDE8E8',
+  blue: '#0369A1',
   blueSoft: '#E0F2FE',
-  green: '#10B981',
-  greenSoft: '#D1FAE5',
-  amber: '#F59E0B',
+  green: '#059669',
+  greenSoft: '#DCFCE9',
+  amber: '#B45309',
   amberSoft: '#FEF3C7',
-  slate: '#334155',
+  slate: '#1E293B',
 };
 
 type ParamList = { ClassResults: { classId: string }; ClassExams: { classId: string } };
@@ -52,6 +53,32 @@ const getExcelVal = (row: Record<string, any>, keys: string[]) => {
     if (match && row[match] !== undefined && row[match] !== null && row[match] !== '') return row[match];
   }
   return undefined;
+};
+
+// Mirrors web's utils/excelValidator -> validateExcelStructure: checks the
+// parsed sheet has at least one recognizable column from each required
+// group before we bother mapping rows, and returns diagnostics for the
+// progress modal instead of silently failing.
+const validateExcelStructure = (rawData: any[]) => {
+  const headers = Object.keys(rawData[0] || {});
+  const normalized = headers.map((h) => h.toLowerCase());
+  const candidateGroups = [
+    { label: 'Roll No / Student Name', keys: ['Roll No', 'Roll Number', 'rollNo', 'Student Name', 'Name', 'studentName'] },
+    { label: 'Marks Obtained', keys: ['Marks Obtained', 'Marks', 'marksObtained', 'Score'] },
+  ];
+  const missingGroups = candidateGroups.filter((g) => !g.keys.some((k) => normalized.includes(k.toLowerCase())));
+  if (missingGroups.length > 0) {
+    return {
+      isValid: false,
+      detectedHeaders: headers,
+      expectedHeaders: candidateGroups.flatMap((g) => g.keys),
+      diagnostics: [
+        `Detected columns: ${headers.join(', ') || 'none'}`,
+        `Missing required column group(s): ${missingGroups.map((g) => g.label).join(', ')}`,
+      ],
+    };
+  }
+  return { isValid: true as const };
 };
 
 const processExcelBatches = async ({
@@ -86,6 +113,7 @@ export default function ClassResultsScreen() {
   const [authToken, setAuthToken] = useState<string | null>(null);
 
   const [classInfo, setClassInfo] = useState<any>(null);
+  const [classInfoFailed, setClassInfoFailed] = useState(false);
   const [academicYears, setAcademicYears] = useState<any[]>([]);
   const [selectedAcademicYearId, setSelectedAcademicYearId] = useState('');
   const [results, setResults] = useState<any[]>([]);
@@ -103,8 +131,7 @@ export default function ClassResultsScreen() {
   const [publishing, setPublishing] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // Same inline alert banner as web (replaces native Alert.alert popups —
-  // web never uses confirm() or blocking dialogs, so neither do we).
+  // Inline alert banner — same shape as web's `.alert-{type} alert-dismissible`.
   const [alert, setAlert] = useState<{ type: 'success' | 'danger' | ''; message: string }>({ type: '', message: '' });
 
   // Search / filter / pagination — mirrors web's results table toolbar
@@ -113,10 +140,12 @@ export default function ClassResultsScreen() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
 
-  // Excel batch progress modal
+  // Universal Excel batch progress / validation-error modal — mirrors web's
+  // <ExcelBatchProgressModal isOpen title fileName progress validationError onDownloadTemplate onClose />
   const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [batchFileName, setBatchFileName] = useState('');
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+  const [validationError, setValidationError] = useState<any>(null);
 
   useEffect(() => { initialize(); }, []);
 
@@ -153,8 +182,14 @@ export default function ClassResultsScreen() {
     fetchResults(authToken, false, val);
   };
 
-  // Mirrors web's fetchResults: same three parallel calls (class / results /
-  // exams), same academicYearId param threading, same state assignments.
+  // Mirrors web's fetchResults 1:1 — same three parallel calls (class /
+  // results / exams), same academicYearId param threading, same state
+  // assignments. The one addition is a dedicated .catch on the class-info
+  // call: the web version has none, so a failed class fetch silently rejects
+  // the whole Promise.all and the subtitle is stuck on "Loading class..."
+  // forever with no way to tell the user anything went wrong. Catching it
+  // here keeps every successful-path behavior identical while giving the
+  // failure path a real, retryable state instead of an infinite spinner.
   const fetchResults = async (
     token: string | null = authToken,
     isRefresh = false,
@@ -163,9 +198,11 @@ export default function ClassResultsScreen() {
     if (!classId) {
       setLoading(false);
       setRefreshing(false);
+      setClassInfoFailed(true);
       return;
     }
     if (isRefresh) setRefreshing(true); else setLoading(true);
+    setClassInfoFailed(false);
 
     try {
       const activeYear = yearIdParam !== undefined
@@ -175,17 +212,20 @@ export default function ClassResultsScreen() {
       const examsParams = { classId, ...(activeYear ? { academicYearId: activeYear } : {}) };
 
       const [clsRes, resData, examsRes] = await Promise.all([
-        axios.get(`${BASE_URL}/classes/${classId}`, { headers: authHeaders(token) }),
+        axios.get(`${BASE_URL}/classes/${classId}`, { headers: authHeaders(token) })
+          .catch((e) => { console.error('Failed to load class info:', e); setClassInfoFailed(true); return { data: {} }; }),
         axios.get(`${BASE_URL}/promotions/results/class/${classId}`, { headers: authHeaders(token), params: resultsParams }).catch(() => ({ data: {} })),
         axios.get(`${BASE_URL}/exams`, { headers: authHeaders(token), params: examsParams }).catch(() => ({ data: {} })),
       ]);
 
       if (clsRes.data?.data) setClassInfo(clsRes.data.data);
+      else setClassInfoFailed(true);
       if (resData.data?.data) setResults(Array.isArray(resData.data.data) ? resData.data.data : []);
       const examList = examsRes.data?.data || [];
       setExams(Array.isArray(examList) ? examList : []);
     } catch (err) {
       console.error(err);
+      setClassInfoFailed(true);
       setAlert({ type: 'danger', message: 'Failed to load class results' });
     } finally {
       setLoading(false);
@@ -291,10 +331,10 @@ export default function ClassResultsScreen() {
     } finally { setPublishing(false); }
   };
 
-  // Params now match web's /results/format call exactly (classId, division,
-  // subject, maxMarks, className — no examId). `token` is added only because
-  // RN's Linking.openURL can't attach an Authorization header the way the
-  // web app's axios blob request does; it's the one unavoidable RN-only param.
+  // Web downloads this as a blob and clicks a synthetic <a>. RN can't attach
+  // an Authorization header to Linking.openURL, so — same endpoint, same
+  // params (classId, division, subject, maxMarks, className) — a `token`
+  // query param is added as the one unavoidable RN-only difference.
   const handleDownloadFormat = () => {
     const exam = exams.find((e) => String(e._id || e.id) === String(selectedExamId));
     const qs = new URLSearchParams({
@@ -309,9 +349,10 @@ export default function ClassResultsScreen() {
     Linking.openURL(url).catch(() => setAlert({ type: 'danger', message: 'Failed to download format' }));
   };
 
-  // Client-side Excel parsing + chunked bulk upload, mirroring web's
-  // XLSX.read + processExcelBatches -> POST /results/bulk flow (JSON rows,
-  // not a multipart file), with a progress modal for large sheets.
+  // Mirrors web's handleExcelUpload: pick file -> parse -> validate
+  // structure -> map rows -> processExcelBatches -> POST /results/bulk,
+  // including the pre-validation and empty-file diagnostics the web version
+  // surfaces in its batch modal.
   const handleExcelUpload = async () => {
     if (!selectedExamId) { setAlert({ type: 'danger', message: 'Select exam and file' }); return; }
     try {
@@ -331,6 +372,15 @@ export default function ClassResultsScreen() {
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rawData: any[] = XLSX.utils.sheet_to_json(sheet);
 
+      const structureCheck = validateExcelStructure(rawData);
+      if (!structureCheck.isValid) {
+        setValidationError(structureCheck);
+        setBatchFileName(file.name || 'results.xlsx');
+        setBatchModalOpen(true);
+        setUploading(false);
+        return;
+      }
+
       const rows = rawData
         .map((r) => ({
           rollNo: getExcelVal(r, ['Roll No', 'Roll Number', 'Roll', 'rollNo']),
@@ -341,12 +391,21 @@ export default function ClassResultsScreen() {
         .filter((r) => r.rollNo || r.studentName);
 
       if (rows.length === 0) {
+        setValidationError({
+          isValid: false,
+          detectedHeaders: Object.keys(rawData[0] || {}),
+          expectedHeaders: [],
+          diagnostics: ['The file was parsed but all rows were filtered out as invalid. Ensure student name or roll number is present.'],
+        });
+        setBatchFileName(file.name || 'results.xlsx');
+        setBatchModalOpen(true);
         setAlert({ type: 'danger', message: 'No valid student result rows found in Excel file.' });
         setUploading(false);
         return;
       }
 
       const exam = exams.find((e) => String(e._id || e.id) === String(selectedExamId));
+      setValidationError(null);
       setBatchFileName(file.name || 'results.xlsx');
       setBatchProgress({ current: 0, total: rows.length });
       setBatchModalOpen(true);
@@ -387,9 +446,13 @@ export default function ClassResultsScreen() {
       }
     } finally {
       setUploading(false);
-      setBatchModalOpen(false);
-      setBatchProgress(null);
     }
+  };
+
+  const closeBatchModal = () => {
+    setBatchModalOpen(false);
+    setBatchProgress(null);
+    setValidationError(null);
   };
 
   const finalCount = results.filter((r) => r.isFinal).length;
@@ -428,7 +491,9 @@ export default function ClassResultsScreen() {
         <Text style={styles.inputLabel}>{label}</Text>
         <TouchableOpacity style={[styles.dropdownHeader, isOpen && styles.dropdownHeaderActive]} onPress={() => setActiveDropdown(isOpen ? null : fieldKey)} activeOpacity={0.85}>
           <Text style={selectedObj ? styles.dropdownSelectedText : styles.dropdownPlaceholder} numberOfLines={1}>{selectedObj?.label || placeholder}</Text>
-          <Feather name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} color={C.textMuted} />
+          <View style={styles.dropdownChevronWrap}>
+            <Feather name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} color={C.textMuted} />
+          </View>
         </TouchableOpacity>
         {isOpen && (
           <View style={styles.dropdownListContainer}>
@@ -440,6 +505,7 @@ export default function ClassResultsScreen() {
               ) : options.map((opt, i) => (
                 <TouchableOpacity key={opt.value + i} style={styles.dropdownItem} onPress={() => { onSelect(opt.value); setActiveDropdown(null); }}>
                   <Text style={[styles.dropdownItemText, value === opt.value && styles.textBrand]}>{opt.label}</Text>
+                  {value === opt.value && <Feather name="check" size={16} color={C.primary} />}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -451,14 +517,15 @@ export default function ClassResultsScreen() {
 
   const pageSizeOptions = [10, 15, 25, 50, 100, 9999];
 
-  // Same alert banner shape as web's `.alert-{type} alert-dismissible`.
   const AlertBanner = () => {
     if (!alert.message) return null;
     const isSuccess = alert.type === 'success';
     return (
-      <View style={[styles.alertBanner, { backgroundColor: isSuccess ? C.greenSoft : C.primarySoft, borderColor: isSuccess ? C.green : C.primary }]}>
+      <View style={[styles.alertBanner, { backgroundColor: isSuccess ? C.greenSoft : C.primarySoft }]}>
+        <View style={[styles.alertAccent, { backgroundColor: isSuccess ? C.green : C.primary }]} />
+        <Feather name={isSuccess ? 'check-circle' : 'alert-circle'} size={16} color={isSuccess ? C.green : C.primary} />
         <Text style={[styles.alertText, { color: isSuccess ? C.green : C.primary }]}>{alert.message}</Text>
-        <TouchableOpacity onPress={() => setAlert({ type: '', message: '' })}>
+        <TouchableOpacity onPress={() => setAlert({ type: '', message: '' })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Feather name="x" size={16} color={isSuccess ? C.green : C.primary} />
         </TouchableOpacity>
       </View>
@@ -493,7 +560,7 @@ export default function ClassResultsScreen() {
             onChangeText={setSearch}
           />
           {!!search && (
-            <TouchableOpacity onPress={() => setSearch('')}>
+            <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Feather name="x" size={16} color={C.textMuted} />
             </TouchableOpacity>
           )}
@@ -514,7 +581,7 @@ export default function ClassResultsScreen() {
         </View>
 
         <View style={styles.pageSizeRow}>
-          <Text style={styles.pageSizeLabel}>Rows:</Text>
+          <Text style={styles.pageSizeLabel}>ROWS</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
             {pageSizeOptions.map((size) => (
               <TouchableOpacity
@@ -548,7 +615,9 @@ export default function ClassResultsScreen() {
           <Feather name="chevron-left" size={16} color={currentPage === 1 ? C.textFaint : C.primary} />
           <Text style={[styles.pageNavBtnText, currentPage === 1 && { color: C.textFaint }]}>Prev</Text>
         </TouchableOpacity>
-        <Text style={styles.pageNavCenterText}>Page {currentPage} of {totalPages}</Text>
+        <View style={styles.pageNavCenterPill}>
+          <Text style={styles.pageNavCenterText}>Page {currentPage} of {totalPages}</Text>
+        </View>
         <TouchableOpacity
           style={[styles.pageNavBtn, currentPage === totalPages && styles.pageNavBtnDisabled]}
           onPress={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
@@ -582,10 +651,10 @@ export default function ClassResultsScreen() {
     </View>
   );
 
-  const AnnualTableRow = ({ item }: { item: any }) => {
+  const AnnualTableRow = ({ item, index }: { item: any; index: number }) => {
     const stu = item.studentId || {};
     return (
-      <View style={[styles.tr, { width: annualTableWidth }]}>
+      <View style={[styles.tr, { width: annualTableWidth }, index % 2 === 1 && styles.trStripe]}>
         <Text style={[styles.tdCell, styles.tdBold, { width: ANNUAL_COLS[0].width }]} numberOfLines={1}>{stu.name || '—'}</Text>
         <Text style={[styles.tdCell, { width: ANNUAL_COLS[1].width }]}>{stu.rollNo || '—'}</Text>
         <Text style={[styles.tdCell, styles.tdBold, { width: ANNUAL_COLS[2].width, color: C.primary }]}>{item.overallPercent ?? 0}%</Text>
@@ -611,8 +680,8 @@ export default function ClassResultsScreen() {
     );
   };
 
-  // ---- Marks Entry table — same columns as web:
-  // Roll | Student | Marks | % | Grade | Pass | Status
+  // Read-only, matching web — marks are only ever edited via the Excel
+  // upload flow, not per-row in this table.
   const ENTRY_COLS = [
     { key: 'roll', label: 'Roll', width: 70 },
     { key: 'student', label: 'Student', width: 140 },
@@ -620,7 +689,7 @@ export default function ClassResultsScreen() {
     { key: 'pct', label: '%', width: 60 },
     { key: 'grade', label: 'Grade', width: 70 },
     { key: 'pass', label: 'Pass', width: 80 },
-    { key: 'status', label: 'Status', width: 110 },
+    { key: 'status', label: 'Status', width: 130 },
   ];
   const entryTableWidth = ENTRY_COLS.reduce((s, c) => s + c.width, 0);
 
@@ -632,11 +701,11 @@ export default function ClassResultsScreen() {
     </View>
   );
 
-  const EntryTableRow = ({ item }: { item: any }) => {
+  const EntryTableRow = ({ item, index }: { item: any; index: number }) => {
     const hasRes = !!item.result;
     const isPass = hasRes && item.result.isPass;
     return (
-      <View style={[styles.tr, { width: entryTableWidth }]}>
+      <View style={[styles.tr, { width: entryTableWidth }, index % 2 === 1 && styles.trStripe]}>
         <Text style={[styles.tdCell, styles.tdBold, { width: ENTRY_COLS[0].width, color: C.textMuted }]}>{item.rollNo || '—'}</Text>
         <Text style={[styles.tdCell, styles.tdBold, { width: ENTRY_COLS[1].width }]} numberOfLines={1}>{item.name || '—'}</Text>
         <Text style={[styles.tdCell, { width: ENTRY_COLS[2].width }]}>{hasRes ? `${item.result.marksObtained} / ${item.result.maxMarks}` : '—'}</Text>
@@ -654,23 +723,39 @@ export default function ClassResultsScreen() {
     );
   };
 
+  // Fixed subtitle logic — matches web's `{classInfo ? '<className> - <division>' : 'Loading class...'}`
+  // for the success path exactly, but no longer gets stuck forever if the
+  // class-info request genuinely fails.
+  const headerSubtitle = classInfo
+    ? `${classInfo.className || ''}${classInfo.division ? ` - ${classInfo.division}` : ''}`.trim()
+    : loading
+      ? 'Loading class...'
+      : (classInfoFailed ? 'Class unavailable — pull to retry' : 'Loading class...');
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {/* Header — back icon removed. Breadcrumb pill matches the web app's
+          "Examinations & Grading / Class Results" category trail. */}
       <View style={styles.header}>
+        <View style={styles.breadcrumbRow}>
+          <View style={styles.breadcrumbBadge}>
+            <Text style={styles.breadcrumbBadgeText}>EXAMINATIONS & GRADING</Text>
+          </View>
+          <Text style={styles.breadcrumbSep}>/</Text>
+          <Text style={styles.breadcrumbCurrent}>Class Results</Text>
+        </View>
+
         <View style={styles.headerRow}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={24} color={C.text} />
-          </TouchableOpacity>
           <View style={styles.headerIconBadge}>
-            <Feather name="bar-chart-2" size={20} color={C.primary} />
+            <Feather name="bar-chart-2" size={22} color={C.primary} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Class Results</Text>
-            <Text style={styles.subtitle}>
-              {classInfo ? `${classInfo.className} ${classInfo.division ? `(${classInfo.division})` : ''}` : 'Loading...'}
-            </Text>
+            <Text style={styles.title}>Class Results & Marksheets</Text>
+            <Text style={styles.subtitle} numberOfLines={1}>{headerSubtitle}</Text>
           </View>
+          <TouchableOpacity style={styles.headerRefreshBtn} onPress={() => fetchResults(authToken, true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Feather name="refresh-ccw" size={17} color={C.textMuted} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -679,11 +764,11 @@ export default function ClassResultsScreen() {
       {/* Academic Session selector + tabs */}
       <View style={styles.filterSection}>
         {academicYears.length > 0 && (
-          <View style={{ marginBottom: 12, zIndex: 20 }}>
+          <View style={{ marginBottom: 14, zIndex: 20 }}>
             {renderInlineDropdown(
               'academicYear',
               'ACADEMIC SESSION',
-              academicYears.map((ay) => ({ label: `${ay.name}${ay.isActive ? ' ★' : ''}`, value: ay._id })),
+              academicYears.map((ay) => ({ label: `Session: ${ay.name}${ay.isActive ? '  ★' : ''}`, value: ay._id })),
               selectedAcademicYearId,
               onSelectAcademicYear,
               'No academic sessions found',
@@ -693,10 +778,10 @@ export default function ClassResultsScreen() {
         )}
 
         <View style={styles.tabContainer}>
-          <TouchableOpacity style={[styles.tabBtn, tab === 'annual' && styles.tabBtnActive]} onPress={() => setTab('annual')}>
+          <TouchableOpacity style={[styles.tabBtn, tab === 'annual' && styles.tabBtnActive]} onPress={() => setTab('annual')} activeOpacity={0.85}>
             <Text style={[styles.tabText, tab === 'annual' && styles.tabTextActive]}>Annual Matrix</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.tabBtn, tab === 'entry' && styles.tabBtnActive]} onPress={() => setTab('entry')}>
+          <TouchableOpacity style={[styles.tabBtn, tab === 'entry' && styles.tabBtnActive]} onPress={() => setTab('entry')} activeOpacity={0.85}>
             <Text style={[styles.tabText, tab === 'entry' && styles.tabTextActive]}>Marks Entry / Excel</Text>
           </TouchableOpacity>
         </View>
@@ -707,7 +792,7 @@ export default function ClassResultsScreen() {
         <>
           <View style={styles.actionBar}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingHorizontal: 16 }}>
-              <TouchableOpacity style={styles.actionBtnOutline} onPress={handleCompute} disabled={computing}>
+              <TouchableOpacity style={styles.actionBtnOutline} onPress={handleCompute} disabled={computing} activeOpacity={0.85}>
                 {computing ? (
                   <><ActivityIndicator color={C.primary} size="small" /><Text style={styles.actionBtnOutlineText}>Computing...</Text></>
                 ) : (
@@ -721,32 +806,34 @@ export default function ClassResultsScreen() {
                     <Feather name="check-circle" size={16} color="#fff" />
                     <Text style={styles.actionBtnSolidText}>Results Finalized (Live)</Text>
                   </View>
-                  <TouchableOpacity style={styles.actionBtnWarningOutline} onPress={() => handleFinalize(true)} disabled={finalizing}>
+                  <TouchableOpacity style={styles.actionBtnWarningOutline} onPress={() => handleFinalize(true)} disabled={finalizing} activeOpacity={0.85}>
                     {finalizing ? <ActivityIndicator color={C.amber} size="small" /> : <><Feather name="unlock" size={16} color={C.amber} /><Text style={styles.actionBtnWarningOutlineText}>Unlock to Draft</Text></>}
                   </TouchableOpacity>
                 </>
               ) : (
-                <TouchableOpacity style={styles.actionBtnSolid} onPress={() => handleFinalize(false)} disabled={finalizing}>
+                <TouchableOpacity style={styles.actionBtnSolid} onPress={() => handleFinalize(false)} disabled={finalizing} activeOpacity={0.85}>
                   {finalizing ? <ActivityIndicator color="#fff" size="small" /> : <><Feather name="lock" size={16} color="#fff" /><Text style={styles.actionBtnSolidText}>Finalize & Lock (Make Live)</Text></>}
                 </TouchableOpacity>
               )}
 
-              <TouchableOpacity style={styles.actionBtnNeutral} onPress={() => navigation.navigate('ClassExams', { classId })}>
+              <TouchableOpacity style={styles.actionBtnNeutral} onPress={() => navigation.navigate('ClassExams', { classId })} activeOpacity={0.85}>
                 <Feather name="pen-tool" size={16} color={C.textMuted} /><Text style={styles.actionBtnNeutralText}>Class Exams</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
 
           {loading ? (
-            <View style={styles.center}><ActivityIndicator size="large" color={C.primary} /></View>
+            <View style={styles.center}>
+              <ActivityIndicator size="large" color={C.primary} />
+            </View>
           ) : results.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconCircle}>
-                <Feather name="pie-chart" size={40} color={C.primarySoft} />
+                <Feather name="trending-up" size={36} color={C.primary} style={{ opacity: 0.45 }} />
               </View>
               <Text style={styles.emptyTitle}>No Computed Results Found</Text>
               <Text style={styles.emptySubtitle}>Enter marks via Marks Entry tab or Class Exams, then compute annual results.</Text>
-              <TouchableOpacity style={[styles.actionBtnSolid, { marginTop: 20 }]} onPress={handleCompute} disabled={computing}>
+              <TouchableOpacity style={[styles.actionBtnSolid, { marginTop: 20 }]} onPress={handleCompute} disabled={computing} activeOpacity={0.85}>
                 {computing ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.actionBtnSolidText}>Compute Class Results Now</Text>}
               </TouchableOpacity>
             </View>
@@ -765,7 +852,7 @@ export default function ClassResultsScreen() {
                       </View>
                     }
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchResults(authToken, true)} colors={[C.primary]} tintColor={C.primary} />}
-                    renderItem={({ item }) => <AnnualTableRow item={item} />}
+                    renderItem={({ item, index }) => <AnnualTableRow item={item} index={index} />}
                   />
                 </View>
               </ScrollView>
@@ -784,24 +871,26 @@ export default function ClassResultsScreen() {
             </View>
 
             <View style={styles.entryActionsRow}>
-              <TouchableOpacity style={[styles.entryActionBtn, { backgroundColor: C.surface, borderColor: C.green }]} disabled={!selectedExamId} onPress={handleDownloadFormat}>
+              <TouchableOpacity style={[styles.entryActionBtn, { backgroundColor: C.surface, borderColor: C.green }]} disabled={!selectedExamId} onPress={handleDownloadFormat} activeOpacity={0.85}>
                 <Feather name="download-cloud" size={16} color={C.green} /><Text style={[styles.entryActionText, { color: C.green }]}>Format</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.entryActionBtn, { backgroundColor: C.surface, borderColor: C.blue }]} disabled={!selectedExamId || uploading} onPress={handleExcelUpload}>
+              <TouchableOpacity style={[styles.entryActionBtn, { backgroundColor: C.surface, borderColor: C.blue }]} disabled={!selectedExamId || uploading} onPress={handleExcelUpload} activeOpacity={0.85}>
                 {uploading ? <ActivityIndicator size="small" color={C.blue} /> : <><Feather name="upload-cloud" size={16} color={C.blue} /><Text style={[styles.entryActionText, { color: C.blue }]}>Upload Excel</Text></>}
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.entryActionBtn, { backgroundColor: C.primary, borderColor: C.primary }]} disabled={!selectedExamId || publishing} onPress={handlePublish}>
+              <TouchableOpacity style={[styles.entryActionBtn, { backgroundColor: C.primary, borderColor: C.primary }]} disabled={!selectedExamId || publishing} onPress={handlePublish} activeOpacity={0.85}>
                 {publishing ? <ActivityIndicator size="small" color="#fff" /> : <><Feather name="send" size={16} color="#fff" /><Text style={[styles.entryActionText, { color: '#fff' }]}>Publish</Text></>}
               </TouchableOpacity>
             </View>
           </View>
 
           {loading ? (
-            <View style={styles.center}><ActivityIndicator size="large" color={C.primary} /></View>
+            <View style={styles.center}>
+              <ActivityIndicator size="large" color={C.primary} />
+            </View>
           ) : !selectedExamId ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconCircle}>
-                <Feather name="inbox" size={40} color={C.textFaint} />
+                <Feather name="inbox" size={36} color={C.textFaint} />
               </View>
               <Text style={styles.emptyTitle}>Select an Exam</Text>
               <Text style={styles.emptySubtitle}>Select an exam to view / upload marks. Schedule exams from Class Exams page.</Text>
@@ -809,7 +898,7 @@ export default function ClassResultsScreen() {
           ) : examResults.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconCircle}>
-                <Feather name="file-text" size={40} color={C.textFaint} />
+                <Feather name="file-text" size={36} color={C.textFaint} />
               </View>
               <Text style={styles.emptyTitle}>No Marks Entered</Text>
               <Text style={styles.emptySubtitle}>No marks entered yet. Download format, fill marks, and upload Excel.</Text>
@@ -822,7 +911,7 @@ export default function ClassResultsScreen() {
                   data={examResults}
                   keyExtractor={(item, index) => item.studentId || item.rollNo || index.toString()}
                   refreshControl={<RefreshControl refreshing={refreshing} onRefresh={fetchExamSheet} colors={[C.primary]} tintColor={C.primary} />}
-                  renderItem={({ item }) => <EntryTableRow item={item} />}
+                  renderItem={({ item, index }) => <EntryTableRow item={item} index={index} />}
                 />
               </View>
             </ScrollView>
@@ -830,21 +919,53 @@ export default function ClassResultsScreen() {
         </View>
       )}
 
-      {/* Excel batch import progress modal — mirrors web's ExcelBatchProgressModal */}
-      <Modal visible={batchModalOpen} transparent animationType="fade">
+      {/* Universal Excel batch progress / validation-error modal — mirrors
+          web's <ExcelBatchProgressModal>: shows upload progress normally,
+          or column diagnostics + a "Get Template" shortcut when the sheet's
+          headers don't match what the backend expects. */}
+      <Modal visible={batchModalOpen} transparent animationType="fade" onRequestClose={closeBatchModal}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Importing Exam Results via Excel</Text>
-            <Text style={styles.modalFileName} numberOfLines={1}>{batchFileName}</Text>
-            {batchProgress && (
+            {validationError ? (
               <>
-                <View style={styles.progressBarTrack}>
-                  <View style={[styles.progressBarFill, { width: `${batchProgress.total ? Math.round((batchProgress.current / batchProgress.total) * 100) : 0}%` }]} />
+                <View style={[styles.modalIconCircle, { backgroundColor: C.primarySoft }]}>
+                  <Feather name="alert-triangle" size={22} color={C.primary} />
                 </View>
-                <Text style={styles.progressText}>{batchProgress.current} / {batchProgress.total} processed</Text>
+                <Text style={styles.modalTitle}>Excel Format Issue</Text>
+                <Text style={styles.modalFileName} numberOfLines={1}>{batchFileName}</Text>
+                <View style={styles.diagnosticsBox}>
+                  {(validationError.diagnostics || []).map((d: string, i: number) => (
+                    <Text key={i} style={styles.diagnosticText}>• {d}</Text>
+                  ))}
+                </View>
+                <View style={styles.editModalActions}>
+                  <TouchableOpacity style={styles.editCancelBtn} onPress={closeBatchModal} activeOpacity={0.85}>
+                    <Text style={styles.editCancelBtnText}>Close</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.editSaveBtn} onPress={() => { closeBatchModal(); handleDownloadFormat(); }} activeOpacity={0.85}>
+                    <Feather name="download-cloud" size={15} color="#fff" />
+                    <Text style={styles.editSaveBtnText}>Get Template</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.modalIconCircle}>
+                  <Feather name="upload-cloud" size={22} color={C.primary} />
+                </View>
+                <Text style={styles.modalTitle}>Importing Exam Results via Excel</Text>
+                <Text style={styles.modalFileName} numberOfLines={1}>{batchFileName}</Text>
+                {batchProgress && (
+                  <>
+                    <View style={styles.progressBarTrack}>
+                      <View style={[styles.progressBarFill, { width: `${batchProgress.total ? Math.round((batchProgress.current / batchProgress.total) * 100) : 0}%` }]} />
+                    </View>
+                    <Text style={styles.progressText}>{batchProgress.current} / {batchProgress.total} processed</Text>
+                  </>
+                )}
+                <ActivityIndicator color={C.primary} style={{ marginTop: 14 }} />
               </>
             )}
-            <ActivityIndicator color={C.primary} style={{ marginTop: 14 }} />
           </View>
         </View>
       </Modal>
@@ -857,49 +978,57 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  header: { padding: 20, paddingTop: Platform.OS === 'android' ? 40 : 20, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  backBtn: { padding: 4, marginRight: -4 },
-  headerIconBadge: { width: 48, height: 48, borderRadius: 16, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 22, fontWeight: '800', color: C.text, letterSpacing: -0.5 },
-  subtitle: { fontSize: 13, color: C.textMuted, marginTop: 4, fontWeight: '500' },
+  header: { paddingHorizontal: 20, paddingVertical: 16, paddingTop: Platform.OS === 'android' ? 40 : 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
 
-  alertBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 16, marginTop: 12, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
-  alertText: { fontSize: 13, fontWeight: '700', flex: 1, marginRight: 10 },
+  breadcrumbRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  breadcrumbBadge: { backgroundColor: C.primarySoft, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  breadcrumbBadgeText: { fontSize: 9.5, fontWeight: '800', color: C.primary, letterSpacing: 0.5 },
+  breadcrumbSep: { fontSize: 12, color: C.textFaint },
+  breadcrumbCurrent: { fontSize: 12, fontWeight: '600', color: C.textMuted },
+
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  headerIconBadge: { width: 50, height: 50, borderRadius: 18, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F7C9C9' },
+  headerRefreshBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center' },
+  title: { fontSize: 19, fontWeight: '800', color: C.text, letterSpacing: -0.3 },
+  subtitle: { fontSize: 13, color: C.textMuted, marginTop: 3, fontWeight: '600' },
+
+  alertBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginTop: 12, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 14, overflow: 'hidden' },
+  alertAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
+  alertText: { fontSize: 13, fontWeight: '700', flex: 1 },
 
   globalBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 6 },
   globalBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
 
   filterSection: { paddingHorizontal: 16, paddingTop: 16, backgroundColor: C.bg },
-  tabContainer: { flexDirection: 'row', backgroundColor: C.surfaceSoft, padding: 4, borderRadius: 14 },
-  tabBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10 },
-  tabBtnActive: { backgroundColor: C.surface, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
+  tabContainer: { flexDirection: 'row', backgroundColor: C.surfaceSoft, padding: 4, borderRadius: 16, gap: 4 },
+  tabBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 12 },
+  tabBtnActive: { backgroundColor: C.primary, shadowColor: C.primaryDark, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 3 },
   tabText: { fontSize: 13, fontWeight: '700', color: C.textMuted },
-  tabTextActive: { color: C.primary },
+  tabTextActive: { color: '#fff' },
 
   actionBar: { paddingVertical: 16, backgroundColor: C.bg },
-  actionBtnOutline: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, gap: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1 },
+  actionBtnOutline: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 24, gap: 8, shadowColor: C.slate, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
   actionBtnOutlineText: { color: C.text, fontSize: 13, fontWeight: '700' },
-  actionBtnSolid: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.primary, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, gap: 8, shadowColor: C.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 },
+  actionBtnSolid: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.primary, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 24, gap: 8, shadowColor: C.primaryDark, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.28, shadowRadius: 6, elevation: 4 },
   actionBtnSolidText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  actionBtnSuccess: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.green, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, gap: 8, opacity: 0.9 },
-  actionBtnWarningOutline: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderWidth: 1.5, borderColor: C.amber, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, gap: 8 },
+  actionBtnSuccess: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.green, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 24, gap: 8, shadowColor: C.green, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 5, elevation: 2 },
+  actionBtnWarningOutline: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderWidth: 1.5, borderColor: C.amber, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 24, gap: 8 },
   actionBtnWarningOutlineText: { color: C.amber, fontSize: 13, fontWeight: '700' },
-  actionBtnNeutral: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceSoft, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, gap: 8 },
+  actionBtnNeutral: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceSoft, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 24, gap: 8 },
   actionBtnNeutralText: { color: C.textMuted, fontSize: 13, fontWeight: '700' },
 
   emptyState: { alignItems: 'center', padding: 40, marginTop: 20 },
   emptyStateSmall: { alignItems: 'center', paddingVertical: 30 },
-  emptyIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: C.surface, justifyContent: 'center', alignItems: 'center', marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  emptyIconCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: C.surface, justifyContent: 'center', alignItems: 'center', marginBottom: 18, shadowColor: C.slate, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2, borderWidth: 1, borderColor: C.border },
   emptyTitle: { fontSize: 18, fontWeight: '800', color: C.text },
-  emptySubtitle: { fontSize: 14, color: C.textMuted, marginTop: 8, textAlign: 'center', lineHeight: 22 },
+  emptySubtitle: { fontSize: 14, color: C.textMuted, marginTop: 8, textAlign: 'center', lineHeight: 22, paddingHorizontal: 10 },
 
   // Results table header (search / filter / pagesize / summary)
-  tableHeaderCard: { backgroundColor: C.surface, borderRadius: 20, padding: 18, marginHorizontal: 16, marginTop: 4, marginBottom: 12, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 6, elevation: 2 },
+  tableHeaderCard: { backgroundColor: C.surface, borderRadius: 22, padding: 18, marginHorizontal: 16, marginTop: 4, marginBottom: 12, borderWidth: 1, borderColor: C.border, shadowColor: C.slate, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   tableHeaderTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 },
   tableHeaderTitle: { fontSize: 15, fontWeight: '800', color: C.text },
 
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.surfaceSoft, borderRadius: 12, paddingHorizontal: 14, height: 44, marginBottom: 14 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.surfaceSoft, borderRadius: 13, paddingHorizontal: 14, height: 46, marginBottom: 14 },
   searchInput: { flex: 1, fontSize: 14, color: C.text, fontWeight: '500' },
 
   filterChipsRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
@@ -909,7 +1038,7 @@ const styles = StyleSheet.create({
   filterChipTextActive: { color: '#fff' },
 
   pageSizeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
-  pageSizeLabel: { fontSize: 11, fontWeight: '800', color: C.textFaint },
+  pageSizeLabel: { fontSize: 10, fontWeight: '800', color: C.textFaint, letterSpacing: 0.6 },
   pageSizeChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: C.surfaceSoft },
   pageSizeChipActive: { backgroundColor: C.slate },
   pageSizeChipText: { fontSize: 12, fontWeight: '700', color: C.textMuted },
@@ -917,24 +1046,26 @@ const styles = StyleSheet.create({
 
   resultCountText: { fontSize: 11, color: C.textFaint, fontWeight: '600' },
 
-  paginationBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: C.surface, borderRadius: 16, padding: 12, marginHorizontal: 16, marginTop: 8, marginBottom: 12, borderWidth: 1, borderColor: C.border },
-  pageNavBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
-  pageNavBtnDisabled: { opacity: 0.5 },
+  paginationBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: C.surface, borderRadius: 18, padding: 10, marginHorizontal: 16, marginTop: 8, marginBottom: 12, borderWidth: 1, borderColor: C.border },
+  pageNavBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12 },
+  pageNavBtnDisabled: { opacity: 0.4 },
   pageNavBtnText: { fontSize: 13, fontWeight: '700', color: C.primary },
+  pageNavCenterPill: { backgroundColor: C.surfaceSoft, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6 },
   pageNavCenterText: { fontSize: 12, fontWeight: '700', color: C.textMuted },
 
-  // Table (mirrors web's <table> markup 1:1)
-  tableWrap: { marginHorizontal: 16, marginBottom: 16, backgroundColor: C.surface, borderRadius: 16, borderWidth: 1, borderColor: C.border },
-  trHeader: { flexDirection: 'row', backgroundColor: C.surfaceSoft, borderBottomWidth: 1, borderColor: C.border, paddingVertical: 10 },
-  thCell: { fontSize: 11, fontWeight: '800', color: C.textFaint, textTransform: 'uppercase', paddingHorizontal: 10 },
-  tr: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderColor: C.surfaceSoft, paddingVertical: 12 },
+  // Table (mirrors web's <table> markup 1:1, with subtle row striping)
+  tableWrap: { marginHorizontal: 16, marginBottom: 16, backgroundColor: C.surface, borderRadius: 18, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
+  trHeader: { flexDirection: 'row', backgroundColor: C.surfaceSoft, borderBottomWidth: 1, borderColor: C.border, paddingVertical: 12 },
+  thCell: { fontSize: 11, fontWeight: '800', color: C.textFaint, textTransform: 'uppercase', paddingHorizontal: 10, letterSpacing: 0.3 },
+  tr: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderColor: C.surfaceSoft, paddingVertical: 13 },
+  trStripe: { backgroundColor: '#FBFBFE' },
   tdCell: { fontSize: 13, color: C.text, paddingHorizontal: 10 },
   tdBold: { fontWeight: '800' },
 
   // Marks Entry
   entryConfigBar: { padding: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border, zIndex: 10 },
   entryActionsRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
-  entryActionBtn: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, height: 44, borderRadius: 12, gap: 8 },
+  entryActionBtn: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, height: 46, borderRadius: 24, gap: 8 },
   entryActionText: { fontSize: 13, fontWeight: '700' },
 
   smallBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
@@ -946,21 +1077,31 @@ const styles = StyleSheet.create({
 
   inputWrapper: { marginBottom: 0 },
   inputLabel: { fontSize: 11, fontWeight: '800', color: C.textFaint, marginBottom: 8, marginLeft: 2, letterSpacing: 0.5 },
-  dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1.5, borderColor: C.border, borderRadius: 12, paddingHorizontal: 16, height: 50, backgroundColor: C.surface },
-  dropdownHeaderActive: { borderColor: C.primary, shadowColor: C.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+  dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1.5, borderColor: C.border, borderRadius: 14, paddingHorizontal: 16, height: 52, backgroundColor: C.surface },
+  dropdownHeaderActive: { borderColor: C.primary, shadowColor: C.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 5 },
+  dropdownChevronWrap: { width: 26, height: 26, borderRadius: 8, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center' },
   dropdownSelectedText: { fontSize: 14, color: C.text, fontWeight: '600' },
   dropdownPlaceholder: { fontSize: 14, color: C.textFaint },
-  dropdownListContainer: { position: 'absolute', top: 76, left: 0, right: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 10 },
-  dropdownItem: { padding: 16, borderBottomWidth: 1, borderBottomColor: C.surfaceSoft },
+  dropdownListContainer: { position: 'absolute', top: 78, left: 0, right: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 10 },
+  dropdownItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: C.surfaceSoft },
   dropdownItemText: { fontSize: 14, color: C.text, fontWeight: '600' },
   textBrand: { color: C.primary, fontWeight: '800' },
 
-  // Excel batch progress modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'center', alignItems: 'center', padding: 30 },
-  modalCard: { width: '100%', backgroundColor: C.surface, borderRadius: 20, padding: 24, alignItems: 'center' },
+  // Excel batch progress / validation modal
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,17,32,0.6)', justifyContent: 'center', alignItems: 'center', padding: 26 },
+  modalCard: { width: '100%', backgroundColor: C.surface, borderRadius: 24, padding: 26, alignItems: 'center' },
+  modalIconCircle: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   modalTitle: { fontSize: 16, fontWeight: '800', color: C.text, marginBottom: 4, textAlign: 'center' },
   modalFileName: { fontSize: 12, color: C.textMuted, fontWeight: '600', marginBottom: 16, maxWidth: '100%' },
   progressBarTrack: { width: '100%', height: 8, borderRadius: 4, backgroundColor: C.surfaceSoft, overflow: 'hidden' },
   progressBarFill: { height: '100%', backgroundColor: C.primary, borderRadius: 5 },
   progressText: { fontSize: 12, color: C.textMuted, fontWeight: '700', marginTop: 9 },
+
+  diagnosticsBox: { width: '100%', backgroundColor: C.surfaceSoft, borderRadius: 14, padding: 14, marginBottom: 4 },
+  diagnosticText: { fontSize: 12.5, color: C.textMuted, fontWeight: '600', lineHeight: 19 },
+  editModalActions: { flexDirection: 'row', gap: 10, marginTop: 20, width: '100%' },
+  editCancelBtn: { flex: 1, height: 48, borderRadius: 14, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center' },
+  editCancelBtnText: { fontSize: 14, fontWeight: '700', color: C.textMuted },
+  editSaveBtn: { flex: 1.4, flexDirection: 'row', gap: 8, height: 48, borderRadius: 15, backgroundColor: C.primary, justifyContent: 'center', alignItems: 'center', shadowColor: C.primaryDark, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 3 },
+  editSaveBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
 });
