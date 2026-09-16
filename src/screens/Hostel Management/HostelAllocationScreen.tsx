@@ -64,9 +64,9 @@ export default function HostelAllocationScreen() {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const results = await Promise.allSettled([
-        axios.get(`${BASE_URL}/hostels/allocations?active=true`, authHeaders(token)),
+        axios.get(`${BASE_URL}/hostel/allocations?active=true`, authHeaders(token)),
         axios.get(`${BASE_URL}/students?limit=500`, authHeaders(token)),
-        axios.get(`${BASE_URL}/hostels/rooms`, authHeaders(token)),
+        axios.get(`${BASE_URL}/hostel/rooms`, authHeaders(token)),
       ]);
       const [allocRes, stuRes, roomsRes] = results;
 
@@ -88,7 +88,7 @@ export default function HostelAllocationScreen() {
     if (!form.studentId || !form.roomId) { Alert.alert('Missing information', 'Please select a student and a room.'); return; }
     setAllocating(true);
     try {
-      await axios.post(`${BASE_URL}/hostels/allocations`, {
+      await axios.post(`${BASE_URL}/hostel/allocations`, {
         studentId: form.studentId,
         roomId: form.roomId,
         allocatedDate: formatToYMD(form.allocatedDate)

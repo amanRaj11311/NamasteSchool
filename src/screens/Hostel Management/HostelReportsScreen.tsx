@@ -38,7 +38,7 @@ export default function HostelReportsScreen() {
   const fetchReport = async (token: string | null = authToken, isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
-      const res = await axios.get(`${BASE_URL}/hostels/reports/occupancy`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await axios.get(`${BASE_URL}/hostel/reports/occupancy`, { headers: { Authorization: `Bearer ${token}` } });
       setReport(res.data?.data || null);
     } catch (err: any) {
       console.error('Occupancy report fetch failed:', err.response?.status, err.response?.data || err.message);

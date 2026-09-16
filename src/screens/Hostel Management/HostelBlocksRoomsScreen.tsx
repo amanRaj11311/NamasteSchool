@@ -57,8 +57,8 @@ export default function HostelBlocksRoomsScreen() {
     try {
       const params = bFilter ? { blockId: bFilter } : {};
       const results = await Promise.allSettled([
-        axios.get(`${BASE_URL}/hostels/blocks`, authHeaders(token)),
-        axios.get(`${BASE_URL}/hostels/rooms`, { params, ...authHeaders(token) }),
+        axios.get(`${BASE_URL}/hostel/blocks`, authHeaders(token)),
+        axios.get(`${BASE_URL}/hostel/rooms`, { params, ...authHeaders(token) }),
       ]);
       const [bRes, rRes] = results;
 
@@ -87,7 +87,7 @@ export default function HostelBlocksRoomsScreen() {
     if (!blockForm.name.trim()) { Alert.alert('Error', 'Block name required'); return; }
     setSaving(true);
     try {
-      await axios.post(`${BASE_URL}/hostels/blocks`, blockForm, authHeaders(authToken));
+      await axios.post(`${BASE_URL}/hostel/blocks`, blockForm, authHeaders(authToken));
       Alert.alert('Success', 'Block added successfully');
       setBlockModal(false);
       fetchData(authToken, filterBlock, true);
@@ -101,7 +101,7 @@ export default function HostelBlocksRoomsScreen() {
     }
     setSaving(true);
     try {
-      await axios.post(`${BASE_URL}/hostels/rooms`, {
+      await axios.post(`${BASE_URL}/hostel/rooms`, {
         ...roomForm,
         capacity: Number(roomForm.capacity),
         monthlyFee: Number(roomForm.monthlyFee)
