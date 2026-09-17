@@ -46,7 +46,7 @@ const C = {
 
 const HEADER_GRADIENT = ['#FFFFFF', '#FFFFFF'];
 const BRAND_GRADIENT = [C.primary, C.primaryDeep];
-const INK_GRADIENT = ['#FFFFFF', '#FFFFFF'];
+const INK_GRADIENT = [C.ink, C.inkSoft];
 
 const SHADOW_SM = {
   elevation: 1,
@@ -86,6 +86,16 @@ const ALLOCATION_POLICIES = [
 
 type TabKey = 'branding' | 'academic' | 'security' | 'account';
 
+// ---- Helper: build initials from a full name ("Rahul Sharma" -> "RS", "Rahul" -> "R") ----
+const getInitials = (fullName: string) => {
+  if (!fullName || !fullName.trim()) return 'U';
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  const first = parts[0].charAt(0);
+  const last = parts[parts.length - 1].charAt(0);
+  return (first + last).toUpperCase();
+};
+
 export default function SettingsScreen() {
   const { refreshBranding } = useSchoolContext();
 
@@ -102,7 +112,8 @@ export default function SettingsScreen() {
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
   // States
-  const [profile, setProfile] = useState({ name: '', email: '', role: '' });
+  const [profile, setProfile] = useState({ name: '', email: '', role: '', avatarUrl: '' });
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
   const [showPwd, setShowPwd] = useState({ current: false, new: false, confirm: false });
 
@@ -115,6 +126,7 @@ export default function SettingsScreen() {
   });
 
   const [branding, setBranding] = useState({ schoolName: '', tagline: '', logoUrl: '' });
+  const [logoLoadFailed, setLogoLoadFailed] = useState(false);
 
   useEffect(() => { initialize(); }, []);
 
@@ -125,6 +137,7 @@ export default function SettingsScreen() {
     const uName = await AsyncStorage.getItem('userName') || '';
     const uEmail = await AsyncStorage.getItem('userEmail') || '';
     const uRole = await AsyncStorage.getItem('userRole') || 'User';
+    const uAvatar = await AsyncStorage.getItem('userAvatarUrl') || '';
 
     const parsedPerms = permsRaw ? JSON.parse(permsRaw) : [];
     const superAdmin = superAdminRaw === 'true';
@@ -134,7 +147,7 @@ export default function SettingsScreen() {
     setAuthToken(token);
     setActiveTab(superAdmin ? 'branding' : 'account');
 
-    setProfile({ name: uName, email: uEmail, role: uRole });
+    setProfile({ name: uName, email: uEmail, role: uRole, avatarUrl: uAvatar });
     fetchSettings(token);
   };
 
@@ -158,6 +171,7 @@ export default function SettingsScreen() {
           tagline: s.tagline || '',
           logoUrl: s.logoUrl || '',
         });
+        setLogoLoadFailed(false);
       }
     } catch (e) { console.error('Failed to load settings', e); }
     finally { setLoading(false); }
@@ -230,6 +244,7 @@ export default function SettingsScreen() {
         logoUrl: branding.logoUrl.trim(),
       }, authHeaders(authToken));
       showToast('Branding updated across all portals');
+      setLogoLoadFailed(false);
       refreshBranding();
     } catch (e: any) { Alert.alert('Error', e.response?.data?.message || 'Failed to update branding'); }
     finally { setSaving(false); setSavingSection(null); }
@@ -356,7 +371,14 @@ export default function SettingsScreen() {
     </View>
   );
 
-  const previewLogoUri = resolveAssetUrl(branding.logoUrl);
+  // Resolve the logo URL and guard against it failing to load (e.g. bad path, 404, blocked network)
+  const previewLogoUri = branding.logoUrl ? resolveAssetUrl(branding.logoUrl) : null;
+  const showLogoImage = !!previewLogoUri && !logoLoadFailed;
+
+  // Resolve the user's avatar URL (if any) and guard against load failure
+  const previewAvatarUri = profile.avatarUrl ? resolveAssetUrl(profile.avatarUrl) : null;
+  const showAvatarImage = !!previewAvatarUri && !avatarLoadFailed;
+  const initials = getInitials(profile.name);
 
   const TABS: { key: TabKey; label: string; icon: string; visible: boolean }[] = [
     { key: 'branding', label: 'Branding', icon: 'image', visible: isSuperAdmin },
@@ -438,15 +460,29 @@ export default function SettingsScreen() {
 
                 <View style={styles.logoUploadBox}>
                   <View style={styles.logoPreviewCircle}>
-                    {previewLogoUri ? (
-                      <Image source={{ uri: previewLogoUri }} style={styles.logoPreviewImage} resizeMode="contain" />
+                    {showLogoImage ? (
+                      <Image
+                        source={{ uri: previewLogoUri! }}
+                        style={styles.logoPreviewImage}
+                        resizeMode="contain"
+                        onError={(e) => {
+                          console.log('Logo failed to load:', previewLogoUri, e.nativeEvent?.error);
+                          setLogoLoadFailed(true);
+                        }}
+                      />
                     ) : (
                       <Feather name="image" size={24} color={C.primary} />
                     )}
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.logoUploadTitle}>{previewLogoUri ? 'Current logo' : 'No logo set'}</Text>
-                    <Text style={styles.logoUploadHint}>Paste a direct image URL / CDN link below</Text>
+                    <Text style={styles.logoUploadTitle}>
+                      {previewLogoUri ? (logoLoadFailed ? 'Logo failed to load' : 'Current logo') : 'No logo set'}
+                    </Text>
+                    <Text style={styles.logoUploadHint}>
+                      {logoLoadFailed
+                        ? 'Could not load this image. Check the URL is correct and publicly accessible.'
+                        : 'Paste a direct image URL / CDN link below'}
+                    </Text>
                   </View>
                 </View>
 
@@ -455,7 +491,7 @@ export default function SettingsScreen() {
                   label="Logo Image URL"
                   icon="link"
                   value={branding.logoUrl}
-                  onChangeText={(t: string) => setBranding({ ...branding, logoUrl: t })}
+                  onChangeText={(t: string) => { setBranding({ ...branding, logoUrl: t }); setLogoLoadFailed(false); }}
                   placeholder="/logo.png or https://..."
                   autoCapitalize="none"
                 />
@@ -478,8 +514,13 @@ export default function SettingsScreen() {
               </View>
               <LinearGradient colors={INK_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.previewDrawerCard, SHADOW_LG]}>
                 <View style={styles.previewLogoBox}>
-                  {previewLogoUri ? (
-                    <Image source={{ uri: previewLogoUri }} style={styles.previewLogoImg} resizeMode="contain" />
+                  {showLogoImage ? (
+                    <Image
+                      source={{ uri: previewLogoUri! }}
+                      style={styles.previewLogoImg}
+                      resizeMode="contain"
+                      onError={() => setLogoLoadFailed(true)}
+                    />
                   ) : (
                     <Feather name="image" size={20} color={C.primary} />
                   )}
@@ -503,7 +544,19 @@ export default function SettingsScreen() {
             <View style={styles.card}>
               <View style={styles.profileBanner}>
                 <LinearGradient colors={INK_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.avatarLarge, SHADOW_MD]}>
-                  <Text style={styles.avatarLargeText}>{profile.name.charAt(0).toUpperCase() || 'U'}</Text>
+                  {showAvatarImage ? (
+                    <Image
+                      source={{ uri: previewAvatarUri! }}
+                      style={styles.avatarImage}
+                      resizeMode="cover"
+                      onError={(e) => {
+                        console.log('Avatar failed to load:', previewAvatarUri, e.nativeEvent?.error);
+                        setAvatarLoadFailed(true);
+                      }}
+                    />
+                  ) : (
+                    <Text style={styles.avatarLargeText}>{initials}</Text>
+                  )}
                 </LinearGradient>
                 <Text style={styles.profileName}>{profile.name || 'Your Name'}</Text>
                 <Text style={styles.profileEmail}>{profile.email}</Text>
@@ -728,8 +781,9 @@ subtitle: {
   groupLabel: { fontSize: 11.5, fontWeight: '800', color: C.slate, marginBottom: 14, textTransform: 'uppercase', letterSpacing: 0.6 },
 
   profileBanner: { alignItems: 'center', padding: 32, borderBottomWidth: 1, borderColor: C.border, backgroundColor: C.surfaceSoft },
-  avatarLarge: { width: 84, height: 84, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginBottom: 14, borderWidth: 3, borderColor: '#fff' },
+  avatarLarge: { width: 84, height: 84, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginBottom: 14, borderWidth: 3, borderColor: '#fff', overflow: 'hidden' },
   avatarLargeText: { fontSize: 32, fontWeight: '800', color: '#fff' },
+  avatarImage: { width: '100%', height: '100%' },
   profileName: { fontSize: 20, fontWeight: '800', color: C.text },
   profileEmail: { fontSize: 13, color: C.textMuted, fontWeight: '600', marginTop: 4 },
   roleBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.blueSoft, paddingHorizontal: 11, paddingVertical: 5, borderRadius: 12, marginTop: 12, gap: 5, borderWidth: 1, borderColor: '#CBEEFB' },
