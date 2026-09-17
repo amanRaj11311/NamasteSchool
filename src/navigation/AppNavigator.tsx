@@ -13,12 +13,12 @@ import {
   TouchableWithoutFeedback,
   Platform,
   StatusBar,
-  useWindowDimensions
+  Animated,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { createDrawerNavigator, DrawerContentScrollView } from "@react-navigation/drawer";
 import { useNavigation } from "@react-navigation/native";
 import Feather from "react-native-vector-icons/Feather";
 import LinearGradient from "react-native-linear-gradient";
@@ -26,6 +26,12 @@ import axios from "axios";
 import { API_BASE } from "../network/api";
 
 const HEADER_DISPLAY_MODE: 'TITLE' | 'PILLS' = 'TITLE';
+
+// How much of the available height (below the header) the drawer is allowed
+// to occupy at most. The drawer never grows taller than the modules it has
+// to show — this is only a safety ceiling for accounts with many modules.
+const DRAWER_MAX_HEIGHT_RATIO = 0.82;
+const DRAWER_CHROME_HEIGHT = 150; // approx height of the brand row + footer
 
 // --- Screen Imports ---
 import LoginScreen from "../authentication/LoginScreen";
@@ -97,8 +103,12 @@ import HostelReportsScreen from '../screens/Hostel Management/HostelReportsScree
 
 import SchoolLogo from '../assets/logo.png';
 
+// Outer stack: Login -> the app shell. Inner ("content") stack: the actual
+// module screens. Keeping these separate is what lets the drawer live
+// outside react-navigation's own Drawer.Navigator (which always renders a
+// full-height side panel) so it can instead be a small floating card.
 const Stack = createNativeStackNavigator();
-const Drawer = createDrawerNavigator();
+const ContentStack = createNativeStackNavigator();
 
 type Permission = { module: string; action: string };
 type MenuItem = {
@@ -250,6 +260,7 @@ const ADMIN_MENU: MenuSection[] = [
     ],
   },
 ];
+
 const C = {
   bg: '#F6F6F9',
   surface: '#FFFFFF',
@@ -272,8 +283,10 @@ const C = {
   inkSoft: '#181B24',
 
   gold: '#C7A466',
+
+  overlay: 'rgba(13,15,22,0.55)',
 };
- 
+
 const BRAND_GRADIENT = [C.primary, C.primaryDeep];
 
 // Web: STUDENT_NAV_SECTIONS
@@ -457,6 +470,194 @@ function HeaderLayoutProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  APP MENU (permission-filtered navigation model, shared)           */
+/* ------------------------------------------------------------------ */
+
+type AppMenuContextType = {
+  loading: boolean;
+  filteredMenu: MenuSection[];
+  visibleRoutes: MenuItem[];
+  mode: UserMode;
+  profileName: string;
+  profileSubtitle: string;
+};
+
+const AppMenuContext = createContext<AppMenuContextType>({
+  loading: true, filteredMenu: [], visibleRoutes: [], mode: 'admin', profileName: '', profileSubtitle: '',
+});
+const useAppMenu = () => useContext(AppMenuContext);
+
+function AppMenuProvider({ children }: { children: React.ReactNode }) {
+  const [loading, setLoading] = useState(true);
+  const [filteredMenu, setFilteredMenu] = useState<MenuSection[]>([]);
+  const [visibleRoutes, setVisibleRoutes] = useState<MenuItem[]>([]);
+  const [mode, setMode] = useState<UserMode>('admin');
+  const [profileName, setProfileName] = useState('');
+  const [profileSubtitle, setProfileSubtitle] = useState('');
+
+  useEffect(() => {
+    const loadMenu = async () => {
+      try {
+        const [permsRaw, superAdminRaw, userTypeRaw, userRoleRaw, userRaw, userNameRaw] = await Promise.all([
+          AsyncStorage.getItem("userPermissions"),
+          AsyncStorage.getItem("isSuperAdmin"),
+          AsyncStorage.getItem("userType"),
+          AsyncStorage.getItem("userRole"),
+          AsyncStorage.getItem("user"),
+          AsyncStorage.getItem("userName"),
+        ]);
+
+        let permissions: Permission[] = [];
+        try { permissions = permsRaw ? JSON.parse(permsRaw) : []; } catch { permissions = []; }
+        if (!Array.isArray(permissions)) permissions = [];
+
+        let parsedUser: any = null;
+        try { parsedUser = userRaw ? JSON.parse(userRaw) : null; } catch {}
+
+        const isSuperAdmin = superAdminRaw === "true" || parsedUser?.isSuperAdmin === true;
+
+        // Web parity: user.userType === 'student' | 'parent', plus role fallbacks
+        const typeVal = norm(userTypeRaw || parsedUser?.userType);
+        const roleVal = norm(userRoleRaw || parsedUser?.role || parsedUser?.roleId?.name);
+
+        let currentMode: UserMode = 'admin';
+        if (typeVal === 'student' || roleVal === 'student') currentMode = 'student';
+        else if (typeVal === 'parent' || roleVal === 'parent' || roleVal === 'guardian') currentMode = 'parent';
+        setMode(currentMode);
+
+        // Brand block text, same info the web sidebar shows
+        if (currentMode === 'student') {
+          const student = parsedUser?.student;
+          const name = student?.firstName
+            ? `${student.firstName} ${student.lastName || ''}`.trim()
+            : (userNameRaw || parsedUser?.name || 'Student');
+          setProfileName(name);
+          setProfileSubtitle(student?.admissionNumber || 'Student Portal');
+        } else if (currentMode === 'parent') {
+          setProfileName(userNameRaw || parsedUser?.name || 'Parent / Guardian');
+          const childCount = parsedUser?.parent?.children?.length || 0;
+          const primaryChild = parsedUser?.parent?.primaryStudent || parsedUser?.student;
+          setProfileSubtitle(
+            childCount > 1 ? `${childCount} Children`
+              : primaryChild?.name ? primaryChild.name
+              : 'Parent Portal'
+          );
+        }
+
+        const baseMenu = getMenuForMode(currentMode);
+
+        // Student / parent menus are role-scoped already (all alwaysShow),
+        // admin & staff menus go through the permission filter.
+        const finalMenu: MenuSection[] = baseMenu
+          .map((section) => ({
+            section: section.section,
+            items: filterMenuItems(section.items, permissions, isSuperAdmin),
+          }))
+          .filter((section) => section.items.length > 0);
+
+        const collectRoutes = (items: MenuItem[]): MenuItem[] => {
+          const routes: MenuItem[] = [];
+          items.forEach((item) => {
+            if (item.children && item.children.length > 0) routes.push(...collectRoutes(item.children));
+            else if (item.routeName && item.component) routes.push(item);
+          });
+          return routes;
+        };
+
+        // De-dupe by routeName (a screen can appear once in the navigator)
+        const seen = new Set<string>();
+        const routes = finalMenu
+          .flatMap((section) => collectRoutes(section.items))
+          .filter((r) => {
+            if (seen.has(r.routeName!)) return false;
+            seen.add(r.routeName!);
+            return true;
+          });
+
+        setFilteredMenu(finalMenu);
+        setVisibleRoutes(routes);
+      } catch (error) {
+        setFilteredMenu([]);
+        setVisibleRoutes([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadMenu();
+  }, []);
+
+  return (
+    <AppMenuContext.Provider value={{ loading, filteredMenu, visibleRoutes, mode, profileName, profileSubtitle }}>
+      {children}
+    </AppMenuContext.Provider>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  DRAWER VISIBILITY + CROSS-NAVIGATOR NAV HANDLE                     */
+/* ------------------------------------------------------------------ */
+
+const DrawerVisibilityContext = createContext<{ visible: boolean; open: () => void; close: () => void }>({
+  visible: false, open: () => {}, close: () => {},
+});
+const useDrawerVisibility = () => useContext(DrawerVisibilityContext);
+
+function DrawerVisibilityProvider({ children }: { children: React.ReactNode }) {
+  const [visible, setVisible] = useState(false);
+  const open = useCallback(() => setVisible(true), []);
+  const close = useCallback(() => setVisible(false), []);
+  return (
+    <DrawerVisibilityContext.Provider value={{ visible, open, close }}>
+      {children}
+    </DrawerVisibilityContext.Provider>
+  );
+}
+
+// The drawer panel is a sibling of ContentStack.Navigator, not a descendant,
+// so it can't reach ContentStack's screens through useNavigation(). AppHeader
+// (which IS rendered by ContentStack) hands its live `navigation` object and
+// the current route name up through this context on every render instead.
+type AppNavContextType = {
+  activeRoute: string;
+  setActiveRoute: (r: string) => void;
+  contentNavigationRef: React.MutableRefObject<any>;
+  outerNavigation: any;
+};
+const AppNavContext = createContext<AppNavContextType>({
+  activeRoute: '', setActiveRoute: () => {}, contentNavigationRef: { current: null }, outerNavigation: null,
+});
+const useAppNav = () => useContext(AppNavContext);
+
+function AppNavProvider({ outerNavigation, children }: { outerNavigation: any; children: React.ReactNode }) {
+  const [activeRoute, setActiveRoute] = useState('');
+  const contentNavigationRef = useRef<any>(null);
+  return (
+    <AppNavContext.Provider value={{ activeRoute, setActiveRoute, contentNavigationRef, outerNavigation }}>
+      {children}
+    </AppNavContext.Provider>
+  );
+}
+
+// Walks up through nested navigators so logout works no matter how deep the
+// current screen is nested, then resets to the Login screen on the root.
+const navigateToLogin = (navigation: any) => {
+  if (!navigation) return;
+  let root = navigation;
+  while (typeof root.getParent === 'function' && root.getParent()) {
+    root = root.getParent();
+  }
+  root.reset({ index: 0, routes: [{ name: 'Login' }] });
+};
+
+const handleGlobalLogout = (navigation: any) => {
+  Alert.alert("Logout", "Are you sure you want to logout?", [
+    { text: "Cancel", style: "cancel" },
+    { text: "Logout", style: "destructive", onPress: async () => { await AsyncStorage.clear(); navigateToLogin(navigation); } }
+  ]);
+};
+
 function SchoolProvider({ children }: { children: React.ReactNode }) {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [schoolName, setSchoolName] = useState('');
@@ -499,6 +700,13 @@ function SchoolProvider({ children }: { children: React.ReactNode }) {
         setBrandName(data.schoolName || '');
         setBrandTagline(data.tagline || '');
         setBrandLogoUrl(data.logoUrl || null);
+        // Prefetch immediately so the network logo is already cached by the
+        // time the drawer is first opened — otherwise the first open shows
+        // a blank frame while the image is still being fetched.
+        const resolvedUri = resolveAssetUrl(data.logoUrl);
+        if (resolvedUri) {
+          Image.prefetch(resolvedUri).catch(() => {});
+        }
       }
     } catch (error) {
       // Keep previous / fallback branding silently — this must never block app usage.
@@ -653,10 +861,19 @@ function HeaderSchoolInfo({ availableWidth }: { availableWidth: number }) {
 function AppHeader({ navigation, route, options }: { navigation: any, route: any, options: any }) {
   const insets = useSafeAreaInsets();
   const { reportHeaderBottom } = useHeaderLayout();
+  const { open: openDrawer } = useDrawerVisibility();
+  const { setActiveRoute, contentNavigationRef } = useAppNav();
   const containerRef = useRef<View>(null);
   const [middleWidth, setMiddleWidth] = useState(0);
 
   const title = options?.title || route?.name || 'Dashboard';
+
+  // Hand this screen's live navigation object + name up to the shared
+  // context so the (sibling) drawer panel can navigate and highlight it.
+  useEffect(() => {
+    contentNavigationRef.current = navigation;
+    if (route?.name) setActiveRoute(route.name);
+  }, [navigation, route?.name, contentNavigationRef, setActiveRoute]);
 
   const handleContainerLayout = useCallback(() => {
     containerRef.current?.measureInWindow((_x, y, _width, height) => {
@@ -671,7 +888,7 @@ function AppHeader({ navigation, route, options }: { navigation: any, route: any
   return (
     <View ref={containerRef} onLayout={handleContainerLayout} style={[styles.appHeader, { paddingTop: insets.top }]}>
       <View style={styles.appHeaderRow}>
-        <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.headerIconBtn} hitSlop={8}>
+        <TouchableOpacity onPress={openDrawer} style={styles.headerIconBtn} hitSlop={8} activeOpacity={0.7}>
           <Feather name="menu" size={22} color={C.primary} />
         </TouchableOpacity>
 
@@ -712,13 +929,6 @@ const getInitials = (name: string) => {
   if (parts.length === 0) return "U";
   if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-};
-
-const handleGlobalLogout = (navigation: any) => {
-  Alert.alert("Logout", "Are you sure you want to logout?", [
-    { text: "Cancel", style: "cancel" },
-    { text: "Logout", style: "destructive", onPress: async () => { await AsyncStorage.clear(); navigation.replace('Login'); } }
-  ]);
 };
 
 const HeaderRightAvatar = () => {
@@ -778,7 +988,7 @@ const HeaderRightAvatar = () => {
   );
 };
 
-function DrawerMenuNode({ item, depth, path, currentRouteName, expandedGroups, toggleGroup, navigation }: { item: MenuItem; depth: number; path: string; currentRouteName: string; expandedGroups: Record<string, boolean>; toggleGroup: (key: string) => void; navigation: any; }) {
+function DrawerMenuNode({ item, depth, path, currentRouteName, expandedGroups, toggleGroup, onNavigate }: { item: MenuItem; depth: number; path: string; currentRouteName: string; expandedGroups: Record<string, boolean>; toggleGroup: (key: string) => void; onNavigate: (routeName: string) => void; }) {
   const nodeKey = `${path}/${item.label}`;
   const hasChildren = !!item.children && item.children.length > 0;
   const isActive = containsRoute(item, currentRouteName);
@@ -787,14 +997,14 @@ function DrawerMenuNode({ item, depth, path, currentRouteName, expandedGroups, t
     const active = item.routeName === currentRouteName;
     if (depth === 0) {
       return (
-        <TouchableOpacity style={[styles.drawerItem, active && styles.drawerItemActive]} onPress={() => item.routeName && navigation.navigate(item.routeName)}>
+        <TouchableOpacity activeOpacity={0.7} style={[styles.drawerItem, active && styles.drawerItemActive]} onPress={() => item.routeName && onNavigate(item.routeName)}>
           <DrawerMenuIcon active={active} icon={item.icon} />
           <Text style={[styles.drawerItemText, active && styles.drawerItemTextActive]}>{item.label}</Text>
         </TouchableOpacity>
       );
     }
     return (
-      <TouchableOpacity style={[styles.childDrawerItem, active && styles.childDrawerItemActive]} onPress={() => item.routeName && navigation.navigate(item.routeName)}>
+      <TouchableOpacity activeOpacity={0.7} style={[styles.childDrawerItem, active && styles.childDrawerItemActive]} onPress={() => item.routeName && onNavigate(item.routeName)}>
         <Feather name={item.icon as any} size={14} color={active ? C.primary : "#9CA3AF"} style={{ marginRight: 12 }} />
         <Text style={[styles.childDrawerItemText, active && styles.childDrawerItemTextActive]}>{item.label}</Text>
         {active && <View style={styles.childActiveDot} />}
@@ -807,13 +1017,13 @@ function DrawerMenuNode({ item, depth, path, currentRouteName, expandedGroups, t
   return (
     <View>
       {depth === 0 ? (
-        <TouchableOpacity style={[styles.drawerItem, isActive && styles.drawerItemActive]} onPress={() => toggleGroup(nodeKey)}>
+        <TouchableOpacity activeOpacity={0.7} style={[styles.drawerItem, isActive && styles.drawerItemActive]} onPress={() => toggleGroup(nodeKey)}>
           <DrawerMenuIcon active={isActive} icon={item.icon} />
           <Text style={[styles.drawerItemText, isActive && styles.drawerItemTextActive]}>{item.label}</Text>
           <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={16} color={isActive ? C.primary : "#9CA3AF"} />
         </TouchableOpacity>
       ) : (
-        <TouchableOpacity style={[styles.childDrawerItem, isActive && styles.childDrawerItemActive]} onPress={() => toggleGroup(nodeKey)}>
+        <TouchableOpacity activeOpacity={0.7} style={[styles.childDrawerItem, isActive && styles.childDrawerItemActive]} onPress={() => toggleGroup(nodeKey)}>
           <Feather name={item.icon as any} size={14} color={isActive ? "#ef4444" : "#9CA3AF"} style={{ marginRight: 12 }} />
           <Text style={[styles.childDrawerItemText, isActive && styles.childDrawerItemTextActive, { flex: 1 }]}>{item.label}</Text>
           <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={14} color={isActive ? "#ef4444" : "#9CA3AF"} />
@@ -823,7 +1033,7 @@ function DrawerMenuNode({ item, depth, path, currentRouteName, expandedGroups, t
       {isExpanded && (
         <View style={styles.childrenContainer}>
           {item.children!.map((child) => (
-            <DrawerMenuNode key={child.label} item={child} depth={depth + 1} path={nodeKey} currentRouteName={currentRouteName} expandedGroups={expandedGroups} toggleGroup={toggleGroup} navigation={navigation} />
+            <DrawerMenuNode key={child.label} item={child} depth={depth + 1} path={nodeKey} currentRouteName={currentRouteName} expandedGroups={expandedGroups} toggleGroup={toggleGroup} onNavigate={onNavigate} />
           ))}
         </View>
       )}
@@ -831,27 +1041,34 @@ function DrawerMenuNode({ item, depth, path, currentRouteName, expandedGroups, t
   );
 }
 
-function CustomDrawerContent(props: any) {
-  const [userName, setUserName] = useState("Loading...");
-  const [userRole, setUserRole] = useState("");
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
-  const insets = useSafeAreaInsets();
+/* ------------------------------------------------------------------ */
+/*  CUSTOM DRAWER — floats below the header, sized to its own content  */
+/* ------------------------------------------------------------------ */
+
+function CustomDrawerPanel() {
+  const { visible, close } = useDrawerVisibility();
+  const { filteredMenu, mode, profileName, profileSubtitle } = useAppMenu();
+  const { activeRoute, contentNavigationRef, outerNavigation } = useAppNav();
   const { brandName, brandTagline, brandLogoUrl } = useSchoolContext();
+  const { headerBottom } = useHeaderLayout();
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
-  const currentRouteName = props.state.routeNames[props.state.index];
-  const mode: UserMode = props.mode || 'admin';
+  const [rendered, setRendered] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [userName, setUserName] = useState("User");
+  const [userRole, setUserRole] = useState("");
+  const [logoFailed, setLogoFailed] = useState(false);
 
-  // Admin/staff mode reflects the live "School Branding" settings (name, tagline,
-  // logo). Student/parent portals keep their own profile-derived header.
-  const brandTitle = mode === 'student' ? (props.profileName || 'Student')
-    : mode === 'parent' ? (props.profileName || 'Parent / Guardian')
-    : (brandName || 'Namaste School');
-  const brandSubtitle = mode === 'student' ? (props.profileSubtitle || 'Student Portal')
-    : mode === 'parent' ? (props.profileSubtitle || 'Parent Portal')
-    : (brandTagline || 'MANAGEMENT SYSTEM');
+  const drawerWidth = Math.min(windowWidth * 0.82, 320);
+  const offscreenX = -(drawerWidth + insets.left + 24);
+  const translateX = useRef(new Animated.Value(offscreenX)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
 
-  const resolvedLogoUri = mode === 'admin' ? resolveAssetUrl(brandLogoUrl) : null;
-  const logoSource = resolvedLogoUri ? { uri: resolvedLogoUri } : SchoolLogo;
+  const panelTop = Math.max(headerBottom - 10, insets.top);
+  const availableHeight = Math.max(windowHeight - panelTop - insets.bottom - 24, 160);
+  const maxPanelHeight = Math.min(availableHeight, windowHeight * DRAWER_MAX_HEIGHT_RATIO);
+  const maxMenuScrollHeight = Math.max(maxPanelHeight - DRAWER_CHROME_HEIGHT, 80);
 
   useEffect(() => {
     (async () => {
@@ -859,73 +1076,136 @@ function CustomDrawerContent(props: any) {
       const role = await AsyncStorage.getItem("userRole");
       if (name) setUserName(name);
       if (role) setUserRole(role);
-
-      const toExpand: Record<string, boolean> = {};
-      const walk = (items: MenuItem[], path: string) => {
-        items.forEach((node) => {
-          if (node.children && node.children.length > 0) {
-            const nodeKey = `${path}/${node.label}`;
-            if (containsRoute(node, currentRouteName)) toExpand[nodeKey] = true;
-            walk(node.children, nodeKey);
-          }
-        });
-      };
-      props.filteredMenu.forEach((section: MenuSection) => walk(section.items, section.section));
-      setExpandedGroups((prev) => ({ ...prev, ...toExpand }));
     })();
-  }, [currentRouteName, props.filteredMenu]);
+  }, []);
+
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [brandLogoUrl]);
+
+  useEffect(() => {
+    if (visible) setRendered(true);
+  }, [visible]);
+
+  useEffect(() => {
+    if (!rendered) return;
+    if (visible) {
+      translateX.setValue(offscreenX);
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
+        Animated.spring(translateX, { toValue: 0, useNativeDriver: true, damping: 18, mass: 0.9, stiffness: 190 }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(translateX, { toValue: offscreenX, duration: 200, useNativeDriver: true }),
+      ]).start(() => setRendered(false));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, rendered]);
+
+  // Auto-expand whichever group holds the active route, each time the drawer opens.
+  useEffect(() => {
+    if (!visible) return;
+    const toExpand: Record<string, boolean> = {};
+    const walk = (items: MenuItem[], path: string) => {
+      items.forEach((node) => {
+        if (node.children && node.children.length > 0) {
+          const nodeKey = `${path}/${node.label}`;
+          if (containsRoute(node, activeRoute)) toExpand[nodeKey] = true;
+          walk(node.children, nodeKey);
+        }
+      });
+    };
+    filteredMenu.forEach((section) => walk(section.items, section.section));
+    setExpandedGroups((prev) => ({ ...prev, ...toExpand }));
+  }, [visible, filteredMenu, activeRoute]);
 
   const toggleGroup = (nodeKey: string) => setExpandedGroups((prev) => ({ ...prev, [nodeKey]: !prev[nodeKey] }));
 
+  const handleNavigate = (routeName: string) => {
+    contentNavigationRef.current?.navigate(routeName);
+    close();
+  };
+
+  const handleLogout = () => {
+    close();
+    handleGlobalLogout(contentNavigationRef.current || outerNavigation);
+  };
+
+  if (!rendered) return null;
+
+  const resolvedLogoUri = mode === 'admin' ? resolveAssetUrl(brandLogoUrl) : null;
+  const logoSource = resolvedLogoUri && !logoFailed ? { uri: resolvedLogoUri } : SchoolLogo;
+
+  const brandTitle = mode === 'student' ? (profileName || 'Student')
+    : mode === 'parent' ? (profileName || 'Parent / Guardian')
+    : (brandName || 'Namaste School');
+  const brandSubtitle = mode === 'student' ? (profileSubtitle || 'Student Portal')
+    : mode === 'parent' ? (profileSubtitle || 'Parent Portal')
+    : (brandTagline || 'MANAGEMENT SYSTEM');
+
   return (
-    <SafeAreaView style={styles.drawerContainer}>
-  <DrawerContentScrollView
-    {...props}
-    contentContainerStyle={{ paddingTop: 0 }}
-    showsVerticalScrollIndicator={false}
-  >
-    <LinearGradient
-      colors={BRAND_GRADIENT}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={[
-        styles.logoHeader,
-        {
-          marginTop: insets.top + 6,
-          paddingTop: 18,
-        },
-      ]}
-    >         <View style={styles.logoImageContainer}>
-            <Image source={logoSource} style={styles.logoImage} resizeMode="contain" />
+    <Modal transparent visible={rendered} animationType="none" onRequestClose={close} statusBarTranslucent>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity }]}>
+        <TouchableWithoutFeedback onPress={close}>
+          <View style={StyleSheet.absoluteFill} />
+        </TouchableWithoutFeedback>
+      </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.drawerPanel,
+          {
+            top: panelTop,
+            left: Math.max(insets.left, 0) + 12,
+            width: drawerWidth,
+            maxHeight: maxPanelHeight,
+            transform: [{ translateX }],
+          },
+        ]}
+      >
+        <LinearGradient colors={BRAND_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.drawerBrandRow}>
+          <View style={styles.drawerLogoCard}>
+            <Image source={logoSource} style={styles.drawerLogo} resizeMode="contain" onError={() => setLogoFailed(true)} />
           </View>
-          <View style={styles.logoTextContainer}>
-            <Text style={styles.logoTitle} numberOfLines={1}>{brandTitle}</Text>
-            <Text style={styles.logoSubtitle} numberOfLines={1}>{brandSubtitle}</Text>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.drawerBrandTitle} numberOfLines={1}>{brandTitle}</Text>
+            <Text style={styles.drawerBrandSubtitle} numberOfLines={1}>{brandSubtitle}</Text>
           </View>
+          <TouchableOpacity onPress={close} hitSlop={8} style={styles.drawerCloseBtn} activeOpacity={0.7}>
+            <Feather name="x" size={16} color="#ffffff" />
+          </TouchableOpacity>
         </LinearGradient>
 
-        <View style={styles.menuContainer}>
-          {props.filteredMenu.map((section: MenuSection) => (
+        <ScrollView
+          style={{ maxHeight: maxMenuScrollHeight }}
+          bounces={false}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.drawerMenuScrollContent}
+        >
+          {filteredMenu.map((section) => (
             <View key={section.section}>
               <Text style={styles.sectionHeaderTitle}>{section.section}</Text>
               {section.items.map((item) => (
-                <DrawerMenuNode key={item.label} item={item} depth={0} path={section.section} currentRouteName={currentRouteName} expandedGroups={expandedGroups} toggleGroup={toggleGroup} navigation={props.navigation} />
+                <DrawerMenuNode key={item.label} item={item} depth={0} path={section.section} currentRouteName={activeRoute} expandedGroups={expandedGroups} toggleGroup={toggleGroup} onNavigate={handleNavigate} />
               ))}
             </View>
           ))}
-        </View>
-      </DrawerContentScrollView>
+        </ScrollView>
 
-      <View style={[styles.footerContainer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        <View style={styles.footerTextContainer}>
-          <Text style={styles.footerName} numberOfLines={1}>{userName}</Text>
-          <View style={styles.footerRoleBadge}><Text style={styles.footerRole}>{userRole || mode}</Text></View>
+        <View style={styles.drawerFooter}>
+          <View style={styles.footerAvatar}><Text style={styles.footerAvatarText}>{getInitials(userName)}</Text></View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.footerName} numberOfLines={1}>{userName}</Text>
+            <View style={styles.footerRoleBadge}><Text style={styles.footerRole}>{userRole || mode}</Text></View>
+          </View>
+          <TouchableOpacity onPress={handleLogout} style={styles.footerLogoutBtn} hitSlop={8} activeOpacity={0.7}>
+            <Feather name="log-out" size={17} color={C.primary} />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={() => handleGlobalLogout(props.navigation)} style={styles.footerLogoutBtn}>
-          <Feather name="log-out" size={18} color={C.primary} />
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+      </Animated.View>
+    </Modal>
   );
 }
 
@@ -943,112 +1223,14 @@ function NoModulesAssignedScreen({ navigation }: { navigation: any }) {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  APP SHELL — content stack + floating drawer, sharing context       */
+/* ------------------------------------------------------------------ */
 
-function DrawerRoot() {
-  const navigation = useNavigation<any>();
-  const [menuLoading, setMenuLoading] = useState(true);
-  const [filteredMenu, setFilteredMenu] = useState<MenuSection[] | null>(null);
-  const [visibleRoutes, setVisibleRoutes] = useState<MenuItem[]>([]);
-  const [mode, setMode] = useState<UserMode>('admin');
-  const [profileName, setProfileName] = useState('');
-  const [profileSubtitle, setProfileSubtitle] = useState('');
-  const { width: windowWidth } = useWindowDimensions();
+function AppShellInner({ outerNavigation }: { outerNavigation: any }) {
+  const { loading, visibleRoutes } = useAppMenu();
 
-  const drawerWidth = Math.min(windowWidth * 0.85, 340);
-
-  useEffect(() => {
-    const loadMenu = async () => {
-      try {
-        const [permsRaw, superAdminRaw, userTypeRaw, userRoleRaw, userRaw, userNameRaw] = await Promise.all([
-          AsyncStorage.getItem("userPermissions"),
-          AsyncStorage.getItem("isSuperAdmin"),
-          AsyncStorage.getItem("userType"),
-          AsyncStorage.getItem("userRole"),
-          AsyncStorage.getItem("user"),
-          AsyncStorage.getItem("userName"),
-        ]);
-
-        let permissions: Permission[] = [];
-        try { permissions = permsRaw ? JSON.parse(permsRaw) : []; } catch { permissions = []; }
-        if (!Array.isArray(permissions)) permissions = [];
-
-        let parsedUser: any = null;
-        try { parsedUser = userRaw ? JSON.parse(userRaw) : null; } catch {}
-
-        const isSuperAdmin = superAdminRaw === "true" || parsedUser?.isSuperAdmin === true;
-
-        // Web parity: user.userType === 'student' | 'parent', plus role fallbacks
-        const typeVal = norm(userTypeRaw || parsedUser?.userType);
-        const roleVal = norm(userRoleRaw || parsedUser?.role || parsedUser?.roleId?.name);
-
-        let currentMode: UserMode = 'admin';
-        if (typeVal === 'student' || roleVal === 'student') currentMode = 'student';
-        else if (typeVal === 'parent' || roleVal === 'parent' || roleVal === 'guardian') currentMode = 'parent';
-        setMode(currentMode);
-
-        // Brand block text, same info the web sidebar shows
-        if (currentMode === 'student') {
-          const student = parsedUser?.student;
-          const name = student?.firstName
-            ? `${student.firstName} ${student.lastName || ''}`.trim()
-            : (userNameRaw || parsedUser?.name || 'Student');
-          setProfileName(name);
-          setProfileSubtitle(student?.admissionNumber || 'Student Portal');
-        } else if (currentMode === 'parent') {
-          setProfileName(userNameRaw || parsedUser?.name || 'Parent / Guardian');
-          const childCount = parsedUser?.parent?.children?.length || 0;
-          const primaryChild = parsedUser?.parent?.primaryStudent || parsedUser?.student;
-          setProfileSubtitle(
-            childCount > 1 ? `${childCount} Children`
-              : primaryChild?.name ? primaryChild.name
-              : 'Parent Portal'
-          );
-        }
-
-        const baseMenu = getMenuForMode(currentMode);
-
-        // Student / parent menus are role-scoped already (all alwaysShow),
-        // admin & staff menus go through the permission filter.
-        const finalMenu: MenuSection[] = baseMenu
-          .map((section) => ({
-            section: section.section,
-            items: filterMenuItems(section.items, permissions, isSuperAdmin),
-          }))
-          .filter((section) => section.items.length > 0);
-
-        const collectRoutes = (items: MenuItem[]): MenuItem[] => {
-          const routes: MenuItem[] = [];
-          items.forEach((item) => {
-            if (item.children && item.children.length > 0) routes.push(...collectRoutes(item.children));
-            else if (item.routeName && item.component) routes.push(item);
-          });
-          return routes;
-        };
-
-        // De-dupe by routeName (a screen can appear once in the navigator)
-        const seen = new Set<string>();
-        const routes = finalMenu
-          .flatMap((section) => collectRoutes(section.items))
-          .filter((r) => {
-            if (seen.has(r.routeName!)) return false;
-            seen.add(r.routeName!);
-            return true;
-          });
-
-        setFilteredMenu(finalMenu);
-        setVisibleRoutes(routes);
-      } catch (error) {
-        setFilteredMenu([]);
-        setVisibleRoutes([]);
-      } finally {
-        setMenuLoading(false);
-      }
-    };
-
-    loadMenu();
-  }, []);
-
-  if (menuLoading) {
+  if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={C.primary} />
@@ -1057,35 +1239,36 @@ function DrawerRoot() {
     );
   }
 
-  if (!filteredMenu || visibleRoutes.length === 0) return <NoModulesAssignedScreen navigation={navigation} />;
+  if (visibleRoutes.length === 0) return <NoModulesAssignedScreen navigation={outerNavigation} />;
 
   return (
-    <SchoolProvider>
-      <HeaderLayoutProvider>
-        <Drawer.Navigator
-          initialRouteName={visibleRoutes[0].routeName}
-          drawerContent={(props) => (
-            <CustomDrawerContent
-              {...props}
-              filteredMenu={filteredMenu}
-              mode={mode}
-              profileName={profileName}
-              profileSubtitle={profileSubtitle}
-            />
-          )}
-          screenOptions={(props) => ({
-            header: () => <AppHeader navigation={props.navigation} route={props.route} options={props.options} />,
-            drawerType: 'front',
-            overlayColor: 'rgba(17,24,39,0.5)',
-            drawerStyle: { ...styles.drawerStyle, width: drawerWidth },
-          })}
-        >
-          {visibleRoutes.map((m) => (
-            <Drawer.Screen key={m.routeName} name={m.routeName!} component={m.component!} options={{ title: m.label }} />
-          ))}
-        </Drawer.Navigator>
-      </HeaderLayoutProvider>
-    </SchoolProvider>
+    <>
+      <ContentStack.Navigator
+        initialRouteName={visibleRoutes[0].routeName}
+        screenOptions={{ header: (props) => <AppHeader {...props} /> }}
+      >
+        {visibleRoutes.map((m) => (
+          <ContentStack.Screen key={m.routeName} name={m.routeName!} component={m.component!} options={{ title: m.label }} />
+        ))}
+      </ContentStack.Navigator>
+      <CustomDrawerPanel />
+    </>
+  );
+}
+
+function AppShell({ navigation }: { navigation: any }) {
+  return (
+    <AppMenuProvider>
+      <SchoolProvider>
+        <HeaderLayoutProvider>
+          <DrawerVisibilityProvider>
+            <AppNavProvider outerNavigation={navigation}>
+              <AppShellInner outerNavigation={navigation} />
+            </AppNavProvider>
+          </DrawerVisibilityProvider>
+        </HeaderLayoutProvider>
+      </SchoolProvider>
+    </AppMenuProvider>
   );
 }
 
@@ -1093,27 +1276,13 @@ export default function AppNavigator({ initialRoute }: { initialRoute: string })
   return (
     <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="DrawerRoot" component={DrawerRoot} />
+      <Stack.Screen name="DrawerRoot" component={AppShell} />
     </Stack.Navigator>
   );
 }
 
 const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F4F7F9" },
-  drawerContainer: { flex: 1, backgroundColor: '#ffffff' },
-
-  drawerStyle: {
-    backgroundColor: '#ffffff',
-    borderRightWidth: 0,
-    borderTopRightRadius: 24,
-    borderBottomRightRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 10, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 20,
-  },
 
   noAccessContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F4F7F9", paddingHorizontal: 32 },
   noAccessIconCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 20 },
@@ -1122,53 +1291,52 @@ const styles = StyleSheet.create({
   noAccessLogoutBtn: { flexDirection: "row", alignItems: "center", backgroundColor: C.primary, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 24 },
   noAccessLogoutText: { color: "#ffffff", fontWeight: "700", fontSize: 14 },
 
- appHeader: {
-  backgroundColor: C.surface,
-  borderBottomWidth: 1,
-  borderBottomColor: C.border,
-  shadowColor: '#0F172A',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.05,
-  shadowRadius: 8,
-  elevation: 3,
-},
+  appHeader: {
+    backgroundColor: C.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
   appHeaderRow: { flexDirection: 'row', alignItems: 'center', height: 56, paddingHorizontal: 12 },
   appHeaderMiddle: { flex: 1, flexShrink: 1, minWidth: 0, overflow: 'hidden', marginHorizontal: 8, justifyContent: 'center' },
-headerModuleTitle: {
-  fontSize: 18,
-  fontWeight: '800',
-  color: C.text,
-  letterSpacing: 0.2,
-  marginLeft: 4,
-},  
-headerIconBtn: {
-  width: 38,
-  height: 38,
-  borderRadius: 12,
-  justifyContent: 'center',
-  alignItems: 'center',
-  backgroundColor: C.primarySoft,
-},
-headerAvatar: {
-  width: 36,
-  height: 36,
-  borderRadius: 18,
-  backgroundColor: C.primary,
-  justifyContent: 'center',
-  alignItems: 'center',
-  borderWidth: 2,
-  borderColor: C.primaryTint,
-  shadowColor: C.primary,
-  shadowOpacity: 0.20,
-  shadowRadius: 8,
-  elevation: 3,
-},
-
-headerAvatarText: {
-  color: '#FFFFFF',
-  fontSize: 13,
-  fontWeight: '800',
-},
+  headerModuleTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: C.text,
+    letterSpacing: 0.2,
+    marginLeft: 4,
+  },
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: C.primarySoft,
+  },
+  headerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: C.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: C.primaryTint,
+    shadowColor: C.primary,
+    shadowOpacity: 0.20,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  headerAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)' },
   profileDropdown: { position: 'absolute', backgroundColor: '#ffffff', borderRadius: 16, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10, borderWidth: 1, borderColor: '#F3F4F6' },
@@ -1183,27 +1351,25 @@ headerAvatarText: {
   pillBase: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 32, borderRadius: 999, overflow: 'hidden' },
   sessionPill: { borderWidth: 1, borderColor: '#E5E7EB' },
   sessionPillText: { fontSize: 12, fontWeight: '700', color: '#374151' },
-schoolPill: {
-  borderWidth: 1,
-  borderColor: C.primaryTint,
-  backgroundColor: C.primarySoft,
-},
-
-schoolPillIconWrap: {
-  width: 18,
-  height: 18,
-  borderRadius: 9,
-  backgroundColor: C.primary,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-
-schoolPillText: {
-  fontSize: 12,
-  fontWeight: '800',
-  color: C.primary,
-  flexShrink: 1,
-},
+  schoolPill: {
+    borderWidth: 1,
+    borderColor: C.primaryTint,
+    backgroundColor: C.primarySoft,
+  },
+  schoolPillIconWrap: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: C.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  schoolPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: C.primary,
+    flexShrink: 1,
+  },
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(17,24,39,0.5)' },
   pickerContainer: { backgroundColor: '#ffffff', borderRadius: 16, padding: 14, elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 16, borderWidth: 1, borderColor: '#F3F4F6' },
   pickerHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 10, marginBottom: 6, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
@@ -1215,84 +1381,64 @@ schoolPillText: {
   pickerItemSub: { fontSize: 11, color: '#9CA3AF', marginTop: 2, fontWeight: '600' },
   pickerEmptyText: { textAlign: 'center', padding: 20, color: '#9CA3AF', fontWeight: '500' },
 
-logoHeader: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  paddingHorizontal: 20,
-  paddingTop: 18,
-  paddingBottom: 24,
+  // --- Floating drawer panel ---
+  backdrop: { backgroundColor: C.overlay },
+  drawerPanel: {
+    position: 'absolute',
+    backgroundColor: '#ffffff',
+    borderRadius: 22,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.28,
+    shadowRadius: 30,
+    elevation: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+  },
+  drawerBrandRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16 },
+  drawerLogoCard: {
+    width: 46, height: 46, borderRadius: 13, backgroundColor: '#ffffff',
+    justifyContent: 'center', alignItems: 'center', overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
+  },
+  drawerLogo: { width: 36, height: 36, borderRadius: 8 },
+  drawerBrandTitle: { fontSize: 15, fontWeight: '800', color: '#ffffff', letterSpacing: 0.2 },
+  drawerBrandSubtitle: { fontSize: 9, fontWeight: '800', color: 'rgba(255,255,255,0.88)', letterSpacing: 0.7, textTransform: 'uppercase', marginTop: 3 },
+  drawerCloseBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center' },
 
-  borderTopWidth: 1,
-  borderTopColor: '#E8E9EF',
-
-  borderBottomLeftRadius: 24,
-  borderBottomRightRadius: 0,
-},logoImageContainer: {
-  width: 64,
-  height: 64,
-  borderRadius: 16,
-  backgroundColor: '#FFFFFF',
-  shadowColor: C.primary,
-  shadowOffset: { width: 0, height: 6 },
-  shadowOpacity: 0.20,
-  shadowRadius: 10,
-  elevation: 6,
-  justifyContent: 'center',
-  alignItems: 'center',
-  overflow: 'hidden',
-},
-
-logoImage: {
-  width: 52,
-  height: 52,
-  borderRadius: 10,
-},  logoTextContainer: { marginLeft: 16, flex: 1 },
-logoTitle: {
-  fontSize: 19,
-  fontWeight: '800',
-  color: '#FFFFFF',
-  letterSpacing: 0.2,
-},
-
-logoSubtitle: {
-  fontSize: 10,
-  color: 'rgba(255,255,255,0.88)',
-  fontWeight: '800',
-  marginTop: 3,
-  letterSpacing: 0.8,
-  textTransform: 'uppercase',
-},
-  menuContainer: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40 },
+  drawerMenuScrollContent: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 6 },
   sectionHeaderTitle: { fontSize: 10, fontWeight: '800', color: '#9CA3AF', letterSpacing: 1, marginTop: 8, marginBottom: 10, marginLeft: 12 },
   drawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, marginBottom: 4 },
-drawerItemActive: {
-  backgroundColor: C.primarySoft,
-},
-
-drawerItemTextActive: {
-  color: C.primary,
-},  drawerIconBox: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#F9FAFB', justifyContent: 'center', alignItems: 'center', marginRight: 14, overflow: 'hidden' },
+  drawerItemActive: {
+    backgroundColor: C.primarySoft,
+  },
+  drawerItemTextActive: {
+    color: C.primary,
+  },
+  drawerIconBox: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#F9FAFB', justifyContent: 'center', alignItems: 'center', marginRight: 14, overflow: 'hidden' },
   drawerItemText: { fontSize: 14, fontWeight: '700', color: '#4B5563', flex: 1 },
 
   childrenContainer: { marginLeft: 28, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: '#F3F4F6', marginBottom: 8, marginTop: 4 },
   childDrawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10 },
   childDrawerItemActive: { backgroundColor: '#F9FAFB' },
   childDrawerItemText: { fontSize: 13, fontWeight: '600', color: '#6B7280', flex: 1 },
-childDrawerItemTextActive: {
-  color: C.primary,
-  fontWeight: '800',
-},
+  childDrawerItemTextActive: {
+    color: C.primary,
+    fontWeight: '800',
+  },
+  childActiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: C.primary,
+  },
 
-childActiveDot: {
-  width: 6,
-  height: 6,
-  borderRadius: 3,
-  backgroundColor: C.primary,
-},
-  footerContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, borderTopWidth: 1, marginLeft: 24, borderTopColor: '#F3F4F6', backgroundColor: '#ffffff' },
-  footerTextContainer: { flex: 1 },
-  footerName: { fontSize: 15, fontWeight: '800', color: '#111827' },
+  drawerFooter: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#F3F4F6', backgroundColor: '#FBFBFD' },
+  footerAvatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.primary, justifyContent: 'center', alignItems: 'center' },
+  footerAvatarText: { color: '#ffffff', fontWeight: '800', fontSize: 13 },
+  footerName: { fontSize: 14, fontWeight: '800', color: '#111827' },
   footerRoleBadge: { backgroundColor: '#E0F2FE', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 6 },
   footerRole: { fontSize: 10, fontWeight: '800', color: C.primary, textTransform: 'uppercase' },
-  footerLogoutBtn: { padding: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#FEE2E2', shadowColor: C.primary, shadowOpacity: 0.1, shadowRadius: 4, elevation: 1 },
+  footerLogoutBtn: { padding: 10, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#FEE2E2', shadowColor: C.primary, shadowOpacity: 0.1, shadowRadius: 4, elevation: 1 },
 });
