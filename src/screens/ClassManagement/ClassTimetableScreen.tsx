@@ -264,10 +264,6 @@ export default function ClassTimetableScreen({ route }: any) {
     }
   };
 
-  // --- Excel Format Download & Export ---
-  // Built entirely client-side from data already in memory (`timetableData`,
-  // already fetched via GET /timetable/class) using `xlsx` — no export/format
-  // API exists on the backend, so nothing shows up in a network tab.
   const writeAndShareWorkbook = async (rows: any[][], fileName: string) => {
     try {
       setBusyLabel('Preparing Excel file...');

@@ -8,49 +8,62 @@ import {
   Platform,
 } from 'react-native';
 
-/* =========================================================
-   COLORS
-   ========================================================= */
 
 export const COLORS = {
-  primary: '#DC2626',
-  secondary: '#2563EB',
-  success: '#16A34A',
-  warning: '#D97706',
-  info: '#0284C7',
-  pink: '#DB2777',
-
-  ink: '#111827',
-  body: '#374151',
-  muted: '#6B7280',
-  faint: '#9CA3AF',
-
-  background: '#F8FAFC',
+  
+  background: '#F6F6F9',
   surface: '#FFFFFF',
+  surfaceSoft: '#FBFBFD',
+  surfaceSunken: '#F1F2F6',
 
-  border: '#D1D5DB',
-  borderSoft: '#E5E7EB',
-  borderFaint: '#F1F5F9',
+  border: '#E8E9EF',
+  borderSoft: '#E8E9EF',
+  borderFaint: '#F0F1F5',
+  borderStrong: '#DBDDE6',
 
-  primarySoft: '#FEF2F2',
+  ink: '#0D0F16',
+  body: '#181B24',
+  muted: '#6B7280',
+  faint: '#9AA0AC',
+
+  // Main brand
+  primary: '#B3122A',
+  primaryBright: '#D2263F',
+  primaryDeep: '#7A0C1D',
+  primarySoft: '#FBEEEF',
+  primaryTint: '#F3D6D9',
+
+  // Secondary
+  secondary: '#181B24',
+  secondarySoft: '#F1F2F6',
+
+  // Status colors — keep semantic colors
+  success: '#059669',
+  successSoft: '#ECFDF5',
+  successSoftBorder: '#A7F3D0',
+
+  warning: '#C7A466',
+  warningSoft: '#FFF8E7',
+
+  info: '#2563EB',
+  infoSoft: '#EFF6FF',
+
+  pink: '#DB2777',
+  pinkSoft: '#FCE7F3',
+
+  overlay: 'rgba(13,15,22,0.48)',
+
   primarySoftBorder: '#FECACA',
 
-  secondarySoft: '#EFF6FF',
   secondarySoftBorder: '#BFDBFE',
 
-  successSoft: '#F0FDF4',
-  successSoftBorder: '#BBF7D0',
 
-  warningSoft: '#FFFBEB',
   warningSoftBorder: '#FDE68A',
 
-  infoSoft: '#F0F9FF',
   infoSoftBorder: '#BAE6FD',
 
-  pinkSoft: '#FDF2F8',
   pinkSoftBorder: '#FBCFE8',
 
-  overlay: 'rgba(15, 23, 42, 0.55)',
 
   white: '#FFFFFF',
   black: '#000000',
@@ -58,9 +71,6 @@ export const COLORS = {
 } as const;
 
 
-/* =========================================================
-   SPACING
-   ========================================================= */
 
 export const SPACING = {
   xs: 4,
@@ -72,10 +82,6 @@ export const SPACING = {
 } as const;
 
 
-/* =========================================================
-   BORDER RADIUS
-   ========================================================= */
-
 export const RADIUS = {
   xs: 6,
   sm: 8,
@@ -86,9 +92,6 @@ export const RADIUS = {
 } as const;
 
 
-/* =========================================================
-   FONT SIZES
-   ========================================================= */
 
 export const FONT = {
   micro: 9,
@@ -101,16 +104,10 @@ export const FONT = {
 } as const;
 
 
-/* =========================================================
-   TOUCH TARGET
-   ========================================================= */
 
 export const TOUCH_TARGET = 44;
 
 
-/* =========================================================
-   DEVICE SIZE
-   ========================================================= */
 
 const {
   width: SCREEN_WIDTH,
@@ -122,9 +119,6 @@ export const isSmallDevice = SCREEN_WIDTH < 380;
 export { SCREEN_WIDTH, SCREEN_HEIGHT };
 
 
-/* =========================================================
-   SHADOWS
-   ========================================================= */
 
 export const SHADOW = {
   card: Platform.select({
@@ -183,10 +177,6 @@ export const SHADOW = {
 } as const;
 
 
-/* =========================================================
-   THEME OBJECT
-   ========================================================= */
-
 export const THEME = {
   colors: COLORS,
   spacing: SPACING,
@@ -197,10 +187,6 @@ export const THEME = {
 } as const;
 
 
-/* =========================================================
-   THEME CONTEXT
-   ========================================================= */
-
 type ThemeContextType = {
   theme: typeof THEME;
 };
@@ -210,9 +196,6 @@ const ThemeContext = createContext<ThemeContextType>({
 });
 
 
-/* =========================================================
-   THEME PROVIDER
-   ========================================================= */
 
 interface ThemeProviderProps {
   children: ReactNode;
@@ -229,17 +212,10 @@ export const ThemeProvider = ({
 };
 
 
-/* =========================================================
-   USE THEME HOOK
-   ========================================================= */
-
 export const useTheme = () => {
   return useContext(ThemeContext);
 };
 
 
-/* =========================================================
-   DEFAULT EXPORT
-   ========================================================= */
 
 export default THEME;

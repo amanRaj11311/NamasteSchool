@@ -643,7 +643,7 @@ const styles = StyleSheet.create({
   actionBar: { flexDirection: 'row', paddingHorizontal: 16, alignItems: 'center', gap: 10, zIndex: 10, marginTop: 4 },
   searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 12, height: 46, elevation: 1 },
   searchInput: { flex: 1, marginLeft: 8, fontSize: 14, color: '#111827' },
-  addBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ef4444', paddingHorizontal: 16, height: 46, borderRadius: 12, gap: 6, elevation: 2 },
+  addBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor:  '#B3122A', paddingHorizontal: 16, height: 46, borderRadius: 12, gap: 6, elevation: 2 },
   addBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
   // Cards
@@ -668,7 +668,7 @@ const styles = StyleSheet.create({
   criteriaGrid: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   criteriaTile: { flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 10, alignItems: 'center' },
   criteriaK: { fontSize: 10, textTransform: 'uppercase', color: '#6B7280', fontWeight: '700', marginBottom: 4 },
-  criteriaV: { fontWeight: '800', color: '#ef4444', fontSize: 14 },
+  criteriaV: { fontWeight: '800', color:  '#B3122A', fontSize: 14 },
 
   cardActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 16 },
   actionBtnGroup: { flexDirection: 'row', gap: 8 },
@@ -689,18 +689,18 @@ const styles = StyleSheet.create({
   closeBtnIcon: { padding: 6, backgroundColor: '#F3F4F6', borderRadius: 20 },
   formScroll: { padding: 20 },
   
-  sectionDividerText: { fontSize: 11, fontWeight: '800', color: '#ef4444', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 12, marginTop: 4 },
+  sectionDividerText: { fontSize: 11, fontWeight: '800', color: '#B3122A', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 12, marginTop: 4 },
   
   inputWrapper: { marginBottom: 16, zIndex: 1 },
   inputLabel: { fontSize: 12, fontWeight: '700', color: '#4B5563', marginBottom: 6, marginLeft: 2 },
-  asterisk: { color: '#ef4444' },
+  asterisk: { color: '#B3122A' },
   input: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, height: 46, backgroundColor: '#F9FAFB', fontSize: 14, color: '#111827' },
-  inputError: { borderColor: '#ef4444', backgroundColor: '#FEF2F2' },
-  errorText: { color: '#ef4444', fontSize: 12, marginTop: 4, fontWeight: '500' },
+  inputError: { borderColor: '#B3122A', backgroundColor: '#FEF2F2' },
+  errorText: { color: '#B3122A', fontSize: 12, marginTop: 4, fontWeight: '500' },
   row: { flexDirection: 'row', justifyContent: 'space-between', zIndex: 2 },
 
   dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, height: 46, backgroundColor: '#F9FAFB' },
-  dropdownHeaderActive: { borderColor: '#ef4444', backgroundColor: '#FEF2F2' },
+  dropdownHeaderActive: { borderColor: '#B3122A', backgroundColor: '#FEF2F2' },
   dropdownSelectedText: { color: '#111827', fontSize: 14, fontWeight: '500' },
   dropdownPlaceholder: { color: '#9CA3AF', fontSize: 14 },
   dropdownListContainer: { position: 'absolute', top: 70, left: 0, right: 0, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, backgroundColor: '#fff', overflow: 'hidden', elevation: 5, zIndex: 100 },
@@ -708,19 +708,19 @@ const styles = StyleSheet.create({
   dropdownItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 14 },
   dropdownItemBorder: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   dropdownItemText: { fontSize: 14, color: '#374151', fontWeight: '500' },
-  dropdownItemTextActive: { color: '#ef4444', fontWeight: '700' },
+  dropdownItemTextActive: { color: '#B3122A', fontWeight: '700' },
 
-  saveBtnFull: { backgroundColor: '#ef4444', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2 },
+  saveBtnFull: { backgroundColor: '#B3122A', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2 },
   saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 
   // View Full Spec Modal
   overlay: { flex: 1, backgroundColor: 'rgba(17,24,39,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   viewModalContainer: { backgroundColor: '#F9FAFB', width: '100%', borderRadius: 24, maxHeight: '85%', overflow: 'hidden', elevation: 10 },
-  viewHeaderRed: { backgroundColor: '#ef4444', padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  viewHeaderRed: { backgroundColor: '#B3122A', padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   viewTitle: { color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 0.5 },
   viewName: { fontSize: 24, fontWeight: '800', color: '#111827' },
   
-  sectionHeaderRed: { fontSize: 11, fontWeight: '800', color: '#ef4444', marginTop: 10, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionHeaderRed: { fontSize: 11, fontWeight: '800', color: '#B3122A', marginTop: 10, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   viewDetailsBox: { backgroundColor: '#fff', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 12 },
   viewLabel: { fontSize: 11, color: '#9CA3AF', fontWeight: '700', marginBottom: 4 },
   viewVal: { fontSize: 13, color: '#111827', fontWeight: '700' },

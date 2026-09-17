@@ -64,16 +64,11 @@ const toYMD = (d: Date) => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-// Parses a 'YYYY-MM-DD' string into a LOCAL Date. Using `new Date(ymdString)`
-// directly parses as UTC midnight, which can shift the displayed date by
-// one day depending on device timezone. This avoids that shift.
 const parseYMD = (ymd: string): Date => {
   const [y, m, d] = ymd.split('-').map(Number);
   return new Date(y, (m || 1) - 1, d || 1);
 };
 
-// ERROR HANDLING:
-// Centralized error handler maps all potential API errors (Network, 4xx, 5xx) to actionable frontend messages.
 const getErrorMessage = (error: unknown, fallback: string): string => {
   if (axios.isAxiosError(error)) {
     if (!error.response) {
@@ -335,8 +330,6 @@ export default function NoticeBoardScreen() {
     }
   };
 
-  // ROLE FIX: Resuable helper to definitively resolve the targeted schoolId 
-  // relying entirely on the role source of truth (canSelectSchool).
   const resolveSchoolId = useCallback(() => {
     if (canSelectSchool) {
       return formData.schoolId;
@@ -353,18 +346,11 @@ export default function NoticeBoardScreen() {
       return;
     }
 
-    // 2. Validate Publish Date — driven purely by the stored form value,
-    // not by whether the user opened/touched the date picker. The
-    // auto-populated "today" default counts as a valid selection.
     if (!formData.noticeDate?.trim()) {
       showToast("Publish date is required.", "error");
       return;
     }
 
-    // NOTE: Deadline (submissionDate) is intentionally NOT validated here.
-    // It is optional — do not add a required check for it.
-
-    // 3. Validate School 
     const targetSchoolId = resolveSchoolId();
     if (!targetSchoolId) {
       if (canSelectSchool) {
@@ -384,10 +370,6 @@ export default function NoticeBoardScreen() {
     setSaving(true);
 
     try {
-      // 5. Construct Payload (Preserving exact backend schema names)
-      // submissionDate is only included when it actually has a value —
-      // an empty Deadline is fully omitted from the payload rather than
-      // sent as an empty/invalid string.
       const jsonPayload: Record<string, any> = {
         schoolId: targetSchoolId,
         title: formData.title.trim(),
@@ -911,10 +893,10 @@ const styles = StyleSheet.create({
   audiencePill: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 22, backgroundColor: '#F5F6F8', borderWidth: 1, borderColor: '#EEF0F2' },
   audiencePillActive: { backgroundColor: '#FEF2F2', borderColor: '#FCA5A5' },
   audiencePillText: { fontSize: 13, fontWeight: '700', color: '#565C66' },
-  audiencePillTextActive: { color: '#EF4444' },
+  audiencePillTextActive: { color: '#B3122A' },
   searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F6F8', borderWidth: 1, borderColor: '#EEF0F2', borderRadius: 12, paddingHorizontal: 14, height: 42 },
   searchInput: { flex: 1, marginLeft: 8, fontSize: 13, color: '#101317' },
-  addBtnFull: { backgroundColor: '#EF4444', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 13, borderRadius: 12, marginTop: 12, shadowColor: '#EF4444', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  addBtnFull: { backgroundColor: '#B3122A', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 13, borderRadius: 12, marginTop: 12, shadowColor: '#B3122A', shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   addBtnTextFull: { color: '#fff', fontWeight: '800', marginLeft: 8, fontSize: 14 },
 
   listContent: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 14 },
@@ -958,21 +940,21 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', marginBottom: 16, zIndex: 2 },
 
   dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1.3, borderColor: '#E7E9EC', borderRadius: 12, paddingHorizontal: 14, height: 46, backgroundColor: '#fff' },
-  dropdownHeaderActive: { borderColor: '#EF4444' },
+  dropdownHeaderActive: { borderColor: '#B3122A' },
   dropdownSelectedText: { fontSize: 13, color: '#101317', fontWeight: '600' },
   dropdownPlaceholder: { fontSize: 13, color: '#9CA3AF' },
   dropdownListContainer: { position: 'absolute', top: 74, left: 0, right: 0, backgroundColor: '#fff', borderWidth: 1, borderColor: '#EEF0F2', borderRadius: 12, elevation: 6, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 14 },
   dropdownItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 13 },
   borderBottom: { borderBottomWidth: 1, borderBottomColor: '#F5F6F8' },
   dropdownItemText: { fontSize: 13, color: '#374151', fontWeight: '500' },
-  textAccent: { color: '#EF4444', fontWeight: '700' },
+  textAccent: { color: '#B3122A', fontWeight: '700' },
 
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
   toggleLabel: { fontSize: 13, fontWeight: '600', color: '#374151' },
   uploadBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.3, borderColor: '#E7E9EC', borderStyle: 'dashed', borderRadius: 12, padding: 14, backgroundColor: '#FAFAFB', gap: 9 },
   uploadText: { fontSize: 13, color: '#565C66', flex: 1 },
 
-  saveBtnFull: { backgroundColor: '#EF4444', height: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 10, shadowColor: '#EF4444', shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
+  saveBtnFull: { backgroundColor: '#B3122A', height: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 10, shadowColor: '#B3122A', shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
   saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 
   // Delete confirm
@@ -983,13 +965,13 @@ const styles = StyleSheet.create({
   confirmActions: { flexDirection: 'row', gap: 10, width: '100%' },
   confirmCancelBtn: { flex: 1, height: 46, borderRadius: 12, backgroundColor: '#F5F6F8', justifyContent: 'center', alignItems: 'center' },
   confirmCancelText: { fontWeight: '700', color: '#565C66', fontSize: 14 },
-  confirmDeleteBtn: { flex: 1, height: 46, borderRadius: 12, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' },
+  confirmDeleteBtn: { flex: 1, height: 46, borderRadius: 12, backgroundColor: '#B3122A', justifyContent: 'center', alignItems: 'center' },
   confirmDeleteText: { fontWeight: '700', color: '#fff', fontSize: 14 },
 
   // Notice Detail (View) Modal
   detailModalContainer: { backgroundColor: '#fff', borderRadius: 22, maxHeight: '85%', elevation: 12, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 24 },
   detailHeader: { flexDirection: 'row', alignItems: 'flex-start', padding: 20, borderBottomWidth: 1, borderBottomColor: '#EEF0F2' },
-  detailHeaderIconWrap: { width: 44, height: 44, borderRadius: 14, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center' },
+  detailHeaderIconWrap: { width: 44, height: 44, borderRadius: 14, backgroundColor: '#B3122A', justifyContent: 'center', alignItems: 'center' },
   detailTitle: { fontSize: 17, fontWeight: '800', color: '#101317' },
   detailSubtitle: { fontSize: 12, color: '#8A8F98', marginTop: 3, lineHeight: 16 },
   detailScroll: { padding: 20, paddingTop: 16 },
@@ -1013,7 +995,7 @@ const styles = StyleSheet.create({
 
   // Toast
   toast: { position: 'absolute', bottom: 24, left: 16 , right: 16, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 14, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8, zIndex: 9999 },
-  toastError: { backgroundColor: '#DC2626' },
+  toastError: { backgroundColor: '#B3122A' },
   toastSuccess: { backgroundColor: '#16A34A' },
   toastText: { color: '#fff', fontSize: 13, fontWeight: '600', flex: 1 },
 });

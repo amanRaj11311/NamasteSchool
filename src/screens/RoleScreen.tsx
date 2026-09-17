@@ -614,10 +614,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.bg,
   },
 
-  // =========================================================
-  // HEADER
-  // Same clean white header as Settings
-  // =========================================================
+
 
   header: {
     paddingHorizontal: 20,
@@ -628,21 +625,19 @@ const styles = StyleSheet.create({
     borderBottomColor: C.border,
     ...SHADOW_SM,
   },
+title: {
+  fontSize: 21,
+  fontWeight: '800',
+  color: C.text,
+  letterSpacing: 0.2,
+},
 
-  title: {
-    fontSize: 21,
-    fontWeight: '800',
-    color: C.text,
-    letterSpacing: 0.2,
-  },
-
-  subtitle: {
-    fontSize: 12.5,
-    color: C.textMuted,
-    marginTop: 3,
-    fontWeight: '500',
-  },
-
+subtitle: {
+  fontSize: 12.5,
+  color: C.textMuted,
+  marginTop: 3,
+  fontWeight: '500',
+},
   // =========================================================
   // KPI CARDS
   // =========================================================

@@ -57,13 +57,13 @@ const COLORS = {
   surface: '#FFFFFF',
   border: '#E5E7EB',
   borderSoft: '#F3F4F6',
-  text: '#111827',
+  text: '#14161F',
   textMuted: '#6B7280',
   textFaint: '#9CA3AF',
-  primary: '#ef4444',        // original red — primary brand action
+  primary: '#B3122A',       
   primarySoft: '#FEF2F2',
   primaryBorder: '#FECACA',
-  accent: '#ef4444',         // destructive / delete uses the same brand red
+  accent: '#B3122A',         
   accentSoft: '#FEF2F2',
   success: '#10B981',
   successSoft: '#ECFDF5',

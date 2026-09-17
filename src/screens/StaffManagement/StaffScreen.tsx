@@ -22,11 +22,9 @@ import axios from 'axios';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 const COLORS = {
-  primary: '#E11D48', 
-  primaryDark: '#BE123C',
-  primarySoft: '#FFF1F2',
+  primary: '#B3122A', primaryDark: '#C5221F', primarySoft: '#FDE8E8',
   primarySoftBorder: '#FFE4E6',
-  ink: '#0F172A', 
+  ink: '#12172B', 
   inkSoft: '#475569',
   muted: '#94A3B8',
   border: '#E7EAF0',

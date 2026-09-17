@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList, TextInput, Modal,
   KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, RefreshControl,
-  useWindowDimensions,
+  useWindowDimensions, LayoutAnimation, UIManager,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
@@ -14,21 +14,25 @@ import Share from 'react-native-share';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import { API_BASE } from '../../network/api';
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const CLASS_ATTENDANCE_URL = `${API_BASE}/attendance/class`;
 const BULK_ATTENDANCE_URL = `${API_BASE}/attendance/class/bulk`;
 
 const C = {
-  bg: '#F4F6F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
-  text: '#101828', textMuted: '#6B7280', textFaint: '#9CA3AF',
-  primary: '#E11D2E', primaryDark: '#B91424', primarySoft: '#FEECEC',
-  blue: '#0EA5E9', blueSoft: '#E0F2FE',
-  green: '#10B981', greenSoft: '#D1FAE5',
-  amber: '#F59E0B', amberSoft: '#FEF3C7',
+  bg: '#F6F6F9', surface: '#FFFFFF', surfaceSoft: '#FBFBFD', surfaceSunken: '#F1F2F6', border: '#E7E9F2',
+  text: '#12172B', textMuted: '#5D6478', textFaint: '#9AA0B4',
+  primary: '#B3122A', primaryDark: '#C5221F', primarySoft: '#FDE8E8',
+  blue: '#0369A1', blueSoft: '#E0F2FE',
+  green: '#059669', greenSoft: '#DCFCE9',
+  amber: '#B45309', amberSoft: '#FEF3C7',
   slate: '#64748B', slateSoft: '#F1F5F9',
   purple: '#8B5CF6', purpleSoft: '#EDE9FE',
   todayTint: '#FFF7ED', todayBorder: '#FDBA74',
   futureBg: '#F8F9FB',
+  overlay: 'rgba(13,15,22,0.48)',
 };
 
 const SHADOW = {
@@ -40,6 +44,9 @@ const SHADOW = {
   },
   soft: {
     shadowColor: '#0F172A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 1,
+  },
+  fab: {
+    shadowColor: '#0F172A', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 14, elevation: 8,
   },
 };
 
@@ -230,8 +237,9 @@ const SkeletonRow = ({ delay = 0 }: { delay?: number }) => (
 export default function ClassAttendanceScreen() {
   const { width: winWidth } = useWindowDimensions();
   const isTablet = winWidth >= 768;
-  const dayCellWidth = isTablet ? 54 : 44;
-  const stickyColWidth = isTablet ? 226 : 172;
+  const isCompactPhone = winWidth < 360;
+  const dayCellWidth = isTablet ? 54 : isCompactPhone ? 40 : 44;
+  const stickyColWidth = isTablet ? 226 : isCompactPhone ? 154 : 172;
 
   const [permissions, setPermissions] = useState<any[]>([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
@@ -279,6 +287,20 @@ export default function ClassAttendanceScreen() {
   const [isDailyModalVisible, setDailyModalVisible] = useState(false);
   const [isSingleEditModalVisible, setSingleEditModalVisible] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showLegendModal, setShowLegendModal] = useState(false);
+
+  // Floating action button (Excel actions) — collapsed by default so the
+  // filter bar + student list stay the whole screen; teacher expands this
+  // only when they actually need to import/export.
+  const [fabOpen, setFabOpen] = useState(false);
+  const toggleFab = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFabOpen(o => !o);
+  }, []);
+  const closeFab = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFabOpen(false);
+  }, []);
 
   // Daily Attendance Form
   const [dailyDate, setDailyDate] = useState<Date>(new Date());
@@ -886,8 +908,9 @@ export default function ClassAttendanceScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Compact header — brand + context only, no filters here so it stays short */}
       <View style={styles.header}>
-        <View style={styles.headerIconBadge}><Feather name="check-square" size={20} color={C.primary} /></View>
+        <View style={styles.headerIconBadge}><Feather name="check-square" size={18} color={C.primary} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Class Attendance</Text>
           <Text style={styles.subtitle} numberOfLines={1}>
@@ -904,17 +927,22 @@ export default function ClassAttendanceScreen() {
           <Feather name="users" size={12} color={C.primary} />
           <Text style={styles.headerCountText}>{students.length}</Text>
         </View>
+        <TouchableOpacity style={styles.headerInfoBtn} onPress={() => setShowLegendModal(true)} activeOpacity={0.7}>
+          <Feather name="info" size={16} color={C.textMuted} />
+        </TouchableOpacity>
       </View>
 
+      {/* Filter bar — class, month, search, mark daily. Directly below this
+          the student list opens, so teachers reach marking in one glance. */}
       <View style={styles.filterSection}>
         <View style={{ flexDirection: 'row', gap: 10, zIndex: 10 }}>
-          <View style={{ flex: 1 }}>
-            {renderInlineDropdown('classFilter', 'SELECT CLASS', classes.map(c => ({ label: c.className, value: c._id })), selectedClassId, (v) => { setSelectedClassId(v); fetchGridData(authToken, v, selectedMonth); })}
+          <View style={{ flex: 1.3 }}>
+            {renderInlineDropdown('classFilter', 'CLASS', classes.map(c => ({ label: c.className, value: c._id })), selectedClassId, (v) => { setSelectedClassId(v); fetchGridData(authToken, v, selectedMonth); })}
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.inputLabel}>SELECT MONTH</Text>
+            <Text style={styles.inputLabel}>MONTH</Text>
             <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowMonthPicker(true)} activeOpacity={0.85}>
-              <Text style={styles.datePickerText}>{selectedMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}</Text>
+              <Text style={styles.datePickerText} numberOfLines={1}>{selectedMonth.toLocaleString('default', { month: 'short', year: 'numeric' })}</Text>
               <Feather name="calendar" size={14} color={C.textMuted} />
             </TouchableOpacity>
             {showMonthPicker && (
@@ -935,7 +963,7 @@ export default function ClassAttendanceScreen() {
         <View style={styles.searchRow}>
           <View style={styles.searchContainer}>
             <Feather name="search" size={16} color={C.textFaint} />
-            <TextInput style={styles.searchInput} placeholder="Search student by name or roll no..." placeholderTextColor={C.textFaint} value={searchQuery} onChangeText={setSearchQuery} />
+            <TextInput style={styles.searchInput} placeholder="Search name or roll no..." placeholderTextColor={C.textFaint} value={searchQuery} onChangeText={setSearchQuery} />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery('')}>
                 <Feather name="x-circle" size={15} color={C.textFaint} />
@@ -949,114 +977,9 @@ export default function ClassAttendanceScreen() {
             </TouchableOpacity>
           )}
         </View>
-
-        {/* Excel actions row — parity with the web page's Download Format /
-            Full Month Excel / Upload Excel buttons. All three are real,
-            working actions here (not placeholders). */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.excelActionsRow}>
-          <TouchableOpacity
-            style={[styles.excelActionBtn, styles.excelActionBtnOutline, { borderColor: C.green }]}
-            onPress={downloadSampleAttendanceTemplate}
-            activeOpacity={0.85}
-          >
-            <Feather name="download" size={13} color={C.green} />
-            <Text style={[styles.excelActionText, { color: C.green }]}>Download Format</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.excelActionBtn, { backgroundColor: C.green }]}
-            onPress={downloadFormattedMonthlyExcel}
-            disabled={exporting || students.length === 0}
-            activeOpacity={0.85}
-          >
-            {exporting ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="file-text" size={13} color="#fff" />}
-            <Text style={[styles.excelActionText, { color: '#fff' }]}>{exporting ? 'Exporting…' : 'Full Month Excel'}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.excelActionBtn, styles.excelActionBtnOutline, { borderColor: C.primary }]}
-            onPress={() => setShowUploadModal(true)}
-            activeOpacity={0.85}
-          >
-            <Feather name="upload" size={13} color={C.primary} />
-            <Text style={[styles.excelActionText, { color: C.primary }]}>Upload Excel</Text>
-          </TouchableOpacity>
-        </ScrollView>
       </View>
 
-      {/* Summary / KPI Bar — shows NOTHING (no month totals) until the user
-          taps a specific day in the matrix header below. Once a day is
-          tapped, every card here scopes to that single day only. */}
-      {!loading && students.length > 0 && (
-        <View style={styles.statsSection}>
-          <View style={styles.statsScopeRow}>
-            <View style={styles.statsScopeChip}>
-              <Feather name={selectedStatDate ? 'calendar' : 'mouse-pointer'} size={12} color={C.primary} />
-              <Text style={styles.statsScopeText}>
-                {selectedStatDate ? formatPretty(selectedStatDate) : 'Tap a date below to see its count'}
-              </Text>
-            </View>
-            {selectedStatDate && (
-              <TouchableOpacity style={styles.statsClearBtn} onPress={() => setSelectedStatDate(null)} activeOpacity={0.7}>
-                <Feather name="x" size={11} color={C.textMuted} />
-                <Text style={styles.statsClearText}>Clear</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {selectedStatDate ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}>
-              <View style={[styles.statCard, SHADOW.card, { borderColor: C.border }]}>
-                <Text style={styles.statValue}>{scopedPct !== null ? `${scopedPct}%` : '—'}</Text>
-                <Text style={styles.statLabel}>Present %</Text>
-              </View>
-              {STATUS_ORDER.filter(s => s !== 'Holiday').map(st => {
-                const meta = STATUS_META[st];
-                return (
-                  <View key={st} style={[styles.statCard, SHADOW.card, { borderLeftWidth: 3, borderLeftColor: meta.color }]}>
-                    <View style={styles.statCardTop}>
-                      <Feather name={meta.icon as any} size={12} color={meta.color} />
-                      <Text style={[styles.statValue, { color: meta.color }]}>{scopedStats[st]}</Text>
-                    </View>
-                    <Text style={styles.statLabel}>{meta.label}</Text>
-                  </View>
-                );
-              })}
-            </ScrollView>
-          ) : (
-            <View style={styles.statsEmptyHint}>
-              <Feather name="arrow-down" size={13} color={C.textFaint} />
-              <Text style={styles.statsEmptyHintText}>Select a day in the calendar header to see Present / Absent / Leave counts for that date</Text>
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* Status legend — parity with the web page's P/A/L/HD/H legend */}
-      {!loading && students.length > 0 && (
-        <View style={styles.legendRow}>
-          <View style={styles.legendItem}>
-            <View style={styles.cellCheckboxActive}><Feather name="check" size={9} color="#fff" /></View>
-            <Text style={styles.legendText}>Present</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={styles.cellCheckboxEmpty} />
-            <Text style={styles.legendText}>Absent / Not marked</Text>
-          </View>
-          {STATUS_ORDER.filter(st => st === 'Leave' || st === 'Half-Day').map(st => {
-            const meta = STATUS_META[st];
-            return (
-              <View key={st} style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: meta.color }]} />
-                <Text style={styles.legendText}>{meta.abbr}: {meta.label}</Text>
-              </View>
-            );
-          })}
-          <Text style={styles.legendHintText}>Tap a day to tick Present/Absent · hold to set Leave/Half-Day/Holiday</Text>
-        </View>
-      )}
-
-      {/* Matrix Data Area */}
+      {/* Matrix Data Area — opens immediately under the filter bar */}
       {loading ? (
         <View style={styles.skeletonContainer}>
           {Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} delay={i} />)}
@@ -1077,7 +1000,7 @@ export default function ClassAttendanceScreen() {
                 at once — this is the main fix for lag with large classes. */}
             <View style={{ flex: 1 }}>
               {/* Matrix Header Row — each day cell doubles as a KPI filter:
-                  tap a day to scope the stats bar above to just that day. */}
+                  tap a day to open the stats sheet scoped to just that day. */}
               <View style={styles.matrixHeaderRow}>
                 <View style={[styles.matrixHeaderCell, styles.matrixStickyCol, { width: stickyColWidth }]}>
                   <Text style={styles.matrixHeaderTitle}>STUDENT PROFILE</Text>
@@ -1117,6 +1040,7 @@ export default function ClassAttendanceScreen() {
                 renderItem={renderStudentRow}
                 getItemLayout={getItemLayout}
                 showsVerticalScrollIndicator={true}
+                contentContainerStyle={{ paddingBottom: 110 }}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchGridData(authToken, selectedClassId, selectedMonth, true)} colors={[C.primary]} />}
                 initialNumToRender={14}
                 maxToRenderPerBatch={14}
@@ -1128,6 +1052,123 @@ export default function ClassAttendanceScreen() {
           </ScrollView>
         </View>
       )}
+
+      {/* Floating action button — Excel actions live here so they never take
+          up permanent header space. Tap to expand the speed-dial. */}
+      {!loading && (
+        <View style={styles.fabWrap} pointerEvents="box-none">
+          {fabOpen && (
+            <View style={styles.fabActions}>
+              <TouchableOpacity
+                style={styles.fabActionRow}
+                activeOpacity={0.85}
+                onPress={() => { closeFab(); setShowUploadModal(true); }}
+              >
+                <View style={styles.fabLabelChip}><Text style={styles.fabLabelText}>Upload Excel</Text></View>
+                <View style={[styles.fabMini, { backgroundColor: C.primary }]}>
+                  <Feather name="upload" size={17} color="#fff" />
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.fabActionRow}
+                activeOpacity={0.85}
+                disabled={exporting || students.length === 0}
+                onPress={() => { closeFab(); downloadFormattedMonthlyExcel(); }}
+              >
+                <View style={styles.fabLabelChip}><Text style={styles.fabLabelText}>{exporting ? 'Exporting…' : 'Full Month Excel'}</Text></View>
+                <View style={[styles.fabMini, { backgroundColor: C.green }]}>
+                  {exporting ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="file-text" size={17} color="#fff" />}
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.fabActionRow}
+                activeOpacity={0.85}
+                onPress={() => { closeFab(); downloadSampleAttendanceTemplate(); }}
+              >
+                <View style={styles.fabLabelChip}><Text style={styles.fabLabelText}>Download Format</Text></View>
+                <View style={[styles.fabMini, { backgroundColor: C.blue }]}>
+                  <Feather name="download" size={17} color="#fff" />
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <TouchableOpacity style={styles.fabMain} onPress={toggleFab} activeOpacity={0.9}>
+            <Feather name={fabOpen ? 'x' : 'grid'} size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* BOTTOM SHEET: Day stats — appears only when a day is tapped in the
+          matrix header, so it never eats permanent screen space. */}
+      <Modal visible={!!selectedStatDate} animationType="slide" transparent onRequestClose={() => setSelectedStatDate(null)}>
+        <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setSelectedStatDate(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.sheetCard} onPress={() => {}}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeaderRow}>
+              <View style={styles.statsScopeChip}>
+                <Feather name="calendar" size={12} color={C.primary} />
+                <Text style={styles.statsScopeText}>{selectedStatDate ? formatPretty(selectedStatDate) : ''}</Text>
+              </View>
+              <TouchableOpacity style={styles.statsClearBtn} onPress={() => setSelectedStatDate(null)} activeOpacity={0.7}>
+                <Feather name="x" size={16} color={C.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
+              <View style={[styles.statCard, SHADOW.card, { borderColor: C.border }]}>
+                <Text style={styles.statValue}>{scopedPct !== null ? `${scopedPct}%` : '—'}</Text>
+                <Text style={styles.statLabel}>Present %</Text>
+              </View>
+              {STATUS_ORDER.filter(s => s !== 'Holiday').map(st => {
+                const meta = STATUS_META[st];
+                return (
+                  <View key={st} style={[styles.statCard, SHADOW.card, { borderLeftWidth: 3, borderLeftColor: meta.color }]}>
+                    <View style={styles.statCardTop}>
+                      <Feather name={meta.icon as any} size={12} color={meta.color} />
+                      <Text style={[styles.statValue, { color: meta.color }]}>{scopedStats[st]}</Text>
+                    </View>
+                    <Text style={styles.statLabel}>{meta.label}</Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* MODAL: Legend / help — colour codes + gestures, opened from the info icon */}
+      <Modal visible={showLegendModal} animationType="fade" transparent onRequestClose={() => setShowLegendModal(false)}>
+        <TouchableOpacity style={styles.modalOverlayCenter} activeOpacity={1} onPress={() => setShowLegendModal(false)}>
+          <TouchableOpacity activeOpacity={1} style={[styles.editModalCard, SHADOW.raised]} onPress={() => {}}>
+            <View style={styles.editModalHeader}>
+              <Text style={styles.editModalTitle}>How marking works</Text>
+              <TouchableOpacity onPress={() => setShowLegendModal(false)}><Feather name="x" size={18} color={C.textMuted} /></TouchableOpacity>
+            </View>
+
+            <View style={styles.legendModalRow}>
+              <View style={styles.cellCheckboxActive}><Feather name="check" size={9} color="#fff" /></View>
+              <Text style={styles.legendModalText}>Present — tap once</Text>
+            </View>
+            <View style={styles.legendModalRow}>
+              <View style={styles.cellCheckboxEmpty} />
+              <Text style={styles.legendModalText}>Absent / not yet marked</Text>
+            </View>
+            {STATUS_ORDER.filter(st => st === 'Leave' || st === 'Half-Day').map(st => {
+              const meta = STATUS_META[st];
+              return (
+                <View key={st} style={styles.legendModalRow}>
+                  <View style={[styles.legendDot, { backgroundColor: meta.color }]} />
+                  <Text style={styles.legendModalText}>{meta.abbr} — {meta.label}</Text>
+                </View>
+              );
+            })}
+            <Text style={styles.legendHintText}>Tap a day cell to toggle Present/Absent. Hold it down to set Leave, Half-Day or Holiday. Tap a date in the calendar header to see that day's totals.</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* MODAL: Mark Daily Attendance */}
       <Modal visible={isDailyModalVisible} animationType="slide" transparent>
@@ -1315,6 +1356,15 @@ export default function ClassAttendanceScreen() {
               </TouchableOpacity>
             </View>
 
+            <TouchableOpacity
+              style={[styles.excelActionBtn, styles.excelActionBtnOutline, { borderColor: C.green, alignSelf: 'center', marginBottom: 10 }]}
+              onPress={downloadSampleAttendanceTemplate}
+              activeOpacity={0.85}
+            >
+              <Feather name="download" size={13} color={C.green} />
+              <Text style={[styles.excelActionText, { color: C.green }]}>Download blank format</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.ghostBtn} onPress={() => setShowUploadModal(false)}>
               <Text style={styles.ghostBtnText}>Close</Text>
             </TouchableOpacity>
@@ -1334,13 +1384,18 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 10, fontSize: 12.5, color: C.textMuted, fontWeight: '600' },
 
-  header: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 20, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border, ...SHADOW.soft },
-  headerIconBadge: { width: 46, height: 46, borderRadius: 14, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.primary + '22' },
-  title: { fontSize: 20, fontWeight: '800', color: C.text, letterSpacing: 0.2 },
-  subtitle: { fontSize: 12, color: C.textMuted, marginTop: 2 },
-  headerCountBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.primarySoft, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: C.primary + '22' },
-  headerCountText: { fontSize: 12.5, fontWeight: '800', color: C.primary },
-  syncPulse: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border, ...SHADOW.soft,
+  },
+  headerIconBadge: { width: 38, height: 38, borderRadius: 12, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.primary + '22' },
+  title: { fontSize: 17, fontWeight: '800', color: C.text, letterSpacing: 0.1 },
+  subtitle: { fontSize: 11.5, color: C.textMuted, marginTop: 1 },
+  headerCountBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.primarySoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: C.primary + '22' },
+  headerCountText: { fontSize: 12, fontWeight: '800', color: C.primary },
+  headerInfoBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  syncPulse: { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
 
   // Skeleton loading state — shown briefly on a first-ever visit while
   // cached data (see gridCacheKey) isn't yet available, so the screen never
@@ -1353,37 +1408,47 @@ const styles = StyleSheet.create({
   skeletonPillGroup: { flexDirection: 'row', gap: 6 },
   skeletonPill: { width: 20, height: 20, borderRadius: 6, backgroundColor: C.surfaceSoft },
 
-  filterSection: { backgroundColor: C.surface, padding: 16, borderBottomWidth: 1, borderColor: C.border, zIndex: 50 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12, zIndex: 1 },
+  filterSection: {
+    backgroundColor: C.surface, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14,
+    borderBottomWidth: 1, borderColor: C.border, ...SHADOW.soft, zIndex: 50,
+  },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, zIndex: 1 },
   searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceSoft, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, height: 46 },
   searchInput: { flex: 1, marginLeft: 8, fontSize: 13, color: C.text },
-  markBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.primary, paddingHorizontal: 18, height: 46, borderRadius: 12, gap: 6, ...SHADOW.card },
-  markBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  markBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.primary, paddingHorizontal: 16, height: 46, borderRadius: 12, gap: 6, ...SHADOW.card },
+  markBtnText: { color: '#fff', fontSize: 12.5, fontWeight: '700' },
 
-  excelActionsRow: { flexDirection: 'row', gap: 8, marginTop: 12, paddingBottom: 2 },
   excelActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 38, borderRadius: 20, ...SHADOW.soft },
   excelActionBtnOutline: { backgroundColor: C.surface, borderWidth: 1.4 },
   excelActionText: { fontSize: 11.5, fontWeight: '800' },
 
-  statsSection: { backgroundColor: C.bg, paddingTop: 12, paddingBottom: 4 },
-  statsScopeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 8 },
-  statsScopeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.primarySoft, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
-  statsScopeText: { fontSize: 11.5, fontWeight: '800', color: C.primaryDark },
-  statsClearBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 5 },
-  statsClearText: { fontSize: 11, fontWeight: '700', color: C.textMuted },
-  statsEmptyHint: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderStyle: 'dashed', borderRadius: 12, padding: 12 },
-  statsEmptyHintText: { flex: 1, fontSize: 11.5, color: C.textMuted, fontWeight: '600' },
+  // Floating action button (speed dial) for Excel actions
+  fabWrap: { position: 'absolute', right: 18, bottom: 22, alignItems: 'flex-end' },
+  fabMain: { width: 56, height: 56, borderRadius: 28, backgroundColor: C.primary, justifyContent: 'center', alignItems: 'center', ...SHADOW.fab },
+  fabActions: { marginBottom: 14, gap: 12, alignItems: 'flex-end' },
+  fabActionRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  fabLabelChip: { backgroundColor: C.text, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, ...SHADOW.soft },
+  fabLabelText: { color: '#fff', fontSize: 11.5, fontWeight: '700' },
+  fabMini: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', ...SHADOW.card },
+
+  // Bottom sheet (day stats)
+  sheetOverlay: { flex: 1, backgroundColor: C.overlay, justifyContent: 'flex-end' },
+  sheetCard: { backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, paddingBottom: 26, ...SHADOW.raised },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: 'center', marginBottom: 14 },
+  sheetHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  statsScopeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.primarySoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  statsScopeText: { fontSize: 12, fontWeight: '800', color: C.primaryDark },
+  statsClearBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center' },
 
   statCard: { minWidth: 92, backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, paddingVertical: 10, paddingHorizontal: 14, alignItems: 'flex-start' },
   statCardTop: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   statValue: { fontSize: 17, fontWeight: '800', color: C.text },
   statLabel: { fontSize: 10.5, color: C.textMuted, fontWeight: '700', marginTop: 3, letterSpacing: 0.2 },
 
-  legendRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: C.bg },
-  legendHintText: { fontSize: 10, color: C.textFaint, fontWeight: '600', fontStyle: 'italic' },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { fontSize: 10.5, color: C.textMuted, fontWeight: '700' },
+  legendModalRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  legendModalText: { fontSize: 13, color: C.text, fontWeight: '600' },
+  legendDot: { width: 12, height: 12, borderRadius: 6 },
+  legendHintText: { fontSize: 11.5, color: C.textMuted, lineHeight: 17, marginTop: 6, fontWeight: '500' },
 
   emptyState: { alignItems: 'center', padding: 40, marginTop: 20 },
   emptyTitle: { fontSize: 16, fontWeight: '800', color: C.text, marginTop: 12 },
@@ -1473,7 +1538,7 @@ const styles = StyleSheet.create({
   uploadChooseBtnText: { fontSize: 12.5, fontWeight: '800', color: C.primary },
 
   // Form Base
-  inputWrapper: { marginBottom: 16 },
+  inputWrapper: { marginBottom: 0 },
   inputLabel: { fontSize: 10, fontWeight: '800', color: C.textMuted, marginBottom: 6, letterSpacing: 0.5 },
   dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, height: 46, backgroundColor: C.surfaceSoft },
   dropdownHeaderActive: { borderColor: C.primary },

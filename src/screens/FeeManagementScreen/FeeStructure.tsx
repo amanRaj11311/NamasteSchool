@@ -20,7 +20,7 @@ const C = {
   textMuted: '#5B667A',
   textFaint: '#9AA4B6',
 
-  primary: '#E11D48',
+  primary: '#B3122A',
   primaryDark: '#BE123C',
   primarySoft: '#FFF1F3',
   primaryBorder: '#FBD1D9',

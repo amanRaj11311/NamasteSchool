@@ -132,7 +132,7 @@ const ADMIN_MENU: MenuSection[] = [
         children: [
           { routeName: "Classes", label: "Classes", icon: "layers", component: ClassesScreen, module: "classes" },
           { routeName: "Class Timetable", label: "Class Timetable", icon: "calendar", component: ClassTimetableScreen, module: "timetable" },
-          { routeName: "ClassAttendance", label: "Class Attendance", icon: "check-square", component: ClassAttendanceScreen, module: "attendance" },
+          { routeName: "Class Attendance", label: "Class Attendance", icon: "check-square", component: ClassAttendanceScreen, module: "attendance" },
           { routeName: "Class Exams", label: "Class Exams", icon: "edit-2", component: ClassExamsScreen, module: "exams" },
           { routeName: "Class Results", label: "Class Results", icon: "bar-chart-2", component: ClassResultsScreen, module: "results" },
           { routeName: "Class Diary", label: "Class Diary", icon: "book-open", component: ClassDiaryScreen, module: "diary" },
@@ -250,6 +250,31 @@ const ADMIN_MENU: MenuSection[] = [
     ],
   },
 ];
+const C = {
+  bg: '#F6F6F9',
+  surface: '#FFFFFF',
+  surfaceSoft: '#FBFBFD',
+  surfaceSunken: '#F1F2F6',
+  border: '#E8E9EF',
+  borderStrong: '#DBDDE6',
+
+  text: '#14161F',
+  textMuted: '#6B7280',
+  textFaint: '#9AA0AC',
+
+  primary: '#B3122A',
+  primaryBright: '#D2263F',
+  primaryDeep: '#7A0C1D',
+  primarySoft: '#FBEEEF',
+  primaryTint: '#F3D6D9',
+
+  ink: '#0D0F16',
+  inkSoft: '#181B24',
+
+  gold: '#C7A466',
+};
+ 
+const BRAND_GRADIENT = [C.primary, C.primaryDeep];
 
 // Web: STUDENT_NAV_SECTIONS
 const STUDENT_MENU: MenuSection[] = [
@@ -569,13 +594,13 @@ function SchoolSwitcherModal() {
           <TouchableWithoutFeedback>
             <View style={[styles.pickerContainer, { marginTop: headerBottom, marginHorizontal: horizontalMargin, width: containerWidth }]}>
               <View style={styles.pickerHeader}>
-                <Feather name="briefcase" size={15} color="#ef4444" />
+                <Feather name="briefcase" size={15}color={C.primary}/>
                 <Text style={styles.pickerHeaderText}>Select School Branch</Text>
                 <TouchableOpacity onPress={closePicker} hitSlop={8} style={{ marginLeft: 'auto' }}><Feather name="x" size={18} color="#9CA3AF" /></TouchableOpacity>
               </View>
               <ScrollView style={{ maxHeight: '60%' }} showsVerticalScrollIndicator={false}>
                 {loadingSchools ? (
-                  <ActivityIndicator style={{ padding: 24 }} color="#ef4444" />
+                  <ActivityIndicator style={{ padding: 24 }} color={C.primary} />
                 ) : schools.length === 0 ? (
                   <Text style={styles.pickerEmptyText}>No schools found.</Text>
                 ) : (
@@ -585,7 +610,7 @@ function SchoolSwitcherModal() {
                         <Text style={[styles.pickerItemText, selectedSchoolId === s._id && styles.pickerItemTextActive]} numberOfLines={1}>{s.name}</Text>
                         {!!s.code && <Text style={styles.pickerItemSub}>{s.code}</Text>}
                       </View>
-                      {selectedSchoolId === s._id && <Feather name="check" size={16} color="#ef4444" />}
+                      {selectedSchoolId === s._id && <Feather name="check" size={16} color={C.primary} />}
                     </TouchableOpacity>
                   ))
                 )}
@@ -618,7 +643,7 @@ function HeaderSchoolInfo({ availableWidth }: { availableWidth: number }) {
         <LinearGradient colors={['#FEF2F2', '#FEE2E2']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.pillBase, styles.schoolPill, { maxWidth: schoolPillMaxWidth }]}>
           <View style={styles.schoolPillIconWrap}><Feather name="home" size={11} color="#ffffff" /></View>
           <Text style={styles.schoolPillText} numberOfLines={1}>{loadingSchools ? 'Loading...' : schoolName || 'Select School'}</Text>
-          {isSuperAdmin && <Feather name="chevron-down" size={12} color="#ef4444" />}
+          {isSuperAdmin && <Feather name="chevron-down" size={12} color={C.primary} />}
         </LinearGradient>
       </TouchableOpacity>
     </ScrollView>
@@ -647,7 +672,7 @@ function AppHeader({ navigation, route, options }: { navigation: any, route: any
     <View ref={containerRef} onLayout={handleContainerLayout} style={[styles.appHeader, { paddingTop: insets.top }]}>
       <View style={styles.appHeaderRow}>
         <TouchableOpacity onPress={() => navigation.openDrawer()} style={styles.headerIconBtn} hitSlop={8}>
-          <Feather name="menu" size={22} color="#111827" />
+          <Feather name="menu" size={22} color={C.primary} />
         </TouchableOpacity>
 
         <View style={styles.appHeaderMiddle} onLayout={handleMiddleLayout}>
@@ -666,11 +691,11 @@ function AppHeader({ navigation, route, options }: { navigation: any, route: any
 
 const DrawerMenuIcon = ({ active, icon }: { active: boolean; icon: string }) =>
   active ? (
-    <LinearGradient colors={['#ef4444', '#f87171']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.drawerIconBox}>
+    <LinearGradient colors={BRAND_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.drawerIconBox}>
       <Feather name={icon as any} size={16} color="#ffffff" />
     </LinearGradient>
   ) : (
-    <View style={styles.drawerIconBox}><Feather name={icon as any} size={16} color="#ef4444" /></View>
+    <View style={styles.drawerIconBox}><Feather name={icon as any} size={16}color={C.primary} /></View>
   );
 
 const containsRoute = (item: MenuItem, routeName: string): boolean => {
@@ -741,7 +766,7 @@ const HeaderRightAvatar = () => {
                 </View>
                 <View style={styles.dropdownDivider} />
                 <TouchableOpacity style={styles.dropdownLogoutBtn} onPress={() => { setShowProfileMenu(false); handleGlobalLogout(navigation); }}>
-                  <Feather name="log-out" size={16} color="#ef4444" />
+                  <Feather name="log-out" size={16} color={C.primary} />
                   <Text style={styles.dropdownLogoutText}>Secure Logout</Text>
                 </TouchableOpacity>
               </View>
@@ -770,7 +795,7 @@ function DrawerMenuNode({ item, depth, path, currentRouteName, expandedGroups, t
     }
     return (
       <TouchableOpacity style={[styles.childDrawerItem, active && styles.childDrawerItemActive]} onPress={() => item.routeName && navigation.navigate(item.routeName)}>
-        <Feather name={item.icon as any} size={14} color={active ? "#ef4444" : "#9CA3AF"} style={{ marginRight: 12 }} />
+        <Feather name={item.icon as any} size={14} color={active ? C.primary : "#9CA3AF"} style={{ marginRight: 12 }} />
         <Text style={[styles.childDrawerItemText, active && styles.childDrawerItemTextActive]}>{item.label}</Text>
         {active && <View style={styles.childActiveDot} />}
       </TouchableOpacity>
@@ -785,7 +810,7 @@ function DrawerMenuNode({ item, depth, path, currentRouteName, expandedGroups, t
         <TouchableOpacity style={[styles.drawerItem, isActive && styles.drawerItemActive]} onPress={() => toggleGroup(nodeKey)}>
           <DrawerMenuIcon active={isActive} icon={item.icon} />
           <Text style={[styles.drawerItemText, isActive && styles.drawerItemTextActive]}>{item.label}</Text>
-          <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={16} color={isActive ? "#ef4444" : "#9CA3AF"} />
+          <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={16} color={isActive ? C.primary : "#9CA3AF"} />
         </TouchableOpacity>
       ) : (
         <TouchableOpacity style={[styles.childDrawerItem, isActive && styles.childDrawerItemActive]} onPress={() => toggleGroup(nodeKey)}>
@@ -854,9 +879,23 @@ function CustomDrawerContent(props: any) {
 
   return (
     <SafeAreaView style={styles.drawerContainer}>
-      <DrawerContentScrollView {...props} contentContainerStyle={{ paddingTop: 0 }} showsVerticalScrollIndicator={false}>
-        <LinearGradient colors={['#ef4444', '#f87171']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.logoHeader, { paddingTop: insets.top + 18 }]}>
-          <View style={styles.logoImageContainer}>
+  <DrawerContentScrollView
+    {...props}
+    contentContainerStyle={{ paddingTop: 0 }}
+    showsVerticalScrollIndicator={false}
+  >
+    <LinearGradient
+      colors={BRAND_GRADIENT}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[
+        styles.logoHeader,
+        {
+          marginTop: insets.top + 6,
+          paddingTop: 18,
+        },
+      ]}
+    >         <View style={styles.logoImageContainer}>
             <Image source={logoSource} style={styles.logoImage} resizeMode="contain" />
           </View>
           <View style={styles.logoTextContainer}>
@@ -883,7 +922,7 @@ function CustomDrawerContent(props: any) {
           <View style={styles.footerRoleBadge}><Text style={styles.footerRole}>{userRole || mode}</Text></View>
         </View>
         <TouchableOpacity onPress={() => handleGlobalLogout(props.navigation)} style={styles.footerLogoutBtn}>
-          <Feather name="log-out" size={18} color="#ef4444" />
+          <Feather name="log-out" size={18} color={C.primary} />
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -893,7 +932,7 @@ function CustomDrawerContent(props: any) {
 function NoModulesAssignedScreen({ navigation }: { navigation: any }) {
   return (
     <SafeAreaView style={styles.noAccessContainer}>
-      <View style={styles.noAccessIconCircle}><Feather name="shield-off" size={32} color="#ef4444" /></View>
+      <View style={styles.noAccessIconCircle}><Feather name="shield-off" size={32} color={C.primary} /></View>
       <Text style={styles.noAccessTitle}>No Modules Assigned</Text>
       <Text style={styles.noAccessMessage}>Your account doesn't have access to any modules yet. Please contact your school administrator.</Text>
       <TouchableOpacity style={styles.noAccessLogoutBtn} onPress={() => handleGlobalLogout(navigation)}>
@@ -1012,7 +1051,7 @@ function DrawerRoot() {
   if (menuLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ef4444" />
+        <ActivityIndicator size="large" color={C.primary} />
         <Text style={{ marginTop: 12, color: "#6B7280" }}>Loading accessible modules...</Text>
       </View>
     );
@@ -1080,26 +1119,56 @@ const styles = StyleSheet.create({
   noAccessIconCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 20 },
   noAccessTitle: { fontSize: 20, fontWeight: "800", color: "#111827", marginBottom: 10, textAlign: "center" },
   noAccessMessage: { fontSize: 14, color: "#6B7280", textAlign: "center", lineHeight: 21, marginBottom: 28 },
-  noAccessLogoutBtn: { flexDirection: "row", alignItems: "center", backgroundColor: "#ef4444", paddingHorizontal: 22, paddingVertical: 12, borderRadius: 24 },
+  noAccessLogoutBtn: { flexDirection: "row", alignItems: "center", backgroundColor: C.primary, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 24 },
   noAccessLogoutText: { color: "#ffffff", fontWeight: "700", fontSize: 14 },
 
-  appHeader: {
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ECEEF1',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 3,
-  },
+ appHeader: {
+  backgroundColor: C.surface,
+  borderBottomWidth: 1,
+  borderBottomColor: C.border,
+  shadowColor: '#0F172A',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.05,
+  shadowRadius: 8,
+  elevation: 3,
+},
   appHeaderRow: { flexDirection: 'row', alignItems: 'center', height: 56, paddingHorizontal: 12 },
   appHeaderMiddle: { flex: 1, flexShrink: 1, minWidth: 0, overflow: 'hidden', marginHorizontal: 8, justifyContent: 'center' },
-  headerModuleTitle: { fontSize: 18, fontWeight: '800', color: '#111827', marginLeft: 4 },
-  headerIconBtn: { width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F9FAFB' },
+headerModuleTitle: {
+  fontSize: 18,
+  fontWeight: '800',
+  color: C.text,
+  letterSpacing: 0.2,
+  marginLeft: 4,
+},  
+headerIconBtn: {
+  width: 38,
+  height: 38,
+  borderRadius: 12,
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: C.primarySoft,
+},
+headerAvatar: {
+  width: 36,
+  height: 36,
+  borderRadius: 18,
+  backgroundColor: C.primary,
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderWidth: 2,
+  borderColor: C.primaryTint,
+  shadowColor: C.primary,
+  shadowOpacity: 0.20,
+  shadowRadius: 8,
+  elevation: 3,
+},
 
-  headerAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#ef4444', justifyContent: 'center', alignItems: 'center' },
-  headerAvatarText: { color: '#ffffff', fontSize: 13, fontWeight: '800' },
+headerAvatarText: {
+  color: '#FFFFFF',
+  fontSize: 13,
+  fontWeight: '800',
+},
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)' },
   profileDropdown: { position: 'absolute', backgroundColor: '#ffffff', borderRadius: 16, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10, borderWidth: 1, borderColor: '#F3F4F6' },
@@ -1108,16 +1177,33 @@ const styles = StyleSheet.create({
   dropdownEmail: { fontSize: 12, color: '#6B7280', marginTop: 2, fontWeight: '600' },
   dropdownDivider: { height: 1, backgroundColor: '#E5E7EB', marginBottom: 8 },
   dropdownLogoutBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8, backgroundColor: '#FEF2F2', borderRadius: 10, marginTop: 8, justifyContent: 'center' },
-  dropdownLogoutText: { color: '#ef4444', fontSize: 14, fontWeight: '800', marginLeft: 8 },
+  dropdownLogoutText: { color: C.primary, fontSize: 14, fontWeight: '800', marginLeft: 8 },
 
   headerPillsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 8 },
   pillBase: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 32, borderRadius: 999, overflow: 'hidden' },
   sessionPill: { borderWidth: 1, borderColor: '#E5E7EB' },
   sessionPillText: { fontSize: 12, fontWeight: '700', color: '#374151' },
-  schoolPill: { borderWidth: 1, borderColor: '#FECACA' },
-  schoolPillIconWrap: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#ef4444', justifyContent: 'center', alignItems: 'center' },
-  schoolPillText: { fontSize: 12, fontWeight: '800', color: '#ef4444', flexShrink: 1 },
+schoolPill: {
+  borderWidth: 1,
+  borderColor: C.primaryTint,
+  backgroundColor: C.primarySoft,
+},
 
+schoolPillIconWrap: {
+  width: 18,
+  height: 18,
+  borderRadius: 9,
+  backgroundColor: C.primary,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+
+schoolPillText: {
+  fontSize: 12,
+  fontWeight: '800',
+  color: C.primary,
+  flexShrink: 1,
+},
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(17,24,39,0.5)' },
   pickerContainer: { backgroundColor: '#ffffff', borderRadius: 16, padding: 14, elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 16, borderWidth: 1, borderColor: '#F3F4F6' },
   pickerHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 10, marginBottom: 6, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
@@ -1125,36 +1211,88 @@ const styles = StyleSheet.create({
   pickerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 6 },
   pickerItemBorder: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   pickerItemText: { fontSize: 14, fontWeight: '600', color: '#374151' },
-  pickerItemTextActive: { color: '#ef4444', fontWeight: '800' },
+  pickerItemTextActive: { color: C.primary, fontWeight: '800' },
   pickerItemSub: { fontSize: 11, color: '#9CA3AF', marginTop: 2, fontWeight: '600' },
   pickerEmptyText: { textAlign: 'center', padding: 20, color: '#9CA3AF', fontWeight: '500' },
 
-  logoHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 24, borderBottomLeftRadius: 24, borderBottomRightRadius: 0 },
-  logoImageContainer: { width: 50, height: 50, borderRadius: 14, backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 6, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  logoImage: { width: 36, height: 36, borderRadius: 8 },
-  logoTextContainer: { marginLeft: 16, flex: 1 },
-  logoTitle: { fontSize: 19, fontWeight: '800', color: '#ffffff' },
-  logoSubtitle: { fontSize: 10, color: 'rgba(255,255,255,0.85)', fontWeight: '800', marginTop: 3, letterSpacing: 0.8, textTransform: 'uppercase' },
+logoHeader: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: 20,
+  paddingTop: 18,
+  paddingBottom: 24,
 
+  borderTopWidth: 1,
+  borderTopColor: '#E8E9EF',
+
+  borderBottomLeftRadius: 24,
+  borderBottomRightRadius: 0,
+},logoImageContainer: {
+  width: 64,
+  height: 64,
+  borderRadius: 16,
+  backgroundColor: '#FFFFFF',
+  shadowColor: C.primary,
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: 0.20,
+  shadowRadius: 10,
+  elevation: 6,
+  justifyContent: 'center',
+  alignItems: 'center',
+  overflow: 'hidden',
+},
+
+logoImage: {
+  width: 52,
+  height: 52,
+  borderRadius: 10,
+},  logoTextContainer: { marginLeft: 16, flex: 1 },
+logoTitle: {
+  fontSize: 19,
+  fontWeight: '800',
+  color: '#FFFFFF',
+  letterSpacing: 0.2,
+},
+
+logoSubtitle: {
+  fontSize: 10,
+  color: 'rgba(255,255,255,0.88)',
+  fontWeight: '800',
+  marginTop: 3,
+  letterSpacing: 0.8,
+  textTransform: 'uppercase',
+},
   menuContainer: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40 },
   sectionHeaderTitle: { fontSize: 10, fontWeight: '800', color: '#9CA3AF', letterSpacing: 1, marginTop: 8, marginBottom: 10, marginLeft: 12 },
   drawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, marginBottom: 4 },
-  drawerItemActive: { backgroundColor: '#FEF2F2' },
-  drawerIconBox: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#F9FAFB', justifyContent: 'center', alignItems: 'center', marginRight: 14, overflow: 'hidden' },
+drawerItemActive: {
+  backgroundColor: C.primarySoft,
+},
+
+drawerItemTextActive: {
+  color: C.primary,
+},  drawerIconBox: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#F9FAFB', justifyContent: 'center', alignItems: 'center', marginRight: 14, overflow: 'hidden' },
   drawerItemText: { fontSize: 14, fontWeight: '700', color: '#4B5563', flex: 1 },
-  drawerItemTextActive: { color: '#ef4444' },
 
   childrenContainer: { marginLeft: 28, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: '#F3F4F6', marginBottom: 8, marginTop: 4 },
   childDrawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10 },
   childDrawerItemActive: { backgroundColor: '#F9FAFB' },
   childDrawerItemText: { fontSize: 13, fontWeight: '600', color: '#6B7280', flex: 1 },
-  childDrawerItemTextActive: { color: '#ef4444', fontWeight: '800' },
-  childActiveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#ef4444' },
+childDrawerItemTextActive: {
+  color: C.primary,
+  fontWeight: '800',
+},
 
+childActiveDot: {
+  width: 6,
+  height: 6,
+  borderRadius: 3,
+  backgroundColor: C.primary,
+},
   footerContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, borderTopWidth: 1, marginLeft: 24, borderTopColor: '#F3F4F6', backgroundColor: '#ffffff' },
   footerTextContainer: { flex: 1 },
   footerName: { fontSize: 15, fontWeight: '800', color: '#111827' },
   footerRoleBadge: { backgroundColor: '#E0F2FE', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 6 },
-  footerRole: { fontSize: 10, fontWeight: '800', color: '#ef4444', textTransform: 'uppercase' },
-  footerLogoutBtn: { padding: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#FEE2E2', shadowColor: '#ef4444', shadowOpacity: 0.1, shadowRadius: 4, elevation: 1 },
+  footerRole: { fontSize: 10, fontWeight: '800', color: C.primary, textTransform: 'uppercase' },
+  footerLogoutBtn: { padding: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#FEE2E2', shadowColor: C.primary, shadowOpacity: 0.1, shadowRadius: 4, elevation: 1 },
 });

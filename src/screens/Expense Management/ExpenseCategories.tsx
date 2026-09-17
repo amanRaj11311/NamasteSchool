@@ -11,7 +11,7 @@ import { API_BASE } from '../../network/api';
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
-  primary: '#ef4444', primarySoft: '#FEF2F2',
+  primary: '#B3122A', primarySoft: '#FEF2F2',
   green: '#10B981', greenSoft: '#D1FAE5',
   slate: '#64748B', slateSoft: '#F1F5F9',
 };
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 12, color: C.textMuted, marginTop: 2 },
   
   filterSection: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border, zIndex: 10 },
-  addBtnFull: { backgroundColor: '#111827', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, elevation: 2 },
+  addBtnFull: { backgroundColor: '#B3122A', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, elevation: 2 },
   addBtnTextFull: { color: '#fff', fontSize: 13, fontWeight: '800', marginLeft: 6 },
 
   listContent: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 16 },

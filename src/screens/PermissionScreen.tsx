@@ -200,7 +200,7 @@ export default function PermissionsScreen() {
 
               {hasPermission('delete') && (
                 <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(perm._id, item.module, perm.action)}>
-                  <Feather name="trash-2" size={16} color="#ef4444" />
+                  <Feather name="trash-2" size={16} color='#B3122A' />
                 </TouchableOpacity>
               )}
             </View>
@@ -215,7 +215,7 @@ export default function PermissionsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Feather name="lock" size={24} color="#ef4444" />
+          <Feather name="lock" size={24} color="#B3122A" />
           <Text style={styles.title}>System Permissions</Text>
         </View>
         <Text style={styles.subtitle}>Manage global system modules and their available access actions.</Text>
@@ -251,14 +251,14 @@ export default function PermissionsScreen() {
 
       {/* List */}
       {loading ? (
-        <View style={styles.center}><ActivityIndicator size="large" color="#ef4444" /></View>
+        <View style={styles.center}><ActivityIndicator size="large" color="#B3122A" /></View>
       ) : (
         <FlatList
           data={groupedData}
           keyExtractor={(item) => item.module}
           renderItem={renderModuleCard}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#ef4444']} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#B3122A']} />}
           ListEmptyComponent={
             <View style={styles.center}>
               <Feather name="shield-off" size={40} color="#D1D5DB" />
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   actionBar: { flexDirection: 'row', paddingHorizontal: 16, alignItems: 'center', gap: 10, zIndex: 10, marginTop: 16 },
   searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 12, height: 46, elevation: 1 },
   searchInput: { flex: 1, marginLeft: 8, fontSize: 14, color: '#111827' },
-  addBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ef4444', paddingHorizontal: 16, height: 46, borderRadius: 12, gap: 6, elevation: 2 },
+  addBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#B3122A', paddingHorizontal: 16, height: 46, borderRadius: 12, gap: 6, elevation: 2 },
   addBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   
   statsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, marginTop: 12 },
@@ -386,16 +386,16 @@ const styles = StyleSheet.create({
   
   inputWrapper: { marginBottom: 16 },
   inputLabel: { fontSize: 12, fontWeight: '700', color: '#4B5563', marginBottom: 6, marginLeft: 2 },
-  asterisk: { color: '#ef4444' },
+  asterisk: { color: '#B3122A' },
   input: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, height: 48, backgroundColor: '#fff', fontSize: 14, color: '#111827' },
-  inputError: { borderColor: '#ef4444', backgroundColor: '#FEF2F2' },
-  errorText: { color: '#ef4444', fontSize: 12, marginTop: 4, fontWeight: '500' },
+  inputError: { borderColor: '#B3122A', backgroundColor: '#FEF2F2' },
+  errorText: { color: '#B3122A', fontSize: 12, marginTop: 4, fontWeight: '500' },
   
   suggestionRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   suggestionLabel: { fontSize: 11, color: '#9CA3AF', fontWeight: '600' },
   suggestionChip: { backgroundColor: '#F3F4F6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB' },
   suggestionText: { fontSize: 11, color: '#4B5563', fontWeight: '600', textTransform: 'capitalize' },
 
-  saveBtnFull: { backgroundColor: '#ef4444', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2 },
+  saveBtnFull: { backgroundColor: '#B3122A', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2 },
   saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

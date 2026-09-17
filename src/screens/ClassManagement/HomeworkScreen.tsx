@@ -9,22 +9,42 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import DocumentPicker from '@react-native-documents/picker';
 import axios from 'axios';
 import { API_BASE } from '../../network/api';
+import { COLORS } from '../../constants/theme';
 
 
 const C = {
-  bg: '#F4F6F9',
+  bg: '#F6F6F9',
   surface: '#FFFFFF',
-  surfaceSoft: '#F9FAFB',
-  border: '#ECEFF3',
-  text: '#101828',
+  surfaceSoft: '#FBFBFD',
+  surfaceSunken: '#F1F2F6',
+  border: '#E8E9EF',
+  borderStrong: '#DBDDE6',
+
+  text: '#14161F',
   textMuted: '#6B7280',
-  textFaint: '#9CA3AF',
-  primary: '#E11D2E',
-  primarySoft: '#FEECEC',
+  textFaint: '#9AA0AC',
+
+  // Brand red — used sparingly now, as an accent rather than a wash.
+  primary: '#B3122A',
+  primaryBright: '#D2263F',
+  primaryDeep: '#7A0C1D',
+  primarySoft: '#FBEEEF',
+  primaryTint: '#F3D6D9',
+
+  // Ink — the new anchor surface (header, dark buttons, active states).
+  ink: '#0D0F16',
+  inkSoft: '#181B24',
+  inkFaint: 'rgba(255,255,255,0.62)',
+
+  gold: '#C7A466',
+  goldSoft: 'rgba(199,164,102,0.14)',
+
   blue: '#0EA5E9',
-  blueSoft: '#E0F2FE',
-  green: '#10B981',
-  greenSoft: '#D1FAE5',
+  blueSoft: '#E7F6FE',
+  green: '#0F9D6B',
+  greenSoft: '#E6F8F1',
+  slate: '#475467',
+  slateSoft: '#F1F3F7',
 };
 
 type Option = { label: string; value: string };
@@ -623,7 +643,7 @@ const styles = StyleSheet.create({
   tagRow: { flexDirection: 'row', gap: 7 },
   tagChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: C.surfaceSoft, borderWidth: 1, borderColor: C.border, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   tagChipExpanded: { backgroundColor: 'rgba(255,255,255,0.16)', borderColor: 'rgba(255,255,255,0.3)' },
-  tagChipText: { fontSize: 10.5, fontWeight: '700', color: '#4B5563' },
+  tagChipText: { fontSize: 10.5, fontWeight: '700', color: '#14161F' },
 
   badgeCol: { alignItems: 'flex-end', gap: 6 },
   countBadge: { backgroundColor: C.blueSoft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
@@ -635,11 +655,11 @@ const styles = StyleSheet.create({
 
   dueRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 15, paddingBottom: 15 },
   dueText: { fontSize: 12, fontWeight: '700', color: C.textMuted },
-  dueTextOverdue: { color: '#DC2626' },
+  dueTextOverdue: { color: COLORS.primary },
 
   detailPane: { padding: 15, borderTopWidth: 1, borderColor: C.border, backgroundColor: C.surfaceSoft },
   detailMeta: { fontSize: 12, fontWeight: '700', color: C.textMuted, marginBottom: 8 },
-  detailDesc: { fontSize: 13, color: '#374151', lineHeight: 19, marginBottom: 12 },
+  detailDesc: { fontSize: 13, color: '#14161F', lineHeight: 19, marginBottom: 12 },
   detailSectionLabel: { fontSize: 10, fontWeight: '800', color: C.textMuted, letterSpacing: 0.5 },
 
   attachmentRow: { marginBottom: 12 },
@@ -676,7 +696,7 @@ const styles = StyleSheet.create({
   formScroll: { padding: 20 },
 
   inputWrapper: { marginBottom: 16 },
-  inputLabel: { fontSize: 12, fontWeight: '700', color: '#4B5563', marginBottom: 6, marginLeft: 2 },
+  inputLabel: { fontSize: 12, fontWeight: '700', color: '#14161F', marginBottom: 6, marginLeft: 2 },
   input: { borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, height: 48, backgroundColor: C.surfaceSoft, fontSize: 14, color: C.text },
   row: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 16, zIndex: 2 },
 
@@ -694,7 +714,7 @@ const styles = StyleSheet.create({
   dropdownPlaceholder: { fontSize: 13.5, color: C.textFaint },
   dropdownListContainer: { position: 'absolute', top: 72, left: 0, right: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, elevation: 6, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8 },
   dropdownItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 13, borderBottomWidth: 1, borderBottomColor: C.border },
-  dropdownItemText: { fontSize: 14, color: '#374151', fontWeight: '500' },
+  dropdownItemText: { fontSize: 14, color:  '#14161F', fontWeight: '500' },
   textBrand: { color: C.primary, fontWeight: '700' },
 
   uploadBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderStyle: 'dashed', borderRadius: 12, padding: 14, backgroundColor: C.surfaceSoft, gap: 8, marginTop: 6, marginBottom: 16 },

@@ -22,7 +22,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 import { API_BASE } from '../../network/api';
 import { useNavigation } from '@react-navigation/native';
-import { COLORS, RADIUS, SPACING, FONT, SHADOW, TOUCH_TARGET, isSmallDevice } from '../../constants/theme';
+import { RADIUS, SPACING, FONT, SHADOW, TOUCH_TARGET, } from '../../constants/theme';
 
 
 // --- Types ---
@@ -1209,6 +1209,74 @@ export default function ClassesScreen() {
     </SafeAreaView>
   );
 }
+const COLORS = {
+  
+  background: '#F6F6F9',
+  surface: '#FFFFFF',
+  surfaceSoft: '#FBFBFD',
+  surfaceSunken: '#F1F2F6',
+  border: '#E8E9EF',
+  borderStrong: '#DBDDE6',
+
+  text: '#14161F',
+  textMuted: '#6B7280',
+  textFaint: '#9AA0AC',
+
+  // Brand red — used sparingly now, as an accent rather than a wash.
+  primary: '#B3122A',
+  primaryBright: '#D2263F',
+  primaryDeep: '#7A0C1D',
+  primarySoft: '#FBEEEF',
+  primaryTint: '#F3D6D9',
+
+  // Ink — the new anchor surface (header, dark buttons, active states).
+  ink: '#0D0F16',
+  inkSoft: '#181B24',
+  inkFaint: 'rgba(255,255,255,0.62)',
+
+  gold: '#C7A466',
+  goldSoft: 'rgba(199,164,102,0.14)',
+
+  blue: '#0EA5E9',
+  blueSoft: '#E7F6FE',
+  green: '#0F9D6B',
+  greenSoft: '#E6F8F1',
+  slate: '#475467',
+  slateSoft: '#F1F3F7',
+
+  
+
+  // Borders
+  borderSoft: '#E8E9EF',
+  borderFaint: '#EEF0F4',
+
+  // Text
+  body: '#181B24',
+  muted: '#6B7280',
+  faint: '#9AA0AC',
+
+  // 🔴 Staff Attendance Red Theme
+  primarySoftBorder: '#E9BFC5',
+
+  // Other semantic colors
+  success: '#059669',
+  successSoft: '#ECFDF5',
+  successSoftBorder: '#A7F3D0',
+
+  warning: '#D99A16',
+  warningSoft: '#FFF8E1',
+
+  info: '#2563EB',
+  infoSoft: '#EFF6FF',
+
+  secondary: '#475569',
+  secondarySoft: '#F1F5F9',
+
+  pink: '#DB2777',
+  pinkSoft: '#FDF2F8',
+
+  overlay: 'rgba(13, 15, 22, 0.45)',
+};
 
 // --- Styles ---
 const styles = StyleSheet.create({
@@ -1216,30 +1284,44 @@ const styles = StyleSheet.create({
   center: { padding: 40, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: SPACING.md, color: COLORS.muted, fontSize: FONT.small, fontWeight: '600' },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: SPACING.xl,
-    paddingBottom: SPACING.lg,
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderSoft,
-  },
-  headerIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.primarySoft,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.md,
-  },
-  title: { fontSize: FONT.h1, fontWeight: '800', color: COLORS.ink },
-  subtitle: { fontSize: FONT.tiny, color: COLORS.faint, marginTop: 2 },
+header: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  padding: SPACING.xl,
+  paddingBottom: SPACING.lg,
+  backgroundColor: COLORS.surface,
+  borderBottomWidth: 1,
+  borderBottomColor: COLORS.borderSoft,
+},
 
+headerIconWrap: {
+  width: 40,
+  height: 40,
+  borderRadius: RADIUS.md,
+  backgroundColor: COLORS.primarySoft,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginRight: SPACING.md,
+},
+
+title: {
+  fontSize: FONT.h1,
+  fontWeight: '800',
+  color: COLORS.ink,
+  letterSpacing: 0.2,
+},
+
+subtitle: {
+  fontSize: FONT.tiny,
+  color: COLORS.muted,
+  marginTop: 2,
+  fontWeight: '500',
+},
   viewToggle: { flexDirection: 'row', backgroundColor: COLORS.background, borderRadius: RADIUS.pill, padding: 3, borderWidth: 1, borderColor: COLORS.borderSoft, marginLeft: SPACING.sm },
   viewToggleBtn: { width: 30, height: 30, borderRadius: RADIUS.pill, justifyContent: 'center', alignItems: 'center' },
-  viewToggleBtnActive: { backgroundColor: COLORS.primary },
+viewToggleBtnActive: {
+  backgroundColor: COLORS.primary,
+},
 
   warningBanner: { flexDirection: 'row', alignItems: 'center', marginHorizontal: SPACING.lg, marginTop: SPACING.lg, padding: SPACING.md, backgroundColor: COLORS.warningSoft, borderRadius: RADIUS.md, borderWidth: 1, borderColor: '#F5D98F' },
   warningTitle: { fontSize: FONT.small, fontWeight: '800', color: COLORS.ink },
@@ -1333,16 +1415,23 @@ kpiValueText: {
   },
   searchInput: { flex: 1, fontSize: FONT.body, color: COLORS.ink },
   addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.lg,
-    height: TOUCH_TARGET,
-    borderRadius: RADIUS.sm,
-    gap: SPACING.xs,
-    ...SHADOW.button,
-  },
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  backgroundColor: COLORS.primary,
+  paddingHorizontal: SPACING.lg,
+  height: TOUCH_TARGET,
+  borderRadius: RADIUS.sm,
+  gap: SPACING.xs,
+  ...SHADOW.button,
+},
+
+primaryBadge: {
+  backgroundColor: COLORS.primary,
+  paddingHorizontal: 14,
+  paddingVertical: 6,
+  borderRadius: RADIUS.pill,
+},
   addBtnCompact: { marginTop: SPACING.sm },
   addBtnDisabled: { opacity: 0.5 },
   addBtnText: { color: '#fff', fontSize: FONT.small, fontWeight: '700' },
@@ -1359,7 +1448,6 @@ kpiValueText: {
 
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: SPACING.lg, gap: SPACING.sm, flexWrap: 'wrap' },
   cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', flex: 1, gap: SPACING.sm },
-  primaryBadge: { backgroundColor: COLORS.primary, paddingHorizontal: 14, paddingVertical: 6, borderRadius: RADIUS.pill },
   primaryBadgeText: { color: '#fff', fontSize: FONT.small, fontWeight: '800' },
   darkBadge: { backgroundColor: COLORS.ink, paddingHorizontal: 12, paddingVertical: 6, borderRadius: RADIUS.pill },
   darkBadgeText: { color: '#fff', fontSize: FONT.tiny, fontWeight: '700' },
@@ -1382,14 +1470,35 @@ kpiValueText: {
     gap: SPACING.sm,
   },
   teacherLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.md },
-  avatarText: { fontSize: FONT.h2, fontWeight: '800', color: '#fff' },
+avatar: {
+  width: 44,
+  height: 44,
+  borderRadius: 22,
+  backgroundColor: COLORS.primary,
+  justifyContent: 'center',
+  alignItems: 'center',
+  marginRight: SPACING.md,
+},  avatarText: { fontSize: FONT.h2, fontWeight: '800', color: '#fff' },
   metaLabel: { fontSize: FONT.micro, fontWeight: '800', color: COLORS.faint, marginBottom: 2, letterSpacing: 0.3 },
   teacherName: { fontSize: FONT.h3, fontWeight: '800', color: COLORS.ink },
   teacherId: { fontSize: FONT.tiny, color: COLORS.muted, fontWeight: '500' },
-  teacherAttBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: COLORS.primarySoftBorder, backgroundColor: COLORS.primarySoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.pill },
-  teacherAttBtnText: { fontSize: FONT.tiny, fontWeight: '800', color: COLORS.primary },
+teacherAttBtn: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 4,
+  borderWidth: 1,
+  borderColor: COLORS.primarySoftBorder,
+  backgroundColor: COLORS.primarySoft,
+  paddingHorizontal: 10,
+  paddingVertical: 6,
+  borderRadius: RADIUS.pill,
+},
 
+teacherAttBtnText: {
+  fontSize: FONT.tiny,
+  fontWeight: '800',
+  color: COLORS.primary,
+},
   metricsList: { gap: SPACING.sm, marginBottom: SPACING.lg },
   metricRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   metricLabel: { fontSize: FONT.small, color: COLORS.muted, fontWeight: '600' },

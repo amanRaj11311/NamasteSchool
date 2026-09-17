@@ -217,7 +217,7 @@ actionBar: {
   alignItems: 'flex-end',
   zIndex: 10,
   elevation: 5,
-},  addBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ef4444', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8, gap: 6, elevation: 2 },
+},  addBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#B3122A', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8, gap: 6, elevation: 2 },
   addBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
   listContent: { paddingHorizontal: 16, paddingBottom: 40 },
@@ -229,7 +229,7 @@ actionBar: {
   schoolSubText: { fontSize: 11, color: '#6B7280', fontWeight: '700', marginTop: 2 },
   yearBadge: { backgroundColor: '#F3F4F6', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, alignSelf: 'flex-start' },
   yearText: { fontSize: 12, fontWeight: '800', color: '#4B5563' },
-  leaveType: { fontSize: 13, color: '#ef4444', fontWeight: '800', marginBottom: 12, marginTop: 12, textTransform: 'uppercase' },
+  leaveType: { fontSize: 13, color: '#B3122A', fontWeight: '800', marginBottom: 12, marginTop: 12, textTransform: 'uppercase' },
 
   statsGrid: { flexDirection: 'row', backgroundColor: '#F9FAFB', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#F3F4F6' },
   statBox: { flex: 1, alignItems: 'center' },
@@ -252,15 +252,15 @@ actionBar: {
   row: { flexDirection: 'row', marginBottom: 16, zIndex: 2 },
   
   dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, height: 48, backgroundColor: '#fff' },
-  dropdownHeaderActive: { borderColor: '#ef4444' },
+  dropdownHeaderActive: { borderColor: '#B3122A' },
   dropdownSelectedText: { fontSize: 14, color: '#111827', fontWeight: '500' },
   dropdownPlaceholder: { fontSize: 14, color: '#9CA3AF' },
   dropdownListContainer: { position: 'absolute', top: 72, left: 0, right: 0, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, elevation: 5 },
   dropdownItem: { padding: 14 },
   borderBottom: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   dropdownItemText: { fontSize: 14, color: '#374151', fontWeight: '500' },
-  textRed: { color: '#ef4444', fontWeight: '700' },
+  textRed: { color: '#B3122A', fontWeight: '700' },
   
-  saveBtnFull: { backgroundColor: '#ef4444', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2 },
+  saveBtnFull: { backgroundColor: '#B3122A', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2 },
   saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

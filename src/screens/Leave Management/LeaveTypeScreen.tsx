@@ -257,7 +257,7 @@ addBtn: {
   flexDirection: 'row',
   alignItems: 'center',
   justifyContent: 'center',
-  backgroundColor: '#ef4444',
+  backgroundColor: '#B3122A',
   paddingHorizontal: 16,
   paddingVertical: 11,
   borderRadius: 10,
@@ -299,18 +299,18 @@ addBtn: {
   row: { flexDirection: 'row', marginBottom: 16, zIndex: 2 },
   
   dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, height: 48, backgroundColor: '#fff' },
-  dropdownHeaderActive: { borderColor: '#ef4444' },
+  dropdownHeaderActive: { borderColor: '#B3122A' },
   dropdownSelectedText: { fontSize: 14, color: '#111827', fontWeight: '500' },
   dropdownPlaceholder: { fontSize: 14, color: '#9CA3AF' },
   dropdownListContainer: { position: 'absolute', top: 72, left: 0, right: 0, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, elevation: 5 },
   dropdownItem: { padding: 14 },
   borderBottom: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   dropdownItemText: { fontSize: 14, color: '#374151', fontWeight: '500' },
-  textRed: { color: '#ef4444', fontWeight: '700' },
+  textRed: { color: '#B3122A', fontWeight: '700' },
   
   toggleBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   toggleLbl: { fontSize: 13, fontWeight: '600', color: '#374151' },
 
-  saveBtnFull: { backgroundColor: '#ef4444', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2 },
+  saveBtnFull: { backgroundColor: '#B3122A', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2 },
   saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

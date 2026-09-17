@@ -13,7 +13,7 @@ import { API_BASE } from '../../network/api';
 const C = {
   bg: '#F4F6F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#101828', textMuted: '#6B7280', textFaint: '#9CA3AF',
-  primary: '#E11D2E', primaryDark: '#B91424', primarySoft: '#FEECEC',
+  primary: '#B3122A', primaryDark: '#B91424', primarySoft: '#FEECEC',
   blue: '#0EA5E9', blueSoft: '#E0F2FE',
   green: '#10B981', greenSoft: '#D1FAE5',
   amber: '#F59E0B', amberSoft: '#FEF3C7',

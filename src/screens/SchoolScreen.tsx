@@ -84,14 +84,15 @@ const initialFormState: SchoolBranch = {
 
 // --- Palette (kept consistent with the rest of the app: brand red) ---
 const COLORS = {
+  
   bg: '#F4F7F9',
   surface: '#FFFFFF',
   border: '#E5E7EB',
   borderSoft: '#F3F4F6',
-  text: '#111827',
+  text: '#14161F',
   textMuted: '#6B7280',
   textFaint: '#9CA3AF',
-  primary: '#ef4444',
+  primary: '#B3122A',
   primarySoft: '#FEF2F2',
   primaryBorder: '#FECACA',
   info: '#3B82F6',
@@ -274,7 +275,7 @@ export default function SchoolScreen() {
           onPress={() => toggleDropdown(fieldKey)}
           activeOpacity={0.8}
         >
-          <Text style={selectedValue ? styles.dropdownSelectedText : styles.dropdownPlaceholder} numberOfLines={1}>
+          <Text style={selectedValue ? styles.dropdownSelectedText : styles.dropdownPlaceholder} numberOfLines={2}>
             {selectedValue?.toString() || `Select...`}
           </Text>
           <Feather name={isOpen ? "chevron-up" : "chevron-down"} size={18} color={COLORS.textMuted} />
@@ -327,8 +328,8 @@ export default function SchoolScreen() {
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.schoolName} numberOfLines={1}>{item.name}</Text>
-          {!!item.nickName && <Text style={styles.schoolNick} numberOfLines={1}>{item.nickName}</Text>}
+          <Text style={styles.schoolName} numberOfLines={2}>{item.name}</Text>
+          {!!item.nickName && <Text style={styles.schoolNick} numberOfLines={2}>{item.nickName}</Text>}
         </View>
         <View style={styles.badgeStack}>
           <View style={styles.codeBadge}><Text style={styles.codeBadgeText}>{item.code}</Text></View>
@@ -820,7 +821,7 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text, marginBottom: 6 },
   emptySubtitle: { fontSize: 13, color: COLORS.textMuted, textAlign: 'center', lineHeight: 19 },
   emptyCta: { marginTop: 20, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.primary, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12 },
-  emptyCtaText: { color: '#fff', fontWeight: '700', fontSize: 13.5 },
+  emptyCtaText: { color: '#14161F', fontWeight: '700', fontSize: 13.5 },
 
   // Add/Edit Form — centered mid-screen dialog
   formOverlay: {
@@ -881,7 +882,7 @@ const styles = StyleSheet.create({
   dropdownPlaceholder: { color: COLORS.textFaint, fontSize: 14 },
   dropdownListContainer: {
     marginTop: 6, borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, backgroundColor: COLORS.surface, overflow: 'hidden',
-    shadowColor: '#0F172A', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3,
+    shadowColor: '#14161F', shadowOpacity: 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 3,
   },
   dropdownSearchBox: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: COLORS.borderSoft, backgroundColor: COLORS.bg },
   dropdownSearchInput: { flex: 1, height: 44, marginLeft: 8, fontSize: 14, color: COLORS.text },

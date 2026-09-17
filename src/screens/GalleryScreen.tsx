@@ -11,7 +11,7 @@ import {API_BASE} from '../network/api';
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
-  primary: '#ef4444', primaryDark: '#DC2626', primarySoft: '#FEF2F2',
+  primary: '#B3122A', primaryDark: '#C5221F', primarySoft: '#FDE8E8',
   blue: '#0EA5E9', blueSoft: '#E0F2FE',
   green: '#10B981', greenSoft: '#D1FAE5',
   slate: '#64748B', slateSoft: '#F1F5F9',
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
   filterSection: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border, zIndex: 10 },
   searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceSoft, borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingHorizontal: 12, height: 44 },
   searchInput: { flex: 1, marginLeft: 8, fontSize: 14, color: C.text },
-  addBtnFull: { backgroundColor: '#ef4444', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, height: 44, borderRadius: 10, marginLeft: 10, elevation: 2 },
+  addBtnFull: { backgroundColor: '#B3122A', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, height: 44, borderRadius: 10, marginLeft: 10, elevation: 2 },
   addBtnTextFull: { color: '#fff', fontSize: 13, fontWeight: '800', marginLeft: 6 },
 
   listContent: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 16 },

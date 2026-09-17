@@ -19,7 +19,7 @@ const C = {
   textMuted: '#5B667A',
   textFaint: '#9AA4B6',
 
-  primary: '#E11D48',
+  primary: '#B3122A',
   primaryDark: '#BE123C',
   primarySoft: '#FFF1F3',
   primaryBorder: '#FBD1D9',
@@ -42,7 +42,7 @@ const C = {
   gold: '#C99A2E',
 };
 
-const AVATAR_PALETTE = ['#E11D48', '#2563EB', '#0F9D63', '#C99A2E', '#7C3AED', '#0891B2'];
+const AVATAR_PALETTE = ['#B3122A', '#2563EB', '#0F9D63', '#C99A2E', '#7C3AED', '#0891B2'];
 
 type Option = { label: string; value: string };
 

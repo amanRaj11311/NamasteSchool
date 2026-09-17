@@ -20,16 +20,13 @@ const ACADEMIC_YEAR_STORAGE_KEY = 'selectedAcademicYearId';
 
 // ---- Brand palette — matches the web app's red gradient (#e52e2e -> #c5221f) ----
 const C = {
-  bg: '#F6F7FB',
+  bg: '#F6F6F9',
   surface: '#FFFFFF',
-  surfaceSoft: '#F1F3F9',
+  surfaceSoft: '#FBFBFD',
+  surfaceSunken: '#F1F2F6',
   border: '#E7E9F2',
-  text: '#12172B',
-  textMuted: '#5D6478',
-  textFaint: '#9AA0B4',
-  primary: '#E52E2E',
-  primaryDark: '#C5221F',
-  primarySoft: '#FDE8E8',
+  text: '#12172B', textMuted: '#5D6478', textFaint: '#9AA0B4',
+  primary: '#B3122A', primaryDark: '#C5221F', primarySoft: '#FDE8E8',
   blue: '#0369A1',
   blueSoft: '#E0F2FE',
   green: '#059669',

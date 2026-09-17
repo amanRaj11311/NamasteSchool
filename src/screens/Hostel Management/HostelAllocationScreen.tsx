@@ -18,7 +18,7 @@ const C = {
   text: '#101828',
   textMuted: '#6B7280',
   textFaint: '#9CA3AF',
-  primary: '#E11D2E',
+  primary: '#B3122A',
   primaryDark: '#B91424',
   primarySoft: '#FEECEC',
   blue: '#0EA5E9',

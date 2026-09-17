@@ -27,7 +27,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { API_BASE } from '../../network/api';
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const ALL_STAFF_ID = 'ALL_STAFF';
-const BRAND = '#ef4444';
+const BRAND = '#B3122A';
 
 interface Permission {
   module: string;
@@ -99,10 +99,6 @@ const EMPTY_FORM = {
   className: '',
   roomNumber: '',
 };
-
-// ============================================================
-// TIME HELPERS (for the native time picker)
-// ============================================================
 const formatTime = (date: Date) => {
   let hours = date.getHours();
   const minutes = date.getMinutes();

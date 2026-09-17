@@ -372,7 +372,7 @@ interface DashboardData {
 
 // --- Brand palette (kept consistent with the Hostel screens) ---
 const C = {
-  primary: '#E11D2E',
+  primary: '#B3122A',
   primaryDark: '#B91424',
   primarySoft: '#FEECEC',
   primaryBorder: '#F6C6C9',
@@ -2086,10 +2086,10 @@ const styles = StyleSheet.create({
   // --- Generic list rows ---
   listItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F5F5F6', gap: 12 },
   listAvatar: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
-  listAvatarText: { fontSize: 13, fontWeight: '800', color: '#4B5563' },
-  itemTitle: { fontSize: 14, fontWeight: '700', color: '#1F2937' },
-  itemSubtitle: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
-  tagText: { fontSize: 11, backgroundColor: '#F3F4F6', color: '#4B5563', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, fontWeight: '700', overflow: 'hidden' },
+  listAvatarText: { fontSize: 13, fontWeight: '800', color: '#14161F' },
+  itemTitle: { fontSize: 14, fontWeight: '700', color: '#14161F' },
+  itemSubtitle: { fontSize: 12, color: '#14161F', marginTop: 2 },
+  tagText: { fontSize: 11, backgroundColor: '#F3F4F6', color: '#14161F', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, fontWeight: '700', overflow: 'hidden' },
   tagGreen: { backgroundColor: '#DCFCE3', color: '#166534' },
   tagRed: { backgroundColor: '#FEE2E2', color: '#991B1B' },
   tagOrange: { backgroundColor: '#FFEDD5', color: '#9A3412' },
@@ -2097,18 +2097,18 @@ const styles = StyleSheet.create({
   badgeRed: { fontSize: 11, backgroundColor: '#FEE2E2', color: '#991B1B', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, fontWeight: '700', overflow: 'hidden' },
 
   // --- Loading / error states ---
-  loadingText: { marginTop: 12, fontSize: 15, color: '#6B7280', fontWeight: '500' },
+  loadingText: { marginTop: 12, fontSize: 15, color: '#14161F', fontWeight: '500' },
   errorIconCircle: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  errorText: { fontSize: 15, color: '#374151', marginBottom: 18, textAlign: 'center', fontWeight: '500' },
+  errorText: { fontSize: 15, color: '#14161F', marginBottom: 18, textAlign: 'center', fontWeight: '500' },
   retryButton: { flexDirection: 'row', backgroundColor: C.primary, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 20, alignItems: 'center' },
   retryButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
   emptyState: { paddingVertical: 24, alignItems: 'center', justifyContent: 'center' },
-  emptyStateText: { color: '#9CA3AF', fontSize: 13, fontWeight: '500' },
+  emptyStateText: { color: '#14161F', fontSize: 13, fontWeight: '500' },
 
   // --- Trend / staff-by-type bars ---
   trendRow: { marginBottom: 14 },
   trendRowTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  trendDate: { fontSize: 13, fontWeight: '600', color: '#4B5563' },
+  trendDate: { fontSize: 13, fontWeight: '600', color: '#14161F' },
   trendFraction: { fontSize: 13, fontWeight: '700', color: '#111827' },
   trendPct: { fontSize: 12, fontWeight: '600', color: '#22c55e' },
   trendTrack: { height: 7, borderRadius: 4, backgroundColor: '#F3F4F6', overflow: 'hidden' },
@@ -2121,9 +2121,9 @@ const styles = StyleSheet.create({
   noticeTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   noticeCategoryBadge: { backgroundColor: '#FEE2E2', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 },
   noticeCategoryText: { color: C.primary, fontSize: 9, fontWeight: '800' },
-  noticeDate: { fontSize: 11, color: '#9CA3AF', fontWeight: '600' },
+  noticeDate: { fontSize: 11, color: '#14161F', fontWeight: '600' },
   noticeTitle: { fontSize: 14, fontWeight: '700', color: '#111827' },
-  noticeDesc: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+  noticeDesc: { fontSize: 12, color: '#14161F', marginTop: 2 },
 
   // --- Notice detail modal ---
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(17,24,39,0.55)', justifyContent: 'center', alignItems: 'center', padding: 20 },
@@ -2131,23 +2131,23 @@ const styles = StyleSheet.create({
   modalHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 22 },
   modalHeaderIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: C.primary, justifyContent: 'center', alignItems: 'center' },
   modalHeaderTitle: { fontSize: 17, fontWeight: '800', color: '#111827' },
-  modalHeaderSubtitle: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+  modalHeaderSubtitle: { fontSize: 12, color: '#14161F', marginTop: 2 },
   modalDivider: { height: 1, backgroundColor: '#F1F2F4', marginTop: 18 },
   modalScroll: { paddingHorizontal: 22, paddingTop: 18 },
   modalPillsRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
   modalStatusPill: { backgroundColor: C.primary, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18 },
   modalStatusPillText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   modalCategoryPill: { backgroundColor: '#F3F4F6', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18 },
-  modalCategoryPillText: { color: '#4B5563', fontSize: 12, fontWeight: '700' },
+  modalCategoryPillText: { color: '#14161F', fontSize: 12, fontWeight: '700' },
   modalNoticeTitle: { fontSize: 19, fontWeight: '800', color: '#111827', marginBottom: 16 },
   modalInfoBox: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, borderWidth: 1, borderColor: '#F1F2F4', borderRadius: 14, padding: 14, marginBottom: 16 },
   modalInfoItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  modalInfoLabel: { fontSize: 12, color: '#9CA3AF', fontWeight: '600' },
+  modalInfoLabel: { fontSize: 12, color: '#14161F', fontWeight: '600' },
   modalInfoValue: { fontSize: 12, color: '#111827', fontWeight: '800' },
   modalContentBox: { borderWidth: 1, borderColor: '#F1F2F4', borderRadius: 14, padding: 16, marginBottom: 20 },
-  modalContentText: { fontSize: 14, color: '#374151', lineHeight: 21 },
+  modalContentText: { fontSize: 14, color: '#14161F', lineHeight: 21 },
   modalFooter: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 22, paddingBottom: 20, paddingTop: 4, borderTopWidth: 1, borderTopColor: '#F1F2F4' },
-  modalCloseBtn: { backgroundColor: '#4B5563', paddingHorizontal: 24, paddingVertical: 11, borderRadius: 14 },
+  modalCloseBtn: { backgroundColor: '#14161F', paddingHorizontal: 24, paddingVertical: 11, borderRadius: 14 },
   modalCloseBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 });
 
