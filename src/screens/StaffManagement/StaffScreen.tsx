@@ -490,7 +490,7 @@ const StaffScreen: React.FC = () => {
             </View>
             <Text style={styles.selectorTitle}>{selectorConfig.title}</Text>
             <TouchableOpacity onPress={() => setSelectorVisible(false)} style={styles.closeBtn}>
-              <Feather name="x" size={18} color={COLORS.inkSoft} />
+             <Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>❌</Text>
             </TouchableOpacity>
           </View>
 
@@ -699,7 +699,7 @@ const StaffScreen: React.FC = () => {
                 <Text style={styles.modalSubtitle}>Fill in the details to {editingStaffId ? 'update this' : 'register a new'} staff member</Text>
               </View>
               <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn}>
-                <Feather name="x" size={18} color={COLORS.inkSoft} />
+              <Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>❌</Text>
               </TouchableOpacity>
             </View>
 
@@ -978,7 +978,7 @@ const StaffScreen: React.FC = () => {
               </View>
               <Text style={styles.selectorTitle}>Filter by Role</Text>
               <TouchableOpacity onPress={() => setFilterModalVisible(false)} style={styles.closeBtn}>
-                <Feather name="x" size={18} color={COLORS.inkSoft} />
+               <Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>❌</Text>
               </TouchableOpacity>
             </View>
 
@@ -1017,7 +1017,7 @@ const StaffScreen: React.FC = () => {
             <View style={styles.viewHeader}>
               <Text style={styles.modalTitle}>Staff Details</Text>
               <TouchableOpacity onPress={() => setViewVisible(false)} style={styles.closeBtn}>
-                <Feather name="x" size={18} color={COLORS.inkSoft} />
+                <Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>❌</Text>
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -1118,7 +1118,7 @@ const StaffScreen: React.FC = () => {
                 </View>
               </View>
               <TouchableOpacity onPress={() => setTimetableVisible(false)} style={styles.ttCloseBtn}>
-                <Feather name="x" size={18} color="#fff" />
+               <Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>❌</Text>
               </TouchableOpacity>
             </View>
 

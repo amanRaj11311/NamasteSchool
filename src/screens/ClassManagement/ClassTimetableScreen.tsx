@@ -361,10 +361,7 @@ export default function ClassTimetableScreen({ route }: any) {
   };
 
   // ---------------------------------------------------------------------
-  // EXCEL — Upload Excel (bulk import periods for the selected class)
-  // Reads the file on-device with RNFS + parses it with XLSX (same pattern
-  // used successfully in the Class Attendance screen) instead of sending
-  // the raw file as multipart/form-data, then posts parsed JSON rows.
+  // EXCEL — Upload Excel
   // ---------------------------------------------------------------------
   const handleUploadExcel = async () => {
     if (!selectedClassId) {
@@ -484,8 +481,6 @@ export default function ClassTimetableScreen({ route }: any) {
     { key: 'download', icon: 'download', label: 'Download Format', onPress: handleDownloadFormat, visible: true, tint: COLORS.success },
   ].filter((a) => a.visible);
 
-  // Menu opens away from the nearest screen edge so it never gets clipped
-  // or collides with the fixed "Add Period" button at the bottom.
   const openUpward = excelFabPos.y > winHeight / 2;
 
   const toggleFabMenu = () => {
@@ -511,10 +506,6 @@ export default function ClassTimetableScreen({ route }: any) {
     action();
   };
 
-  // Drag handling for the Excel FAB. A release with negligible movement is
-  // treated as a tap (opens/closes the speed-dial); anything past the
-  // threshold is treated as a drag and the button springs to a clamped,
-  // on-screen position so it can never be dragged off-screen.
   const excelPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -522,7 +513,7 @@ export default function ClassTimetableScreen({ route }: any) {
       onPanResponderGrant: () => {
         excelMovedRef.current = false;
         excelPan.setOffset({
-          // @ts-ignore - reading the current animated value to use as the drag offset base
+          // @ts-ignore
           x: (excelPan.x as any)._value,
           // @ts-ignore
           y: (excelPan.y as any)._value,
@@ -681,7 +672,7 @@ export default function ClassTimetableScreen({ route }: any) {
                   <TouchableOpacity
                     key={c._id}
                     style={[styles.dropdownItem, index !== classes.length - 1 && styles.dropdownItemBorder, selectedClassId === c._id && styles.dropdownItemActive]}
-                    onPress={() => handleClassSelect(c._id)}
+                    onPress={() => handleClassSelect(c._id as string)}
                   >
                     <Text style={[styles.dropdownItemText, selectedClassId === c._id && styles.dropdownItemTextActive]}>
                       {c.className} {c.division ? `(${c.division})` : ''}
@@ -886,13 +877,10 @@ export default function ClassTimetableScreen({ route }: any) {
           <View style={styles.compactModalContainer}>
             <View style={styles.formHeader}>
               <View style={styles.formHeaderLeft}>
-                <View style={styles.formHeaderIconWrap}>
-                  <Feather name={editingId ? 'edit-2' : 'plus'} size={16} color={BRAND} />
-                </View>
                 <Text style={styles.formTitle}>{editingId ? 'Edit Period Slot' : 'Add Period Slot'}</Text>
               </View>
-              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Feather name="x" size={20} color={COLORS.body} />
+              <TouchableOpacity onPress={() => setFormVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -953,10 +941,14 @@ export default function ClassTimetableScreen({ route }: any) {
                 </View>
               </View>
 
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleSave} activeOpacity={0.9}>
-                <Feather name="check" size={16} color="#fff" style={{ marginRight: 8 }} />
-                <Text style={styles.saveBtnFullText}>{editingId ? 'Update & Close' : 'Save & Close'}</Text>
-              </TouchableOpacity>
+              <View style={styles.formActionRow}>
+                <TouchableOpacity style={styles.cancelBtnFull} onPress={() => setFormVisible(false)} activeOpacity={0.8}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.saveBtnFullRow} onPress={handleSave} activeOpacity={0.9}>
+                  <Text style={styles.saveBtnFullText}>{editingId ? 'Update' : 'Save'}</Text>
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -1057,11 +1049,9 @@ const styles = StyleSheet.create({
 
   modalOverlay: { flex: 1, backgroundColor: COLORS.overlay, justifyContent: 'center', padding: SPACING.md },
   compactModalContainer: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, maxHeight: '90%', overflow: 'hidden', ...SHADOW.raised },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.lg, paddingHorizontal: SPACING.xl, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.borderSoft },
+  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.lg, paddingHorizontal: SPACING.xl, backgroundColor: COLORS.primary },
   formHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  formHeaderIconWrap: { width: 32, height: 32, borderRadius: RADIUS.xs, backgroundColor: COLORS.primarySoft, justifyContent: 'center', alignItems: 'center' },
-  formTitle: { fontSize: FONT.h2, fontWeight: '800', color: COLORS.ink },
-  closeBtnIcon: { padding: 6, backgroundColor: COLORS.borderSoft, borderRadius: 20 },
+  formTitle: { fontSize: FONT.h2, fontWeight: '800', color: '#fff' },
   formScroll: { padding: SPACING.xl },
 
   inputWrapper: { marginBottom: SPACING.lg, zIndex: 1 },
@@ -1080,10 +1070,13 @@ const styles = StyleSheet.create({
   dropdownItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: SPACING.md, paddingHorizontal: SPACING.md },
   dropdownItemBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.borderSoft },
   dropdownItemActive: { backgroundColor: COLORS.primarySoft },
-  dropdownItemText: { fontSize: FONT.body, color: COLORS.body, fontWeight: '500' },
+  dropdownItemText: { fontSize: FONT.body, color: COLORS.body, fontWeight: '500', flexShrink: 1, marginRight: SPACING.sm },
   dropdownItemTextActive: { color: BRAND, fontWeight: '700' },
 
-  saveBtnFull: { flexDirection: 'row', backgroundColor: BRAND, height: 52, borderRadius: RADIUS.md, justifyContent: 'center', alignItems: 'center', marginTop: SPACING.xs, ...SHADOW.button },
+  formActionRow: { flexDirection: 'row', justifyContent: 'space-between', gap: SPACING.md, marginTop: SPACING.sm },
+  cancelBtnFull: { flex: 1, height: 52, borderRadius: RADIUS.md, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.surfaceSunken, borderWidth: 1, borderColor: COLORS.borderSoft },
+  cancelBtnText: { color: COLORS.secondary, fontSize: FONT.h3, fontWeight: '700' },
+  saveBtnFullRow: { flex: 1, flexDirection: 'row', backgroundColor: BRAND, height: 52, borderRadius: RADIUS.md, justifyContent: 'center', alignItems: 'center', ...SHADOW.button },
   saveBtnFullText: { color: '#fff', fontSize: FONT.h3, fontWeight: '800' },
 
   busyOverlay: { flex: 1, backgroundColor: COLORS.overlay, justifyContent: 'center', alignItems: 'center' },

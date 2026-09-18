@@ -287,7 +287,7 @@ export default function StudentLeaveScreen() {
                 <Text style={styles.modalTitle}>Apply for Leave</Text>
               </View>
               <TouchableOpacity onPress={() => setShowApplyModal(false)} style={styles.closeBtnIconLight} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Feather name="x" size={20} color="#fff" />
+                <Text style={{ fontSize: 18, color: '#fff' }}>✕</Text>
               </TouchableOpacity>
             </View>
 

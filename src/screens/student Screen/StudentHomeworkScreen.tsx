@@ -282,7 +282,7 @@ export default function StudentHomeworkScreen() {
                 <View style={styles.modalSubjectBadge}><Text style={styles.modalSubjectBadgeText}>{submittingHw?.subjectName || 'Homework'}</Text></View>
                 <Text style={styles.modalTitle} numberOfLines={2}>{submittingHw?.title}</Text>
               </View>
-              <TouchableOpacity onPress={() => setSubmittingHw(null)} disabled={isSubmitting} style={styles.closeBtnIconLight} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Feather name="x" size={20} color="#fff" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setSubmittingHw(null)} disabled={isSubmitting} style={styles.closeBtnIconLight} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={{ fontSize: 18, color: '#fff' }}>✕</Text></TouchableOpacity>
             </View>
 
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>

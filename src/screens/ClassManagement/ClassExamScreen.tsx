@@ -824,7 +824,7 @@ export default function ClassExamsScreen() {
           <View style={styles.compactModalContainer}>
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>{editingExamId ? 'Edit exam slot' : 'Schedule exam slot'}</Text>
-              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}><Feather name="x" size={20} color="#fff" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}><Text style={{ fontSize: 18, color: '#fff' }}>✕</Text></TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
 
@@ -925,7 +925,7 @@ export default function ClassExamsScreen() {
           <View style={styles.compactModalContainer}>
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>Add master exam category</Text>
-              <TouchableOpacity onPress={() => setCategoryModalVisible(false)} style={styles.closeBtnIcon}><Feather name="x" size={20} color="#fff" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setCategoryModalVisible(false)} style={styles.closeBtnIcon}><Text style={{ fontSize: 18, color: '#fff' }}>✕</Text></TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
               <View style={styles.inputWrapper}>
@@ -984,7 +984,7 @@ export default function ClassExamsScreen() {
                   </Text>
                 )}
               </View>
-              <TouchableOpacity onPress={() => setMarksModalVisible(false)} style={styles.closeBtnIcon}><Feather name="x" size={20} color="#fff" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setMarksModalVisible(false)} style={styles.closeBtnIcon}><Text style={{ fontSize: 18, color: '#fff' }}>✕</Text></TouchableOpacity>
             </View>
 
             <View style={styles.marksToolbar}>

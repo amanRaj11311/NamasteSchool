@@ -544,7 +544,7 @@ export default function ClassDiaryScreen() {
                 </View>
               </View>
               <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon} activeOpacity={0.8}>
-                <Feather name="x" size={18} color="#fff" />
+              <Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>✕</Text>
               </TouchableOpacity>
             </View>
 

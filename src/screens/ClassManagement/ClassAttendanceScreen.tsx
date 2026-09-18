@@ -267,7 +267,7 @@ export default function ClassAttendanceScreen() {
   // Data States
   const [classes, setClasses] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
- 
+
   const [attendanceMap, setAttendanceMap] = useState<Record<string, Record<string, string>>>({});
 
   // Selection States
@@ -405,7 +405,7 @@ export default function ClassAttendanceScreen() {
       setStudents(freshStudents);
       setAttendanceMap(buildAttendanceMap(freshAttendance));
 
-      AsyncStorage.setItem(cacheKey, JSON.stringify({ students: freshStudents, attendanceRecords: freshAttendance })).catch(() => {});
+      AsyncStorage.setItem(cacheKey, JSON.stringify({ students: freshStudents, attendanceRecords: freshAttendance })).catch(() => { });
     } catch (e) { console.error(e); }
     finally { setLoading(false); setRefreshing(false); setSyncing(false); }
   };
@@ -694,7 +694,7 @@ export default function ClassAttendanceScreen() {
     setSelectedStatDate(prev => (prev === dateStr ? null : dateStr));
   }, []);
 
-  
+
   const handleSaveDaily = async () => {
     if (!selectedClassId || !selectedSchoolId) {
       Alert.alert('Missing info', 'Could not determine the school for this class. Try reselecting the class.');
@@ -739,8 +739,8 @@ export default function ClassAttendanceScreen() {
       Alert.alert(
         'Error',
         error.response?.data?.message ||
-          error.response?.data?.error ||
-          'Failed to save attendance.'
+        error.response?.data?.error ||
+        'Failed to save attendance.'
       );
     } finally {
       setSaving(false);
@@ -792,8 +792,8 @@ export default function ClassAttendanceScreen() {
       Alert.alert(
         'Error',
         error.response?.data?.message ||
-          error.response?.data?.error ||
-          'Failed to update status.'
+        error.response?.data?.error ||
+        'Failed to update status.'
       );
     } finally {
       setSaving(false);
@@ -1103,7 +1103,11 @@ export default function ClassAttendanceScreen() {
           )}
 
           <TouchableOpacity style={styles.fabMain} onPress={toggleFab} activeOpacity={0.9}>
-            <Feather name={fabOpen ? 'x' : 'grid'} size={22} color="#fff" />
+            {fabOpen ? (
+              <Text style={{ color: '#fff', fontSize: 28, fontWeight: '300', lineHeight: 28 }}>×</Text>
+            ) : (
+              <Feather name="grid" size={22} color="#fff" />
+            )}
           </TouchableOpacity>
         </View>
       )}
@@ -1112,7 +1116,7 @@ export default function ClassAttendanceScreen() {
           matrix header, so it never eats permanent screen space. */}
       <Modal visible={!!selectedStatDate} animationType="slide" transparent onRequestClose={() => setSelectedStatDate(null)}>
         <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setSelectedStatDate(null)}>
-          <TouchableOpacity activeOpacity={1} style={[styles.sheetCard, { paddingBottom: 26 + insets.bottom }]} onPress={() => {}}>
+          <TouchableOpacity activeOpacity={1} style={[styles.sheetCard, { paddingBottom: 26 + insets.bottom }]} onPress={() => { }}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeaderRow}>
               <View style={styles.statsScopeChip}>
@@ -1149,7 +1153,7 @@ export default function ClassAttendanceScreen() {
       {/* MODAL: Legend / help — colour codes + gestures, opened from the info icon */}
       <Modal visible={showLegendModal} animationType="fade" transparent onRequestClose={() => setShowLegendModal(false)}>
         <TouchableOpacity style={styles.modalOverlayCenter} activeOpacity={1} onPress={() => setShowLegendModal(false)}>
-          <TouchableOpacity activeOpacity={1} style={[styles.editModalCard, SHADOW.raised]} onPress={() => {}}>
+          <TouchableOpacity activeOpacity={1} style={[styles.editModalCard, SHADOW.raised]} onPress={() => { }}>
             <View style={styles.editModalHeader}>
               <Text style={styles.editModalTitle}>How marking works</Text>
               <TouchableOpacity onPress={() => setShowLegendModal(false)}><Feather name="x" size={18} color={C.textMuted} /></TouchableOpacity>
@@ -1183,8 +1187,9 @@ export default function ClassAttendanceScreen() {
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.fullModalContainer}>
             <View style={styles.formHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Feather name="check-circle" size={18} color="#fff" /><Text style={styles.formTitle}>Mark Daily Attendance</Text></View>
-              <TouchableOpacity onPress={() => setDailyModalVisible(false)} style={styles.closeBtnIcon}><Feather name="x" size={18} color="#fff" /></TouchableOpacity>
-            </View>
+              <TouchableOpacity onPress={() => setDailyModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>✕</Text>
+              </TouchableOpacity>            </View>
 
             <View style={styles.dailyConfigBar}>
               <View style={{ flex: 1, marginRight: 16 }}>
@@ -1463,7 +1468,7 @@ const styles = StyleSheet.create({
   matrixContainer: { flex: 1, backgroundColor: C.surface },
   matrixHeaderRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: C.border, backgroundColor: C.surfaceSoft },
   matrixHeaderCell: { padding: 12, justifyContent: 'center', borderRightWidth: 1, borderColor: C.border },
-  matrixStickyCol: { },
+  matrixStickyCol: {},
   matrixHeaderTitle: { fontSize: 10, fontWeight: '800', color: C.textMuted, letterSpacing: 0.5 },
   matrixHeaderDayCell: { padding: 8, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderColor: C.border },
   matrixHeaderTodayCell: { backgroundColor: C.todayTint },
@@ -1542,7 +1547,7 @@ const styles = StyleSheet.create({
   uploadChooseBtn: { borderWidth: 1.4, borderColor: C.primary, borderRadius: 20, paddingHorizontal: 20, paddingVertical: 9, minWidth: 120, alignItems: 'center' },
   uploadChooseBtnText: { fontSize: 12.5, fontWeight: '800', color: C.primary },
 
-  // Form Base
+
   inputWrapper: { marginBottom: 0 },
   inputLabel: { fontSize: 10, fontWeight: '800', color: C.textMuted, marginBottom: 6, letterSpacing: 0.5 },
   dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, height: 46, backgroundColor: C.surfaceSoft },

@@ -196,7 +196,7 @@ export default function StudentNoticesScreen() {
                 <Text style={styles.modalTitle} numberOfLines={2}>{selectedNotice?.title}</Text>
               </View>
               <TouchableOpacity onPress={() => setSelectedNotice(null)} style={styles.closeBtnIconLight} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Feather name="x" size={20} color="#fff" />
+                <Text style={{ fontSize: 18, color: '#fff' }}>✕</Text>
               </TouchableOpacity>
             </View>
 

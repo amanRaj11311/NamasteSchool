@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 import { API_BASE } from '../network/api';
+
 const ROLE_COLORS = [
   '#0F9D6B',
   '#B3122A',
@@ -77,7 +78,6 @@ export default function RolesScreen() {
   // Inline Expand/Collapse States
   const [expandedModule, setExpandedModule] = useState<string | null>(null); 
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null); 
-  // FIXED: Track expanded tags per role ID globally to avoid the Hook error
   const [expandedTags, setExpandedTags] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -246,13 +246,10 @@ export default function RolesScreen() {
     return '#6B7280'; 
   };
 
-  // --- Render Role Card ---
   const renderCard = ({ item }: { item: Role }) => {
     const cardColor = item.color || '#3B82F6';
     const permCount = item.permissions?.length || 0;
     const isExpanded = expandedCardId === item._id;
-    
-    // FIXED: Using parent state instead of local hook
     const showAllTags = item._id ? !!expandedTags[item._id] : false;
 
     const rolePerms = (item.permissions || []).map((p: any) => {
@@ -367,53 +364,75 @@ export default function RolesScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header with Title, Subtitle, and Add Button */}
       <View style={styles.header}>
-        <Text style={styles.title}>Roles</Text>
-        <Text style={styles.subtitle}>{totalRoles} Roles | {totalAssignedPerms} total permissions</Text>
-      </View>
-
-      <View style={styles.kpiGrid}>
-        <View style={styles.kpiCard}>
-          <View style={styles.kpiRow}>
-            <View style={[styles.iconCircle, { backgroundColor: '#F3E8FF' }]}><Feather name="shield" size={16} color="#D946EF" /></View>
-            <Text style={styles.kpiValue}>{totalRoles}</Text>
-          </View>
-          <Text style={styles.kpiLabel}>TOTAL ROLES</Text>
-        </View>
-        <View style={styles.kpiCard}>
-          <View style={styles.kpiRow}>
-            <View style={[styles.iconCircle, { backgroundColor: '#D1FAE5' }]}><Feather name="key" size={16} color="#10B981" /></View>
-            <Text style={styles.kpiValue}>{totalAssignedPerms}</Text>
-          </View>
-          <Text style={styles.kpiLabel}>TOTAL PERMISSIONS</Text>
-        </View>
-        <View style={styles.kpiCard}>
-          <View style={styles.kpiRow}>
-            <View style={[styles.iconCircle, { backgroundColor: '#E0F2FE' }]}><Feather name="activity" size={16} color="#0ea5e9" /></View>
-            <Text style={styles.kpiValue}>{avgPerms}</Text>
-          </View>
-          <Text style={styles.kpiLabel}>AVG PERMISSIONS</Text>
-        </View>
-        <View style={styles.kpiCard}>
-          <View style={styles.kpiRow}>
-            <View style={[styles.iconCircle, { backgroundColor: '#FEF3C7' }]}><Feather name="star" size={16} color="#F59E0B" /></View>
-            <Text style={styles.kpiValue}>{superAdminCount}</Text>
-          </View>
-          <Text style={styles.kpiLabel}>SUPER ADMINS</Text>
-        </View>
-      </View>
-
-      <View style={styles.actionBar}>
-        <View style={styles.searchContainer}>
-          <Feather name="search" size={16} color="#9CA3AF" />
-          <TextInput style={styles.searchInput} placeholder="Search roles..." value={searchQuery} onChangeText={setSearchQuery} />
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.title}>Roles</Text>
+          <Text style={styles.subtitle} numberOfLines={1}>{totalRoles} Roles | {totalAssignedPerms} total permissions</Text>
         </View>
         {hasPermission('create') && (
-          <TouchableOpacity style={styles.addBtn} onPress={openAddForm}>
+          <TouchableOpacity style={styles.headerAddBtn} onPress={openAddForm} activeOpacity={0.85}>
             <Feather name="plus" size={16} color="#fff" />
-            <Text style={styles.addBtnText}>Create Role</Text>
+            <Text style={styles.headerAddBtnText}>Create Role</Text>
           </TouchableOpacity>
         )}
+      </View>
+
+      {/* Scrollable KPI Grid */}
+      <View style={styles.kpiWrapper}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          contentContainerStyle={styles.kpiScrollContent}
+        >
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiRow}>
+              <View style={[styles.iconCircle, { backgroundColor: '#F3E8FF' }]}><Feather name="shield" size={14} color="#D946EF" /></View>
+              <Text style={styles.kpiValue}>{totalRoles}</Text>
+            </View>
+            <Text style={styles.kpiLabel}>TOTAL ROLES</Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiRow}>
+              <View style={[styles.iconCircle, { backgroundColor: '#D1FAE5' }]}><Feather name="key" size={14} color="#10B981" /></View>
+              <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit>{totalAssignedPerms}</Text>
+            </View>
+            <Text style={styles.kpiLabel}>PERMISSIONS</Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiRow}>
+              <View style={[styles.iconCircle, { backgroundColor: '#E0F2FE' }]}><Feather name="activity" size={14} color="#0ea5e9" /></View>
+              <Text style={styles.kpiValue}>{avgPerms}</Text>
+            </View>
+            <Text style={styles.kpiLabel}>AVG PERMS</Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiRow}>
+              <View style={[styles.iconCircle, { backgroundColor: '#FEF3C7' }]}><Feather name="star" size={14} color="#F59E0B" /></View>
+              <Text style={styles.kpiValue}>{superAdminCount}</Text>
+            </View>
+            <Text style={styles.kpiLabel}>SUPER ADMINS</Text>
+          </View>
+        </ScrollView>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.actionBar}>
+        <View style={styles.searchContainer}>
+          <Feather name="search" size={16} color={C.textFaint} />
+          <TextInput 
+            style={styles.searchInput} 
+            placeholder="Search roles..." 
+            placeholderTextColor={C.textFaint}
+            value={searchQuery} 
+            onChangeText={setSearchQuery} 
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")}>
+              <Feather name="x-circle" size={16} color={C.textFaint} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <Text style={styles.showingText}>{filteredRoles.length} results</Text>
@@ -427,10 +446,11 @@ export default function RolesScreen() {
           renderItem={renderCard}
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[C.primary]} />}
+          showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.center}>
-              <Feather name="shield-off" size={40} color="#D1D5DB" />
-              <Text style={{color: '#6B7280', marginTop: 10, fontWeight: '500'}}>No roles found.</Text>
+              <Feather name="shield-off" size={40} color={C.textFaint} />
+              <Text style={{color: C.textMuted, marginTop: 10, fontWeight: '500'}}>No roles found.</Text>
             </View>
           }
         />
@@ -442,7 +462,7 @@ export default function RolesScreen() {
           <View style={styles.formHeader}>
             <Text style={styles.formTitle}>{editingId ? 'Edit Role' : 'Create Role'}</Text>
             <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}>
-              <Feather name="x" size={22} color="#4B5563" />
+              <Feather name="x" size={22} color={C.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -453,12 +473,12 @@ export default function RolesScreen() {
                 <Text style={styles.sectionTitle}>Role Details</Text>
                 <View style={styles.inputWrapper}>
                   <Text style={styles.inputLabel}>Role Name <Text style={styles.asterisk}>*</Text></Text>
-                  <TextInput style={[styles.input, errors.name && styles.inputError]} placeholder="e.g. Content Manager" value={formData.name} onChangeText={t => { setFormData({...formData, name: t}); setErrors({...errors, name: undefined}); }} />
+                  <TextInput style={[styles.input, errors.name && styles.inputError]} placeholder="e.g. Content Manager" placeholderTextColor={C.textFaint} value={formData.name} onChangeText={t => { setFormData({...formData, name: t}); setErrors({...errors, name: undefined}); }} />
                   {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
                 </View>
                 <View style={styles.inputWrapper}>
                   <Text style={styles.inputLabel}>Description</Text>
-                  <TextInput style={[styles.input, { height: 70, textAlignVertical: 'top' }]} placeholder="Brief description of this role..." multiline value={formData.description} onChangeText={t => setFormData({...formData, description: t})} />
+                  <TextInput style={[styles.input, { height: 70, textAlignVertical: 'top' }]} placeholder="Brief description of this role..." placeholderTextColor={C.textFaint} multiline value={formData.description} onChangeText={t => setFormData({...formData, description: t})} />
                 </View>
                 <View style={styles.inputWrapper}>
                   <Text style={styles.inputLabel}>Role Color</Text>
@@ -479,7 +499,7 @@ export default function RolesScreen() {
                 </View>
 
                 <View style={styles.autoGrantNotice}>
-                  <Feather name="info" size={16} color="#0ea5e9" />
+                  <Feather name="info" size={16} color={C.blue} />
                   <Text style={styles.autoGrantText}>Dashboard access is automatically granted to all roles.</Text>
                 </View>
 
@@ -493,19 +513,19 @@ export default function RolesScreen() {
                     <View key={moduleName} style={styles.moduleAccordion}>
                       <TouchableOpacity style={[styles.moduleHeader, isExpanded && styles.moduleHeaderActive]} onPress={() => setExpandedModule(isExpanded ? null : moduleName)} activeOpacity={0.8}>
                         <View style={{flexDirection: 'row', alignItems: 'center', gap: 10}}>
-                          <Feather name="layers" size={16} color={isExpanded ? '#ef4444' : '#6B7280'} />
-                          <Text style={[styles.moduleHeaderText, isExpanded && {color: '#ef4444'}]}>{moduleName.toUpperCase()}</Text>
+                          <Feather name="layers" size={16} color={isExpanded ? C.primary : C.textMuted} />
+                          <Text style={[styles.moduleHeaderText, isExpanded && {color: C.primary}]}>{moduleName.toUpperCase()}</Text>
                         </View>
                         <View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}>
                           <Text style={styles.moduleCount}>{selectedInModule} selected</Text>
-                          <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={18} color="#9CA3AF" />
+                          <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={18} color={C.textFaint} />
                         </View>
                       </TouchableOpacity>
 
                       {isExpanded && (
                         <View style={styles.moduleBody}>
                           <TouchableOpacity style={styles.selectAllBtn} onPress={() => toggleModuleAll(moduleName, modulePerms)}>
-                            <Feather name={selectedInModule === modulePerms.length ? "check-square" : "square"} size={16} color="#0ea5e9" />
+                            <Feather name={selectedInModule === modulePerms.length ? "check-square" : "square"} size={16} color={C.blue} />
                             <Text style={styles.selectAllText}>{selectedInModule === modulePerms.length ? 'Deselect All' : 'Select All in Module'}</Text>
                           </TouchableOpacity>
 
@@ -573,11 +593,11 @@ const C = {
 };
 
 const SHADOW_SM = {
-  elevation: 1,
+  elevation: 2,
   shadowColor: '#0F172A',
-  shadowOpacity: 0.05,
+  shadowOpacity: 0.08,
   shadowRadius: 4,
-  shadowOffset: { width: 0, height: 1 },
+  shadowOffset: { width: 0, height: 2 },
 };
 
 const SHADOW_MD = {
@@ -588,24 +608,11 @@ const SHADOW_MD = {
   shadowOffset: { width: 0, height: 6 },
 };
 
-const SHADOW_LG = {
-  elevation: 6,
-  shadowColor: '#0F172A',
-  shadowOpacity: 0.12,
-  shadowRadius: 22,
-  shadowOffset: { width: 0, height: 10 },
-};
-
 const styles = StyleSheet.create({
-  // =========================================================
-  // MAIN
-  // =========================================================
-
   container: {
     flex: 1,
     backgroundColor: C.bg,
   },
-
   center: {
     flex: 1,
     justifyContent: 'center',
@@ -614,145 +621,77 @@ const styles = StyleSheet.create({
     backgroundColor: C.bg,
   },
 
-
-
+  // Header with Add Button
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 10,
     backgroundColor: C.surface,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
-    ...SHADOW_SM,
   },
-title: {
-  fontSize: 21,
-  fontWeight: '800',
-  color: C.text,
-  letterSpacing: 0.2,
-},
-
-subtitle: {
-  fontSize: 12.5,
-  color: C.textMuted,
-  marginTop: 3,
-  fontWeight: '500',
-},
-  // =========================================================
-  // KPI CARDS
-  // =========================================================
-
-  kpiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-
-  kpiCard: {
-    width: '48%',
-    backgroundColor: C.surface,
-    padding: 15,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: C.border,
-    marginBottom: 12,
-    ...SHADOW_SM,
-  },
-
-  kpiRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 9,
-  },
-
-  iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  kpiValue: {
-    fontSize: 21,
-    fontWeight: '800',
-    color: C.text,
-  },
-
-  kpiLabel: {
-    fontSize: 10.5,
-    fontWeight: '800',
-    color: C.textMuted,
-    letterSpacing: 0.6,
-  },
-
-  // =========================================================
-  // SEARCH + ACTION BAR
-  // =========================================================
-
-  actionBar: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    gap: 10,
-    zIndex: 10,
-    marginTop: 4,
-  },
-
-  searchContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: C.surface,
-    borderWidth: 1.5,
-    borderColor: C.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 48,
-    ...SHADOW_SM,
-  },
-
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 14,
-    color: C.text,
-    fontWeight: '600',
-    height: '100%',
-  },
-
-  addBtn: {
+  headerTextContainer: { flex: 1, paddingRight: 10 },
+  title: { fontSize: 22, fontWeight: '800', color: C.text, letterSpacing: -0.3 },
+  subtitle: { fontSize: 12, color: C.textMuted, marginTop: 2, fontWeight: '500' },
+  headerAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: C.primary,
-    paddingHorizontal: 16,
-    height: 48,
-    borderRadius: 12,
-    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 4,
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  headerAddBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
+  // Scrollable KPI Grid
+  kpiWrapper: { backgroundColor: C.bg, paddingVertical: 12 },
+  kpiScrollContent: { paddingHorizontal: 16, gap: 10 },
+  kpiCard: {
+    width: 135,
+    backgroundColor: C.surface,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
     ...SHADOW_SM,
   },
+  kpiRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  iconCircle: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  kpiValue: { fontSize: 18, fontWeight: '800', color: C.text, flex: 1 },
+  kpiLabel: { fontSize: 9.5, fontWeight: '800', color: C.textMuted, letterSpacing: 0.5 },
 
-  addBtnText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '800',
+  // Search Bar (Full Width)
+  actionBar: { paddingHorizontal: 16, marginBottom: 4 },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 46,
+    ...SHADOW_SM,
   },
+  searchInput: { flex: 1, marginLeft: 8, fontSize: 14, color: C.text },
 
   showingText: {
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 8,
     fontSize: 11.5,
     color: C.textMuted,
     fontWeight: '700',
     textAlign: 'right',
   },
-
-  // =========================================================
-  // LIST
-  // =========================================================
 
   listContent: {
     paddingHorizontal: 16,
@@ -760,10 +699,7 @@ subtitle: {
     paddingTop: 10,
   },
 
-  // =========================================================
-  // ROLE CARD
-  // =========================================================
-
+  // Role Card
   card: {
     backgroundColor: C.surface,
     borderRadius: 18,
@@ -773,23 +709,19 @@ subtitle: {
     overflow: 'hidden',
     ...SHADOW_MD,
   },
-
   cardTopAccent: {
     height: 3,
     width: '100%',
   },
-
   cardBody: {
     padding: 18,
   },
-
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
   },
-
   roleTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -797,31 +729,26 @@ subtitle: {
     flex: 1,
     marginRight: 10,
   },
-
   colorDot: {
     width: 11,
     height: 11,
     borderRadius: 6,
   },
-
   roleName: {
     fontSize: 16,
     fontWeight: '800',
     color: C.text,
     flexShrink: 1,
   },
-
   permBadge: {
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
   },
-
   permBadgeText: {
     fontSize: 11,
     fontWeight: '800',
   },
-
   roleDesc: {
     fontSize: 12,
     color: C.textMuted,
@@ -829,11 +756,6 @@ subtitle: {
     marginBottom: 14,
     fontWeight: '500',
   },
-
-  // =========================================================
-  // WARNING
-  // =========================================================
-
   warningBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -845,22 +767,15 @@ subtitle: {
     borderWidth: 1,
     borderColor: '#F6E4B5',
   },
-
   warningText: {
     fontSize: 11.5,
     color: '#9A6700',
     fontWeight: '700',
   },
-
-  // =========================================================
-  // MODULES
-  // =========================================================
-
   modulesContainer: {
     marginTop: 4,
     marginBottom: 12,
   },
-
   sectionOverline: {
     fontSize: 10.5,
     fontWeight: '800',
@@ -869,14 +784,12 @@ subtitle: {
     marginBottom: 9,
     textTransform: 'uppercase',
   },
-
   tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 7,
     marginBottom: 10,
   },
-
   moduleTag: {
     backgroundColor: C.surfaceSoft,
     paddingHorizontal: 10,
@@ -885,14 +798,12 @@ subtitle: {
     borderWidth: 1,
     borderColor: C.border,
   },
-
   moduleTagText: {
     fontSize: 10.5,
     color: C.textMuted,
     fontWeight: '700',
     textTransform: 'capitalize',
   },
-
   detailsToggleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -900,17 +811,11 @@ subtitle: {
     paddingVertical: 5,
     gap: 5,
   },
-
   detailsToggleText: {
     fontSize: 12,
     fontWeight: '800',
     color: C.textMuted,
   },
-
-  // =========================================================
-  // BREAKDOWN
-  // =========================================================
-
   breakdownContainer: {
     backgroundColor: C.surfaceSoft,
     padding: 15,
@@ -920,7 +825,6 @@ subtitle: {
     marginBottom: 12,
     marginTop: 4,
   },
-
   sectionOverlineDark: {
     fontSize: 10.5,
     fontWeight: '800',
@@ -929,7 +833,6 @@ subtitle: {
     marginBottom: 12,
     textTransform: 'uppercase',
   },
-
   breakdownRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -938,7 +841,6 @@ subtitle: {
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
-
   breakdownModuleText: {
     width: 90,
     fontSize: 11.5,
@@ -947,14 +849,12 @@ subtitle: {
     textTransform: 'capitalize',
     marginTop: 6,
   },
-
   breakdownActionsWrap: {
     flex: 1,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
   },
-
   actionChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -966,24 +866,17 @@ subtitle: {
     borderColor: C.border,
     gap: 6,
   },
-
   actionDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
   },
-
   actionChipText: {
     fontSize: 10.5,
     color: C.textMuted,
     fontWeight: '700',
     textTransform: 'capitalize',
   },
-
-  // =========================================================
-  // CARD ACTIONS
-  // =========================================================
-
   cardActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -992,7 +885,6 @@ subtitle: {
     paddingTop: 12,
     gap: 8,
   },
-
   actionBtn: {
     padding: 9,
     backgroundColor: C.surfaceSoft,
@@ -1001,15 +893,8 @@ subtitle: {
     borderColor: C.border,
   },
 
-  // =========================================================
-  // MODAL
-  // =========================================================
-
-  formContainer: {
-    flex: 1,
-    backgroundColor: C.bg,
-  },
-
+  // Modal
+  formContainer: { flex: 1, backgroundColor: C.bg },
   formHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1021,13 +906,7 @@ subtitle: {
     borderBottomColor: C.border,
     ...SHADOW_SM,
   },
-
-  formTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: C.text,
-  },
-
+  formTitle: { fontSize: 20, fontWeight: '800', color: C.text },
   closeBtnIcon: {
     width: 38,
     height: 38,
@@ -1036,12 +915,7 @@ subtitle: {
     justifyContent: 'center',
     alignItems: 'center',
   },
-
-  formScroll: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-
+  formScroll: { padding: 16, paddingBottom: 40 },
   formCard: {
     backgroundColor: C.surface,
     borderRadius: 18,
@@ -1051,35 +925,12 @@ subtitle: {
     borderColor: C.border,
     ...SHADOW_MD,
   },
+  sectionTitle: { fontSize: 15.5, fontWeight: '800', color: C.text, marginBottom: 16 },
 
-  sectionTitle: {
-    fontSize: 15.5,
-    fontWeight: '800',
-    color: C.text,
-    marginBottom: 16,
-  },
-
-  // =========================================================
-  // FORM INPUTS
-  // =========================================================
-
-  inputWrapper: {
-    marginBottom: 16,
-  },
-
-  inputLabel: {
-    fontSize: 11.5,
-    fontWeight: '800',
-    color: C.textMuted,
-    marginBottom: 7,
-    marginLeft: 2,
-    letterSpacing: 0.4,
-  },
-
-  asterisk: {
-    color: C.primary,
-  },
-
+  // Form Inputs
+  inputWrapper: { marginBottom: 16 },
+  inputLabel: { fontSize: 11.5, fontWeight: '800', color: C.textMuted, marginBottom: 7, marginLeft: 2, letterSpacing: 0.4 },
+  asterisk: { color: C.primary },
   input: {
     borderWidth: 1.5,
     borderColor: C.border,
@@ -1091,23 +942,10 @@ subtitle: {
     color: C.text,
     fontWeight: '600',
   },
+  inputError: { borderColor: C.primary, backgroundColor: C.primarySoft },
+  errorText: { color: C.primary, fontSize: 11, marginTop: 5, fontWeight: '600' },
 
-  inputError: {
-    borderColor: C.primary,
-    backgroundColor: C.primarySoft,
-  },
-
-  errorText: {
-    color: C.primary,
-    fontSize: 11,
-    marginTop: 5,
-    fontWeight: '600',
-  },
-
-  // =========================================================
-  // ROLE COLORS
-  // =========================================================
-
+  // Role Colors
   colorCircle: {
     width: 36,
     height: 36,
@@ -1117,16 +955,12 @@ subtitle: {
     borderWidth: 2,
     borderColor: 'transparent',
   },
-
   colorCircleActive: {
     borderColor: C.text,
     transform: [{ scale: 1.08 }],
   },
 
-  // =========================================================
-  // PERMISSIONS
-  // =========================================================
-
+  // Permissions
   permCounter: {
     fontSize: 11,
     fontWeight: '800',
@@ -1136,7 +970,6 @@ subtitle: {
     paddingVertical: 5,
     borderRadius: 10,
   },
-
   autoGrantNotice: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1148,7 +981,6 @@ subtitle: {
     borderWidth: 1,
     borderColor: '#CBEEFB',
   },
-
   autoGrantText: {
     flex: 1,
     fontSize: 11.5,
@@ -1157,10 +989,7 @@ subtitle: {
     lineHeight: 16,
   },
 
-  // =========================================================
-  // MODULE ACCORDION
-  // =========================================================
-
+  // Module Accordion
   moduleAccordion: {
     borderWidth: 1,
     borderColor: C.border,
@@ -1169,7 +998,6 @@ subtitle: {
     overflow: 'hidden',
     backgroundColor: C.surface,
   },
-
   moduleHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1177,31 +1005,19 @@ subtitle: {
     padding: 14,
     backgroundColor: C.surfaceSoft,
   },
-
   moduleHeaderActive: {
     backgroundColor: C.primarySoft,
     borderBottomWidth: 1,
     borderBottomColor: C.primaryTint,
   },
-
   moduleHeaderText: {
     fontSize: 12.5,
     fontWeight: '800',
     color: C.textMuted,
     letterSpacing: 0.3,
   },
-
-  moduleCount: {
-    fontSize: 11,
-    color: C.textMuted,
-    fontWeight: '700',
-  },
-
-  moduleBody: {
-    padding: 14,
-    backgroundColor: C.surface,
-  },
-
+  moduleCount: { fontSize: 11, color: C.textMuted, fontWeight: '700' },
+  moduleBody: { padding: 14, backgroundColor: C.surface },
   selectAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1211,19 +1027,8 @@ subtitle: {
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
-
-  selectAllText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: C.blue,
-  },
-
-  permChipsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-
+  selectAllText: { fontSize: 12, fontWeight: '800', color: C.blue },
+  permChipsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   permChipForm: {
     paddingHorizontal: 12,
     paddingVertical: 7,
@@ -1232,28 +1037,11 @@ subtitle: {
     borderWidth: 1,
     borderColor: C.border,
   },
+  permChipFormActive: { backgroundColor: C.greenSoft, borderColor: '#A7E7D0' },
+  permChipFormText: { fontSize: 11.5, fontWeight: '700', color: C.textMuted, textTransform: 'capitalize' },
+  permChipFormTextActive: { color: '#047857', fontWeight: '800' },
 
-  permChipFormActive: {
-    backgroundColor: C.greenSoft,
-    borderColor: '#A7E7D0',
-  },
-
-  permChipFormText: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    color: C.textMuted,
-    textTransform: 'capitalize',
-  },
-
-  permChipFormTextActive: {
-    color: '#047857',
-    fontWeight: '800',
-  },
-
-  // =========================================================
-  // SAVE BUTTON
-  // =========================================================
-
+  // Save Button
   saveBtnFull: {
     backgroundColor: C.primary,
     height: 52,
@@ -1263,11 +1051,5 @@ subtitle: {
     marginTop: 4,
     ...SHADOW_MD,
   },
-
-  saveBtnFullText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
+  saveBtnFullText: { color: '#fff', fontSize: 14, fontWeight: '800', letterSpacing: 0.2 },
 });

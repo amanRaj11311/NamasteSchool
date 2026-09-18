@@ -499,7 +499,7 @@ export default function ClassHomeworkScreen() {
           <View style={styles.compactModalContainer}>
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>{editingId ? 'Edit Homework' : 'Assign Homework'}</Text>
-              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}><Feather name="x" size={18} color="#fff" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}><Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>✕</Text> </TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
 

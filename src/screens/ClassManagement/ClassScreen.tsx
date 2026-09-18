@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -22,8 +22,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 import { API_BASE } from '../../network/api';
 import { useNavigation } from '@react-navigation/native';
-import { RADIUS, SPACING, FONT, SHADOW, TOUCH_TARGET, } from '../../constants/theme';
-
+import { RADIUS, SPACING, FONT, SHADOW, TOUCH_TARGET } from '../../constants/theme';
 
 // --- Types ---
 interface Permission {
@@ -107,19 +106,12 @@ export default function ClassesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Today's attendance summary, keyed by classId — mirrors the web dashboard's
-  // "Present / Total" indicator on each class card.
   const [todayAttendanceMap, setTodayAttendanceMap] = useState<Record<string, AttendanceSummary>>({});
 
-  // View mode: card grid (default) or a compact list row, matching the web
-  // Grid View / List View toggle.
   const [viewMode, setViewMode] = useState<ViewMode>('card');
-
-  // Inline dismissible banner (mirrors the web page's alert banner, in
-  // addition to native Alert.alert confirmations for destructive actions).
   const [alertState, setAlertState] = useState<AlertState>({ type: '', message: '' });
 
-  // Filters & server-side pagination (matches the web page's page/limit/search params)
+  // Filters & server-side pagination
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -144,8 +136,6 @@ export default function ClassesScreen() {
     initialize();
   }, []);
 
-  // Reset to page 1 whenever the search term (debounced) or view mode changes,
-  // then refetch — same behaviour as the web page's useEffect on [search, viewMode].
   useEffect(() => {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     searchDebounceRef.current = setTimeout(() => {
@@ -160,12 +150,12 @@ export default function ClassesScreen() {
     if (!authToken) return;
     setCurrentPage(1);
     fetchClasses(authToken, 1, debouncedSearch);
-  }, [debouncedSearch, viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, viewMode]);
 
   useEffect(() => {
     if (!authToken) return;
     fetchClasses(authToken, currentPage, debouncedSearch);
-  }, [currentPage]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentPage]);
 
   const initialize = async () => {
     const token = await AsyncStorage.getItem('userToken');
@@ -224,8 +214,6 @@ export default function ClassesScreen() {
     }
   };
 
-  // Mirrors the web page's fetchTodayAttendance: pulls this month's class
-  // attendance and rolls up a present/total count per class for "today".
   const fetchTodayAttendance = async (token: string | null) => {
     try {
       const todayStr = new Date().toISOString().split('T')[0];
@@ -256,7 +244,6 @@ export default function ClassesScreen() {
     fetchTodayAttendance(authToken);
   }, [authToken, currentPage, debouncedSearch]);
 
-  // RBAC Checker
   const hasPermission = useCallback(
     (action: string) => {
       if (isSuperAdmin) return true;
@@ -265,14 +252,13 @@ export default function ClassesScreen() {
     [permissions, isSuperAdmin]
   );
 
-  // --- Derived Overview Stats ---
   const totalClasses = totalItems || classes.length;
   const totalDivisions = classes.filter((c) => c.division).length;
   const assignedTeachers = new Set(
     classes.filter((c) => c.classTeacher).map((c) => (typeof c.classTeacher === 'object' ? c.classTeacher._id : c.classTeacher))
   ).size;
 
-  const filteredClasses = classes; // filtering now happens server-side via debouncedSearch
+  const filteredClasses = classes;
 
   // --- Actions ---
   const openAddForm = () => {
@@ -359,7 +345,6 @@ export default function ClassesScreen() {
     }
   };
 
-  // --- Inline Dropdown Handlers ---
   const toggleDropdown = (field: string) => setActiveDropdown(activeDropdown === field ? null : field);
 
   const handleSchoolSelect = (schoolId: string) => {
@@ -374,8 +359,6 @@ export default function ClassesScreen() {
     setActiveDropdown(null);
   };
 
-  // Floating (absolute) dropdown so it overlays content instead of pushing
-  // the layout around and fighting the parent ScrollView for touches.
   const renderInlineDropdown = (fieldKey: string, label: string, options: { label: string; value: string }[]) => {
     const isOpen = activeDropdown === fieldKey;
     const currentValue = formData[fieldKey as keyof typeof formData];
@@ -464,6 +447,123 @@ export default function ClassesScreen() {
     return { text: `${summary.present}/${summary.total} Present (${pct}%)`, tone: 'success' as const };
   };
 
+  // --- Header Component (Includes KPIs & Search) ---
+  const renderListHeader = () => (
+    <View style={styles.listHeaderWrapper}>
+      {/* Warning Banner */}
+      {!loading && schools.length === 0 && (
+        <View style={styles.warningBanner}>
+          <Feather name="alert-triangle" size={18} color={COLORS.warning} />
+          <View style={{ flex: 1, marginLeft: SPACING.sm }}>
+            <Text style={styles.warningTitle}>No School Created</Text>
+            <Text style={styles.warningSub}>Please create a school before adding classes.</Text>
+          </View>
+          <TouchableOpacity style={styles.warningBtn} onPress={() => navigation.navigate('Create School')}>
+            <Text style={styles.warningBtnText}>Create</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Inline Alert */}
+      {alertState.message ? (
+        <View style={[styles.inlineAlert, alertState.type === 'success' ? styles.inlineAlertSuccess : styles.inlineAlertDanger]}>
+          <Text style={[styles.inlineAlertText, alertState.type === 'success' ? styles.inlineAlertTextSuccess : styles.inlineAlertTextDanger]} numberOfLines={2}>
+            {alertState.message}
+          </Text>
+          <TouchableOpacity onPress={() => setAlertState({ type: '', message: '' })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Feather name="x" size={16} color={alertState.type === 'success' ? COLORS.success : COLORS.primary} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {/* KPI Scroller */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.overviewRow}> 
+        <View style={styles.kpiCard}>
+          <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.secondarySoft }]}>
+            <Feather name="grid" size={14} color={COLORS.secondary} />
+          </View>
+          <View style={styles.kpiTextCol}>
+            <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+              {loading ? '—' : totalClasses}
+            </Text>
+            <Text style={styles.kpiLabel} numberOfLines={1}>Classes</Text>
+          </View>
+        </View>
+
+        <View style={styles.kpiCard}>
+          <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.primarySoft }]}>
+            <Feather name="layers" size={14} color={COLORS.primary} />
+          </View>
+          <View style={styles.kpiTextCol}>
+            <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+              {loading ? '—' : totalDivisions}
+            </Text>
+            <Text style={styles.kpiLabel} numberOfLines={1}>Divisions</Text>
+          </View>
+        </View>
+
+        <View style={styles.kpiCard}>
+          <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.successSoft }]}>
+            <Feather name="user-check" size={14} color={COLORS.success} />
+          </View>
+          <View style={styles.kpiTextCol}>
+            <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+              {loading ? '—' : assignedTeachers}
+            </Text>
+            <Text style={styles.kpiLabel} numberOfLines={1}>Teachers</Text>
+          </View>
+        </View>
+
+        <View style={styles.kpiCard}>
+          <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.warningSoft }]}>
+            <Feather name="zap" size={14} color={COLORS.warning} />
+          </View>
+          <View style={styles.kpiTextCol}>
+            <Text style={styles.kpiValueText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+              Auto
+            </Text>
+            <Text style={styles.kpiLabel} numberOfLines={1}>Syllabus</Text>
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* Action Bar */}
+      <View style={[styles.actionBar, compact && styles.actionBarCompact]}>
+        <View style={styles.searchContainer}>
+          <Feather name="search" size={16} color={COLORS.faint} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search classes..."
+            placeholderTextColor={COLORS.faint}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Feather name="x-circle" size={16} color={COLORS.faint} />
+            </TouchableOpacity>
+          )}
+        </View>
+        {hasPermission('create') && (
+          <TouchableOpacity
+            style={[styles.addBtn, compact && styles.addBtnCompact, schools.length === 0 && styles.addBtnDisabled]}
+            onPress={openAddForm}
+            activeOpacity={0.9}
+            disabled={schools.length === 0}
+          >
+            <Feather name="plus" size={16} color="#fff" />
+            <Text style={styles.addBtnText}>Add Class</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <Text style={styles.showingText}>
+        Showing {filteredClasses.length} of {totalClasses} class records
+      </Text>
+    </View>
+  );
+
   // --- Render Card (Grid mode) ---
   const renderCard = ({ item }: { item: ClassObj }) => {
     const classId = item._id || item.id;
@@ -474,7 +574,6 @@ export default function ClassesScreen() {
 
     return (
       <View style={[styles.card, isTablet && styles.cardTablet]}>
-        {/* Top accent strip — mirrors the web card's gradient header line */}
         <View style={styles.accentStrip}>
           <View style={[styles.accentSegment, { backgroundColor: COLORS.primary }]} />
           <View style={[styles.accentSegment, { backgroundColor: COLORS.ink }]} />
@@ -500,12 +599,10 @@ export default function ClassesScreen() {
               </View>
             </View>
 
-            {/* Quick action icons — matches the web card's top-right icon cluster */}
             <View style={styles.quickIconGroup}>
               {hasPermission('read') && (
                 <TouchableOpacity
                   style={styles.quickIconBtn}
-                  accessibilityLabel="View class details"
                   onPress={() => {
                     setViewingClass(item);
                     setViewVisible(true);
@@ -515,12 +612,12 @@ export default function ClassesScreen() {
                 </TouchableOpacity>
               )}
               {hasPermission('update') && (
-                <TouchableOpacity style={styles.quickIconBtn} accessibilityLabel="Edit class" onPress={() => openEditForm(item)}>
+                <TouchableOpacity style={styles.quickIconBtn} onPress={() => openEditForm(item)}>
                   <Feather name="edit-2" size={13} color={COLORS.secondary} />
                 </TouchableOpacity>
               )}
               {hasPermission('delete') && (
-                <TouchableOpacity style={styles.quickIconBtn} accessibilityLabel="Delete class" onPress={() => handleDelete(classId)}>
+                <TouchableOpacity style={styles.quickIconBtn} onPress={() => handleDelete(classId)}>
                   <Feather name="trash-2" size={13} color={COLORS.primary} />
                 </TouchableOpacity>
               )}
@@ -534,9 +631,7 @@ export default function ClassesScreen() {
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.metaLabel}>CLASS TEACHER</Text>
-                <Text style={styles.teacherName} numberOfLines={1}>
-                  {teacherName}
-                </Text>
+                <Text style={styles.teacherName} numberOfLines={1}>{teacherName}</Text>
                 {teacherId ? <Text style={styles.teacherId}>{teacherId}</Text> : null}
               </View>
             </View>
@@ -586,8 +681,6 @@ export default function ClassesScreen() {
             </View>
           </View>
 
-          {/* Structured action grid — mirrors the web card's Students /
-              Attendance / Results / Timetable buttons */}
           <View style={styles.cardActionsGrid}>
             <View style={styles.actionGridRow}>
               <TouchableOpacity
@@ -613,9 +706,7 @@ export default function ClassesScreen() {
                 onPress={() => navigation.navigate('ClassAttendance', { classId })}
               >
                 <Feather name="clipboard" size={13} color="#fff" />
-                <Text style={styles.gridBtnTextLight} numberOfLines={1}>
-                  Attendance
-                </Text>
+                <Text style={styles.gridBtnTextLight} numberOfLines={1}>Attendance</Text>
               </TouchableOpacity>
             </View>
 
@@ -624,7 +715,6 @@ export default function ClassesScreen() {
                 style={styles.resultsIconBtn}
                 activeOpacity={0.9}
                 onPress={() => navigation.navigate('ClassResults', { classId })}
-                accessibilityLabel="results"
               >
                 <Feather name="bar-chart-2" size={15} color={COLORS.primary} />
               </TouchableOpacity>
@@ -635,9 +725,7 @@ export default function ClassesScreen() {
                 onPress={() => navigation.navigate('ClassTimetable', { classId })}
               >
                 <Feather name="calendar" size={13} color={COLORS.secondary} />
-                <Text style={styles.gridBtnTextDark} numberOfLines={1}>
-                  Class Timetable & Schedule
-                </Text>
+                <Text style={styles.gridBtnTextDark} numberOfLines={1}>Class Timetable</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -665,9 +753,7 @@ export default function ClassesScreen() {
                 <Text style={styles.darkBadgeSmText}>{item.division}</Text>
               </View>
             ) : null}
-            <Text style={styles.rowTeacherText} numberOfLines={1}>
-              {teacherName}
-            </Text>
+            <Text style={styles.rowTeacherText} numberOfLines={1}>{teacherName}</Text>
           </View>
           <View style={styles.rowIconGroup}>
             {hasPermission('read') && (
@@ -689,16 +775,10 @@ export default function ClassesScreen() {
         </View>
 
         <View style={styles.rowMetaLine}>
-          <Text style={styles.rowMetaText}>
-            <Feather name="users" size={11} /> {item.studentCount || 0} students
-          </Text>
-          <Text style={styles.rowMetaText}>
-            <Feather name="book-open" size={11} /> {item.syllabus || 'N/A'}
-          </Text>
+          <Text style={styles.rowMetaText}><Feather name="users" size={11} /> {item.studentCount || 0} students</Text>
+          <Text style={styles.rowMetaText}><Feather name="book-open" size={11} /> {item.syllabus || 'N/A'}</Text>
           <View style={att.tone === 'success' ? styles.successPillBadgeSm : styles.warningPillBadgeSm}>
-            <Text style={att.tone === 'success' ? styles.successPillTextSm : styles.warningPillTextSm} numberOfLines={1}>
-              {att.text}
-            </Text>
+            <Text style={att.tone === 'success' ? styles.successPillTextSm : styles.warningPillTextSm} numberOfLines={1}>{att.text}</Text>
           </View>
         </View>
 
@@ -712,8 +792,7 @@ export default function ClassesScreen() {
           <TouchableOpacity style={styles.rowActionBtn} onPress={() => navigation.navigate('ClassResults', { classId })}>
             <Text style={styles.rowActionBtnText}>Results</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.rowActionBtn} onPress={() => navigation.navigate('ClassTimetable', { classId })
-}>
+          <TouchableOpacity style={styles.rowActionBtn} onPress={() => navigation.navigate('ClassTimetable', { classId })}>
             <Text style={styles.rowActionBtnText}>Timetable</Text>
           </TouchableOpacity>
         </View>
@@ -723,193 +802,73 @@ export default function ClassesScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {/* Top Fixed Header */}
       <View style={styles.header}>
         <View style={styles.headerIconWrap}>
           <Feather name="book" size={20} color={COLORS.primary} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.title} numberOfLines={1}>
-            School Classes
-          </Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
-            Manage sections, teachers & rosters
-          </Text>
+          <Text style={styles.title} numberOfLines={1}>School Classes</Text>
+          <Text style={styles.subtitle} numberOfLines={1}>Manage sections, teachers & rosters</Text>
         </View>
 
-        {/* View mode toggle — Grid / List, matches the web page's toggle */}
         <View style={styles.viewToggle}>
           <TouchableOpacity
             style={[styles.viewToggleBtn, viewMode === 'card' && styles.viewToggleBtnActive]}
             onPress={() => setViewMode('card')}
-            accessibilityLabel="Grid view"
           >
             <Feather name="grid" size={14} color={viewMode === 'card' ? '#fff' : COLORS.muted} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.viewToggleBtn, viewMode === 'list' && styles.viewToggleBtnActive]}
             onPress={() => setViewMode('list')}
-            accessibilityLabel="List view"
           >
             <Feather name="list" size={14} color={viewMode === 'list' ? '#fff' : COLORS.muted} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* No School banner — mirrors the web page's "No School Branch" warning */}
-      {!loading && schools.length === 0 && (
-        <View style={styles.warningBanner}>
-          <Feather name="alert-triangle" size={18} color={COLORS.warning} />
-          <View style={{ flex: 1, marginLeft: SPACING.sm }}>
-            <Text style={styles.warningTitle}>No School Created</Text>
-            <Text style={styles.warningSub}>Please create a school before adding classes.</Text>
-          </View>
-          <TouchableOpacity style={styles.warningBtn} onPress={() => navigation.navigate('Create School')}>
-            <Text style={styles.warningBtnText}>Create</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Inline dismissible alert */}
-      {alertState.message ? (
-        <View style={[styles.inlineAlert, alertState.type === 'success' ? styles.inlineAlertSuccess : styles.inlineAlertDanger]}>
-          <Text style={[styles.inlineAlertText, alertState.type === 'success' ? styles.inlineAlertTextSuccess : styles.inlineAlertTextDanger]} numberOfLines={2}>
-            {alertState.message}
-          </Text>
-          <TouchableOpacity onPress={() => setAlertState({ type: '', message: '' })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Feather name="x" size={16} color={alertState.type === 'success' ? COLORS.success : COLORS.primary} />
-          </TouchableOpacity>
-        </View>
-      ) : null}
-<ScrollView
-horizontal
-showsHorizontalScrollIndicator={false}
-contentContainerStyle={styles.overviewRow}> 
-<View style={styles.kpiCard}>
-    <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.secondarySoft }]}>
-      <Feather name="grid" size={14} color={COLORS.secondary} />
-    </View>
-    <View style={styles.kpiTextCol}>
-      <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-        {loading ? '—' : totalClasses}
-      </Text>
-      <Text style={styles.kpiLabel} numberOfLines={1}>Classes</Text>
-    </View>
-  </View>
-
-  <View style={styles.kpiCard}>
-    <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.primarySoft }]}>
-      <Feather name="layers" size={14} color={COLORS.primary} />
-    </View>
-    <View style={styles.kpiTextCol}>
-      <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-        {loading ? '—' : totalDivisions}
-      </Text>
-      <Text style={styles.kpiLabel} numberOfLines={1}>Divisions</Text>
-    </View>
-  </View>
-
-  <View style={styles.kpiCard}>
-    <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.successSoft }]}>
-      <Feather name="user-check" size={14} color={COLORS.success} />
-    </View>
-    <View style={styles.kpiTextCol}>
-      <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-        {loading ? '—' : assignedTeachers}
-      </Text>
-      <Text style={styles.kpiLabel} numberOfLines={1}>Teachers</Text>
-    </View>
-  </View>
-
-  <View style={styles.kpiCard}>
-    <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.warningSoft }]}>
-      <Feather name="zap" size={14} color={COLORS.warning} />
-    </View>
-    <View style={styles.kpiTextCol}>
-      <Text style={styles.kpiValueText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-        Auto
-      </Text>
-      <Text style={styles.kpiLabel} numberOfLines={1}>Syllabus</Text>
-    </View>
-   </View>
-</ScrollView>
-
-
-      {/* Action Bar */}
-      <View style={[styles.actionBar, compact && styles.actionBarCompact]}>
-        <View style={styles.searchContainer}>
-          <Feather name="search" size={16} color={COLORS.faint} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search classes by name, division, syllabus..."
-            placeholderTextColor={COLORS.faint}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            returnKeyType="search"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Clear search">
-              <Feather name="x-circle" size={16} color={COLORS.faint} />
-            </TouchableOpacity>
-          )}
-        </View>
-        {hasPermission('create') && (
-          <TouchableOpacity
-            style={[styles.addBtn, compact && styles.addBtnCompact, schools.length === 0 && styles.addBtnDisabled]}
-            onPress={openAddForm}
-            activeOpacity={0.9}
-            disabled={schools.length === 0}
-          >
-            <Feather name="plus" size={16} color="#fff" />
-            <Text style={styles.addBtnText}>Add New Class</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <Text style={styles.showingText}>
-        Showing {filteredClasses.length} of {totalClasses} class records
-      </Text>
-
-      {/* Class List */}
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading classes…</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredClasses}
-          keyExtractor={(item, idx) => item._id || item.id || idx.toString()}
-          renderItem={viewMode === 'card' ? renderCard : renderRow}
-          numColumns={viewMode === 'card' && isTablet ? 2 : 1}
-          key={`${viewMode}-${viewMode === 'card' && isTablet ? 'tablet' : 'phone'}`}
-          columnWrapperStyle={viewMode === 'card' && isTablet ? styles.columnWrapper : undefined}
-          contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} tintColor={COLORS.primary} />}
-          ListFooterComponent={
-            totalPages > 1 ? (
-              <View style={styles.paginationBar}>
-                <TouchableOpacity
-                  style={[styles.pageBtn, currentPage === 1 && styles.pageBtnDisabled]}
-                  disabled={currentPage === 1}
-                  onPress={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                >
-                  <Feather name="chevron-left" size={16} color={currentPage === 1 ? COLORS.faint : COLORS.primary} />
-                </TouchableOpacity>
-                <Text style={styles.pageText}>
-                  Page {currentPage} of {totalPages}
-                </Text>
-                <TouchableOpacity
-                  style={[styles.pageBtn, currentPage === totalPages && styles.pageBtnDisabled]}
-                  disabled={currentPage === totalPages}
-                  onPress={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  <Feather name="chevron-right" size={16} color={currentPage === totalPages ? COLORS.faint : COLORS.primary} />
-                </TouchableOpacity>
-              </View>
-            ) : null
-          }
-          ListEmptyComponent={
+      {/* Main FlatList mapping the classes, with Header injected */}
+      <FlatList
+        data={loading ? [] : filteredClasses}
+        keyExtractor={(item, idx) => item._id || item.id || idx.toString()}
+        ListHeaderComponent={renderListHeader}
+        renderItem={viewMode === 'card' ? renderCard : renderRow}
+        numColumns={viewMode === 'card' && isTablet ? 2 : 1}
+        key={`${viewMode}-${viewMode === 'card' && isTablet ? 'tablet' : 'phone'}`}
+        columnWrapperStyle={viewMode === 'card' && isTablet ? styles.columnWrapper : undefined}
+        contentContainerStyle={styles.listContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} tintColor={COLORS.primary} />}
+        ListFooterComponent={
+          totalPages > 1 && !loading ? (
+            <View style={styles.paginationBar}>
+              <TouchableOpacity
+                style={[styles.pageBtn, currentPage === 1 && styles.pageBtnDisabled]}
+                disabled={currentPage === 1}
+                onPress={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              >
+                <Feather name="chevron-left" size={16} color={currentPage === 1 ? COLORS.faint : COLORS.primary} />
+              </TouchableOpacity>
+              <Text style={styles.pageText}>
+                Page {currentPage} of {totalPages}
+              </Text>
+              <TouchableOpacity
+                style={[styles.pageBtn, currentPage === totalPages && styles.pageBtnDisabled]}
+                disabled={currentPage === totalPages}
+                onPress={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              >
+                <Feather name="chevron-right" size={16} color={currentPage === totalPages ? COLORS.faint : COLORS.primary} />
+              </TouchableOpacity>
+            </View>
+          ) : null
+        }
+        ListEmptyComponent={
+          loading ? (
+            <View style={styles.center}>
+              <ActivityIndicator size="large" color={COLORS.primary} />
+              <Text style={styles.loadingText}>Loading classes…</Text>
+            </View>
+          ) : (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconWrap}>
                 <Feather name="inbox" size={26} color={COLORS.faint} />
@@ -922,29 +881,31 @@ contentContainerStyle={styles.overviewRow}>
                 </TouchableOpacity>
               )}
             </View>
-          }
-        />
-      )}
+          )
+        }
+      />
 
       {/* --- ADD/EDIT FORM MODAL --- */}
       <Modal visible={isFormVisible} transparent animationType="fade" onRequestClose={closeForm}>
         <View style={styles.formOverlay}>
-          <View style={[styles.formModalContainer, isTablet && styles.formModalContainerTablet]}>
-            <View style={styles.formHeader}>
-              <View style={styles.formHeaderLeft}>
-                <View style={styles.formHeaderIconWrap}>
-                  <Feather name={editingId ? 'edit-2' : 'plus'} size={16} color={COLORS.primary} />
-                </View>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%', alignItems: 'center' }}>
+            <View style={[styles.formModalContainer, isTablet && styles.formModalContainerTablet]}>
+              
+              {/* Fixed Header */}
+              <View style={styles.formHeader}>
                 <Text style={styles.formTitle}>{editingId ? 'Edit Class Details' : 'Add New Class'}</Text>
+                <TouchableOpacity onPress={closeForm} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={{ fontSize: 20, color: '#fff', fontWeight: '600' }}>✕</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={closeForm} style={styles.closeBtnIcon} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Feather name="x" size={20} color={COLORS.body} />
-              </TouchableOpacity>
-            </View>
 
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-              <ScrollView contentContainerStyle={styles.formScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-                {/* Backdrop to close any open dropdown when tapping elsewhere in the form */}
+              {/* Scrollable Body */}
+              <ScrollView 
+                style={styles.formBodyScroll} 
+                contentContainerStyle={styles.formScrollContent} 
+                keyboardShouldPersistTaps="handled" 
+                showsVerticalScrollIndicator={false}
+              >
                 {activeDropdown && (
                   <Pressable style={styles.dropdownBackdrop} onPress={() => setActiveDropdown(null)} />
                 )}
@@ -960,11 +921,7 @@ contentContainerStyle={styles.overviewRow}>
                     </View>
                   ) : null}
 
-                  {renderInlineDropdown(
-                    'schoolId',
-                    'School Branch *',
-                    schools.map((s) => ({ label: s.name, value: s._id }))
-                  )}
+                  {renderInlineDropdown('schoolId', 'School Branch *', schools.map((s) => ({ label: s.name, value: s._id })))}
 
                   <View style={[styles.row, compact && styles.rowCompact]}>
                     <View style={[styles.inputWrapper, compact ? styles.rowCompactItem : { flex: 1, marginRight: SPACING.md }]}>
@@ -997,7 +954,6 @@ contentContainerStyle={styles.overviewRow}>
                     </View>
                   </View>
 
-                  {/* Max Section Capacity — matches the web edit modal's capacity field */}
                   <View style={styles.inputWrapper}>
                     <Text style={styles.inputLabel}>
                       Max Section Capacity <Text style={styles.asterisk}>*</Text>
@@ -1032,7 +988,13 @@ contentContainerStyle={styles.overviewRow}>
                     />
                   </View>
                 </View>
+              </ScrollView>
 
+              {/* Fixed Footer */}
+              <View style={styles.formFooter}>
+                <TouchableOpacity style={styles.cancelBtnFull} onPress={closeForm} activeOpacity={0.8}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.saveBtnFull, saving && styles.saveBtnFullDisabled]}
                   onPress={handleSave}
@@ -1042,15 +1004,13 @@ contentContainerStyle={styles.overviewRow}>
                   {saving ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <>
-                      <Feather name="check" size={16} color="#fff" style={{ marginRight: 8 }} />
-                      <Text style={styles.saveBtnFullText}>{editingId ? 'Save Changes' : 'Submit Class'}</Text>
-                    </>
+                    <Text style={styles.saveBtnFullText}>{editingId ? 'Save Changes' : 'Submit Class'}</Text>
                   )}
                 </TouchableOpacity>
-              </ScrollView>
-            </KeyboardAvoidingView>
-          </View>
+              </View>
+
+            </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -1060,8 +1020,8 @@ contentContainerStyle={styles.overviewRow}>
           <View style={[styles.viewModalContainer, isTablet && styles.formModalContainerTablet]}>
             <View style={styles.viewHeaderRed}>
               <Text style={styles.viewTitle}>Class Full Specification</Text>
-              <TouchableOpacity onPress={() => setViewVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Feather name="x" size={22} color="#fff" />
+              <TouchableOpacity onPress={() => setViewVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ fontSize: 20, color: '#fff', fontWeight: '600' }}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -1166,9 +1126,13 @@ contentContainerStyle={styles.overviewRow}>
                 <Text style={styles.viewText}>{viewingClass?.description || 'No description provided.'}</Text>
               </View>
 
-              {hasPermission('update') && (
+            </ScrollView>
+
+            {/* View Full Spec Footer */}
+            {hasPermission('update') && (
+              <View style={[styles.formFooter, { borderTopWidth: 0, paddingBottom: SPACING.xl, paddingTop: 0 }]}>
                 <TouchableOpacity
-                  style={[styles.saveBtnFull, { marginBottom: SPACING.xl }]}
+                  style={[styles.saveBtnFull, { width: '100%' }]}
                   onPress={() => {
                     const target = viewingClass;
                     setViewVisible(false);
@@ -1178,16 +1142,17 @@ contentContainerStyle={styles.overviewRow}>
                   <Feather name="edit-2" size={16} color="#fff" style={{ marginRight: 8 }} />
                   <Text style={styles.saveBtnFullText}>Edit Class</Text>
                 </TouchableOpacity>
-              )}
-            </ScrollView>
+              </View>
+            )}
+
           </View>
         </View>
       </Modal>
     </SafeAreaView>
   );
 }
+
 const COLORS = {
-  
   background: '#F6F6F9',
   surface: '#FFFFFF',
   surfaceSoft: '#FBFBFD',
@@ -1199,14 +1164,12 @@ const COLORS = {
   textMuted: '#6B7280',
   textFaint: '#9AA0AC',
 
-  // Brand red — used sparingly now, as an accent rather than a wash.
   primary: '#B3122A',
   primaryBright: '#D2263F',
   primaryDeep: '#7A0C1D',
   primarySoft: '#FBEEEF',
   primaryTint: '#F3D6D9',
 
-  // Ink — the new anchor surface (header, dark buttons, active states).
   ink: '#0D0F16',
   inkSoft: '#181B24',
   inkFaint: 'rgba(255,255,255,0.62)',
@@ -1221,21 +1184,15 @@ const COLORS = {
   slate: '#475467',
   slateSoft: '#F1F3F7',
 
-  
-
-  // Borders
   borderSoft: '#E8E9EF',
   borderFaint: '#EEF0F4',
 
-  // Text
   body: '#181B24',
   muted: '#6B7280',
   faint: '#9AA0AC',
 
-  // 🔴 Staff Attendance Red Theme
   primarySoftBorder: '#E9BFC5',
 
-  // Other semantic colors
   success: '#059669',
   successSoft: '#ECFDF5',
   successSoftBorder: '#A7F3D0',
@@ -1252,53 +1209,55 @@ const COLORS = {
   pink: '#DB2777',
   pinkSoft: '#FDF2F8',
 
-  overlay: 'rgba(13, 15, 22, 0.45)',
+  overlay: 'rgba(13, 15, 22, 0.55)',
 };
 
 // --- Styles ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  center: { padding: 40, justifyContent: 'center', alignItems: 'center' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: SPACING.md, color: COLORS.muted, fontSize: FONT.small, fontWeight: '600' },
 
-header: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  paddingHorizontal: SPACING.xl,
-  paddingTop: SPACING.lg,      // was SPACING.xl
-  paddingBottom: SPACING.md,   // was SPACING.lg
-  backgroundColor: COLORS.surface,
-  borderBottomWidth: 1,
-  borderBottomColor: COLORS.borderSoft,
-},
-headerIconWrap: {
-  width: 40,
-  height: 40,
-  borderRadius: RADIUS.md,
-  backgroundColor: COLORS.primarySoft,
-  justifyContent: 'center',
-  alignItems: 'center',
-  marginRight: SPACING.md,
-},
-
-title: {
-  fontSize: FONT.h1,
-  fontWeight: '800',
-  color: COLORS.ink,
-  letterSpacing: 0.2,
-},
-
-subtitle: {
-  fontSize: FONT.tiny,
-  color: COLORS.muted,
-  marginTop: 2,
-  fontWeight: '500',
-},
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.lg,
+    paddingBottom: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderSoft,
+  },
+  headerIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+  },
+  title: {
+    fontSize: FONT.h1,
+    fontWeight: '800',
+    color: COLORS.ink,
+    letterSpacing: 0.2,
+  },
+  subtitle: {
+    fontSize: FONT.tiny,
+    color: COLORS.muted,
+    marginTop: 2,
+    fontWeight: '500',
+  },
   viewToggle: { flexDirection: 'row', backgroundColor: COLORS.background, borderRadius: RADIUS.pill, padding: 3, borderWidth: 1, borderColor: COLORS.borderSoft, marginLeft: SPACING.sm },
   viewToggleBtn: { width: 30, height: 30, borderRadius: RADIUS.pill, justifyContent: 'center', alignItems: 'center' },
-viewToggleBtnActive: {
-  backgroundColor: COLORS.primary,
-},
+  viewToggleBtnActive: {
+    backgroundColor: COLORS.primary,
+  },
+
+  listHeaderWrapper: {
+    paddingBottom: SPACING.md,
+  },
 
   warningBanner: { flexDirection: 'row', alignItems: 'center', marginHorizontal: SPACING.lg, marginTop: SPACING.lg, padding: SPACING.md, backgroundColor: COLORS.warningSoft, borderRadius: RADIUS.md, borderWidth: 1, borderColor: '#F5D98F' },
   warningTitle: { fontSize: FONT.small, fontWeight: '800', color: COLORS.ink },
@@ -1313,67 +1272,68 @@ viewToggleBtnActive: {
   inlineAlertTextSuccess: { color: '#065F46' },
   inlineAlertTextDanger: { color: COLORS.primary },
 
-overviewRow: {
-  flexDirection: 'row',
-  paddingHorizontal: SPACING.lg,
-  paddingTop: SPACING.md,
-  paddingBottom: SPACING.md, // was SPACING.xs
-  gap: SPACING.sm,
-},
-kpiCard: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  width: 138,               // was 122 — gives text col more room
-  height: 58,
-  backgroundColor: COLORS.surface,
-  borderRadius: RADIUS.md,
-  borderWidth: 1,
-  borderColor: COLORS.borderFaint,
-  paddingHorizontal: 8,
-  gap: 6,                   // was 7
-  ...SHADOW.card,
-},
-kpiIconWrap: {
-  width: 26,                // was 28
-  height: 26,
-  borderRadius: RADIUS.xs,
-  justifyContent: 'center',
-  alignItems: 'center',
-  flexShrink: 0,
-},
-kpiTextCol: {
-  flex: 1,
-  minWidth: 0,
-},
-kpiLabel: {
-  fontSize: 9,
-  fontWeight: '700',
-  color: COLORS.muted,
-  letterSpacing: 0.1,       // was 0.2 — saves a hair of width
-  marginTop: 1,
-},
-kpiValue: {
-  fontSize: 16,
-  fontWeight: '800',
-  color: COLORS.ink,
-  includeFontPadding: false,
-  lineHeight: 18,
-},
-kpiValueText: {
-  fontSize: 12,
-  fontWeight: '800',
-  color: COLORS.success,
-  includeFontPadding: false,
-  lineHeight: 14,
-},
-actionBar: {
-  flexDirection: 'row',
-  paddingHorizontal: SPACING.lg,
-  alignItems: 'center',
-  gap: SPACING.md,
-  marginTop: 6, // pehle SPACING.xs tha
-  zIndex: 10,
-},
+  overviewRow: {
+    flexDirection: 'row',
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.md,
+    gap: SPACING.sm,
+  },
+  kpiCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: 138,
+    height: 58,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderFaint,
+    paddingHorizontal: 8,
+    gap: 6,
+    ...SHADOW.card,
+  },
+  kpiIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: RADIUS.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  kpiTextCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  kpiLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.muted,
+    letterSpacing: 0.1,
+    marginTop: 1,
+  },
+  kpiValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.ink,
+    includeFontPadding: false,
+    lineHeight: 18,
+  },
+  kpiValueText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.success,
+    includeFontPadding: false,
+    lineHeight: 14,
+  },
+
+  actionBar: {
+    flexDirection: 'row',
+    paddingHorizontal: SPACING.lg,
+    alignItems: 'center',
+    gap: SPACING.md,
+    marginTop: 6,
+    zIndex: 10,
+  },
   actionBarCompact: { flexDirection: 'column', alignItems: 'stretch' },
   searchContainer: {
     flex: 1,
@@ -1390,34 +1350,34 @@ actionBar: {
   },
   searchInput: { flex: 1, fontSize: FONT.body, color: COLORS.ink },
   addBtn: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  backgroundColor: COLORS.primary,
-  paddingHorizontal: SPACING.lg,
-  height: TOUCH_TARGET,
-  borderRadius: RADIUS.sm,
-  gap: SPACING.xs,
-  ...SHADOW.button,
-},
-
-primaryBadge: {
-  backgroundColor: COLORS.primary,
-  paddingHorizontal: 14,
-  paddingVertical: 6,
-  borderRadius: RADIUS.pill,
-},
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    height: TOUCH_TARGET,
+    borderRadius: RADIUS.sm,
+    gap: SPACING.xs,
+    ...SHADOW.button,
+  },
+  primaryBadge: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: RADIUS.pill,
+  },
   addBtnCompact: { marginTop: SPACING.sm },
   addBtnDisabled: { opacity: 0.5 },
   addBtnText: { color: '#fff', fontSize: FONT.small, fontWeight: '700' },
-showingText: {
-  paddingHorizontal: SPACING.lg,
-  paddingTop: 4,          // was SPACING.md
-  fontSize: FONT.tiny,
-  color: COLORS.muted,
-  fontWeight: '500',
-  textAlign: 'right',
-},
+  showingText: {
+    paddingHorizontal: SPACING.lg,
+    paddingTop: 4,
+    fontSize: FONT.tiny,
+    color: COLORS.muted,
+    fontWeight: '500',
+    textAlign: 'right',
+  },
+
   listContent: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xl, paddingTop: SPACING.sm },
   columnWrapper: { gap: SPACING.lg },
 
@@ -1451,35 +1411,36 @@ showingText: {
     gap: SPACING.sm,
   },
   teacherLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
-avatar: {
-  width: 44,
-  height: 44,
-  borderRadius: 22,
-  backgroundColor: COLORS.primary,
-  justifyContent: 'center',
-  alignItems: 'center',
-  marginRight: SPACING.md,
-},  avatarText: { fontSize: FONT.h2, fontWeight: '800', color: '#fff' },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+  },
+  avatarText: { fontSize: FONT.h2, fontWeight: '800', color: '#fff' },
   metaLabel: { fontSize: FONT.micro, fontWeight: '800', color: COLORS.faint, marginBottom: 2, letterSpacing: 0.3 },
   teacherName: { fontSize: FONT.h3, fontWeight: '800', color: COLORS.ink },
   teacherId: { fontSize: FONT.tiny, color: COLORS.muted, fontWeight: '500' },
-teacherAttBtn: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 4,
-  borderWidth: 1,
-  borderColor: COLORS.primarySoftBorder,
-  backgroundColor: COLORS.primarySoft,
-  paddingHorizontal: 10,
-  paddingVertical: 6,
-  borderRadius: RADIUS.pill,
-},
+  teacherAttBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: COLORS.primarySoftBorder,
+    backgroundColor: COLORS.primarySoft,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: RADIUS.pill,
+  },
+  teacherAttBtnText: {
+    fontSize: FONT.tiny,
+    fontWeight: '800',
+    color: COLORS.primary,
+  },
 
-teacherAttBtnText: {
-  fontSize: FONT.tiny,
-  fontWeight: '800',
-  color: COLORS.primary,
-},
   metricsList: { gap: SPACING.sm, marginBottom: SPACING.lg },
   metricRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   metricLabel: { fontSize: FONT.small, color: COLORS.muted, fontWeight: '600' },
@@ -1538,25 +1499,34 @@ teacherAttBtnText: {
   emptyClearBtn: { marginTop: SPACING.lg, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: RADIUS.pill, backgroundColor: COLORS.primarySoft },
   emptyClearBtnText: { color: COLORS.primary, fontWeight: '700', fontSize: FONT.small },
 
-  // Form Modal
+  // Form Modal Layout Updates
   formOverlay: { flex: 1, backgroundColor: COLORS.overlay, justifyContent: 'center', alignItems: 'center', padding: SPACING.lg },
-  formModalContainer: { width: '100%', maxWidth: 650, height: '85%', backgroundColor: COLORS.background, borderRadius: RADIUS.xl, overflow: 'hidden', ...SHADOW.raised },
-  formModalContainerTablet: { maxWidth: 720, height: '80%' },
+  formModalContainer: { 
+    width: '100%', 
+    maxWidth: 650, 
+    maxHeight: '90%', 
+    backgroundColor: COLORS.background, 
+    borderRadius: RADIUS.xl, 
+    overflow: 'hidden', 
+    display: 'flex',
+    flexDirection: 'column',
+    ...SHADOW.raised 
+  },
+  formModalContainerTablet: { maxWidth: 720 },
+  
   formHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: SPACING.xl,
     paddingVertical: SPACING.lg,
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.primary,
   },
   formHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  formHeaderIconWrap: { width: 32, height: 32, borderRadius: RADIUS.xs, backgroundColor: COLORS.primarySoft, justifyContent: 'center', alignItems: 'center' },
-  formTitle: { fontSize: FONT.h2, fontWeight: '800', color: COLORS.ink },
-  closeBtnIcon: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.borderSoft, borderRadius: 18 },
-  formScroll: { padding: SPACING.lg, paddingBottom: SPACING.xxl },
+  formTitle: { fontSize: FONT.h2, fontWeight: '800', color: '#fff' },
+  
+  formBodyScroll: { flexShrink: 1 },
+  formScrollContent: { padding: SPACING.lg },
   dropdownBackdrop: { ...StyleSheet.absoluteFillObject, zIndex: 5 },
   formCard: { backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACING.xl, marginBottom: SPACING.lg, borderWidth: 1, borderColor: COLORS.border, ...SHADOW.card },
   sectionTitle: { fontSize: FONT.h2, fontWeight: '800', color: COLORS.ink },
@@ -1581,8 +1551,6 @@ teacherAttBtnText: {
   dropdownHeaderActive: { borderColor: COLORS.primary },
   dropdownSelectedText: { color: COLORS.ink, fontSize: FONT.body, fontWeight: '500' },
   dropdownPlaceholder: { color: COLORS.faint, fontSize: FONT.body },
-  // Floats above surrounding fields instead of pushing the layout down,
-  // which is what caused the overlap / stuck-touch glitches before.
   dropdownListContainer: {
     position: 'absolute',
     top: '100%',
@@ -1607,7 +1575,18 @@ teacherAttBtnText: {
   dropdownEmpty: { padding: SPACING.lg, alignItems: 'center' },
   dropdownEmptyText: { color: COLORS.faint, fontSize: FONT.small },
 
-  saveBtnFull: { flexDirection: 'row', backgroundColor: COLORS.primary, height: 56, borderRadius: RADIUS.md, justifyContent: 'center', alignItems: 'center', marginTop: SPACING.xs, ...SHADOW.button },
+  formFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: SPACING.md,
+    padding: SPACING.lg,
+    backgroundColor: COLORS.surface,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderSoft,
+  },
+  cancelBtnFull: { flex: 1, height: 50, borderRadius: RADIUS.md, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.surfaceSunken, borderWidth: 1, borderColor: COLORS.borderSoft },
+  cancelBtnText: { color: COLORS.secondary, fontSize: FONT.h3, fontWeight: '700' },
+  saveBtnFull: { flex: 1, flexDirection: 'row', backgroundColor: COLORS.primary, height: 50, borderRadius: RADIUS.md, justifyContent: 'center', alignItems: 'center', ...SHADOW.button },
   saveBtnFullDisabled: { opacity: 0.7 },
   saveBtnFullText: { color: '#fff', fontSize: FONT.h3, fontWeight: '800' },
 
@@ -1624,4 +1603,4 @@ teacherAttBtnText: {
   viewLabel: { fontSize: FONT.tiny, color: COLORS.faint, fontWeight: '700', marginBottom: 4 },
   viewVal: { fontSize: FONT.body, color: COLORS.ink, fontWeight: '700' },
   viewText: { fontSize: FONT.body, color: COLORS.body, lineHeight: 23, fontWeight: '500' },
-})
+});

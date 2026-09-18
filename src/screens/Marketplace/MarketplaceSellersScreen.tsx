@@ -260,7 +260,7 @@ export default function MarketplaceSellersScreen() {
                 <Feather name="store" size={18} color="#fff" />
                 <Text style={styles.modalTitle}>{editingId ? 'Edit Seller Profile' : 'Register New Seller'}</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowModal(false)} style={styles.closeBtnIconLight} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Feather name="x" size={20} color="#fff" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowModal(false)} style={styles.closeBtnIconLight} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Text style={{ fontSize: 18, color: '#fff' }}>✕</Text></TouchableOpacity>
             </View>
 
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>

@@ -1237,7 +1237,7 @@ export default function StudentsScreen() {
                 </View>
               </View>
               <TouchableOpacity onPress={() => setRegisterVisible(false)} style={styles.closeBtnIconLight} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Feather name="x" size={20} color="#fff" />
+                <Text style={{ fontSize: 18, color: '#fff' }}>✕</Text>
               </TouchableOpacity>
             </View>
 

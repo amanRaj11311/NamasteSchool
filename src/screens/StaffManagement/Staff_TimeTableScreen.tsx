@@ -855,8 +855,9 @@ export default function TimetableScreen({ route }: any) {
           <View style={styles.bottomSheet}>
             <View style={styles.bsHeader}>
               <Text style={styles.bsTitle}>Select Staff Member</Text>
-              <TouchableOpacity onPress={() => setStaffSelectorVisible(false)}><Feather name="x" size={20} color="#4B5563" /></TouchableOpacity>
-            </View>
+<TouchableOpacity onPress={() => setStaffSelectorVisible(false)}>
+  <Feather name="x" size={22} color="#4B5563" />
+</TouchableOpacity>            </View>
             <FlatList
               data={staffListWithAll}
               keyExtractor={(item) => item._id}
@@ -885,7 +886,7 @@ export default function TimetableScreen({ route }: any) {
           <View style={styles.bottomSheet}>
             <View style={styles.bsHeader}>
               <Text style={styles.bsTitle}>Select Class</Text>
-              <TouchableOpacity onPress={() => setClassSelectorVisible(false)}><Feather name="x" size={20} color="#4B5563" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setClassSelectorVisible(false)}> <Feather name="x" size={22} color="#4B5563" /></TouchableOpacity>
             </View>
             {classList.length === 0 ? (
               <Text style={{ textAlign: 'center', color: '#9CA3AF', paddingVertical: 20 }}>No classes found.</Text>
@@ -917,7 +918,7 @@ export default function TimetableScreen({ route }: any) {
           <View style={styles.bottomSheet}>
             <View style={styles.bsHeader}>
               <Text style={styles.bsTitle}>Select Subject</Text>
-              <TouchableOpacity onPress={() => setSubjectSelectorVisible(false)}><Feather name="x" size={20} color="#4B5563" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setSubjectSelectorVisible(false)}> <Feather name="x" size={22} color="#4B5563" /></TouchableOpacity>
             </View>
             {subjectList.length === 0 ? (
               <Text style={{ textAlign: 'center', color: '#9CA3AF', paddingVertical: 20 }}>No subjects found.</Text>
