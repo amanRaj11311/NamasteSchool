@@ -781,82 +781,59 @@ export default function ClassesScreen() {
           </TouchableOpacity>
         </View>
       ) : null}
-
-      {/* Overview Cards (Scrollable horizontally) */}
-      {/* Overview Cards — premium 2x2 grid, fixed-height, no layout shift */}
-<View style={styles.overviewGrid}>
-  <View style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
-    <View style={styles.kpiTopRow}>
-      <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.secondarySoft }]}>
-        <Feather name="grid" size={15} color={COLORS.secondary} />
-      </View>
-      <View style={styles.kpiTrendDot} />
+<ScrollView
+horizontal
+showsHorizontalScrollIndicator={false}
+contentContainerStyle={styles.overviewRow}> 
+<View style={styles.kpiCard}>
+    <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.secondarySoft }]}>
+      <Feather name="grid" size={14} color={COLORS.secondary} />
     </View>
-    <Text style={styles.kpiLabel} numberOfLines={1}>TOTAL CLASSES</Text>
-    <Text
-      style={styles.kpiValue}
-      numberOfLines={1}
-      adjustsFontSizeToFit
-      minimumFontScale={0.6}
-    >
-      {loading ? '—' : totalClasses}
-    </Text>
+    <View style={styles.kpiTextCol}>
+      <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+        {loading ? '—' : totalClasses}
+      </Text>
+      <Text style={styles.kpiLabel} numberOfLines={1}>Classes</Text>
+    </View>
   </View>
 
-  <View style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
-    <View style={styles.kpiTopRow}>
-      <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.primarySoft }]}>
-        <Feather name="layers" size={15} color={COLORS.primary} />
-      </View>
-      <View style={styles.kpiTrendDot} />
+  <View style={styles.kpiCard}>
+    <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.primarySoft }]}>
+      <Feather name="layers" size={14} color={COLORS.primary} />
     </View>
-    <Text style={styles.kpiLabel} numberOfLines={1}>DIVISIONS</Text>
-    <Text
-      style={styles.kpiValue}
-      numberOfLines={1}
-      adjustsFontSizeToFit
-      minimumFontScale={0.6}
-    >
-      {loading ? '—' : totalDivisions}
-    </Text>
+    <View style={styles.kpiTextCol}>
+      <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+        {loading ? '—' : totalDivisions}
+      </Text>
+      <Text style={styles.kpiLabel} numberOfLines={1}>Divisions</Text>
+    </View>
   </View>
 
-  <View style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
-    <View style={styles.kpiTopRow}>
-      <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.successSoft }]}>
-        <Feather name="user-check" size={15} color={COLORS.success} />
-      </View>
-      <View style={styles.kpiTrendDot} />
+  <View style={styles.kpiCard}>
+    <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.successSoft }]}>
+      <Feather name="user-check" size={14} color={COLORS.success} />
     </View>
-    <Text style={styles.kpiLabel} numberOfLines={1}>ASSIGNED TEACHERS</Text>
-    <Text
-      style={styles.kpiValue}
-      numberOfLines={1}
-      adjustsFontSizeToFit
-      minimumFontScale={0.6}
-    >
-      {loading ? '—' : assignedTeachers}
-    </Text>
+    <View style={styles.kpiTextCol}>
+      <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+        {loading ? '—' : assignedTeachers}
+      </Text>
+      <Text style={styles.kpiLabel} numberOfLines={1}>Teachers</Text>
+    </View>
   </View>
 
-  <View style={[styles.kpiCard, isTablet && styles.kpiCardTablet]}>
-    <View style={styles.kpiTopRow}>
-      <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.warningSoft }]}>
-        <Feather name="zap" size={15} color={COLORS.warning} />
-      </View>
-      <View style={styles.kpiTrendDot} />
+  <View style={styles.kpiCard}>
+    <View style={[styles.kpiIconWrap, { backgroundColor: COLORS.warningSoft }]}>
+      <Feather name="zap" size={14} color={COLORS.warning} />
     </View>
-    <Text style={styles.kpiLabel} numberOfLines={1}>SYLLABUS ENGINE</Text>
-    <Text
-      style={styles.kpiValueText}
-      numberOfLines={1}
-      adjustsFontSizeToFit
-      minimumFontScale={0.7}
-    >
-      Auto-Detected
-    </Text>
-  </View>
-</View>
+    <View style={styles.kpiTextCol}>
+      <Text style={styles.kpiValueText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+        Auto
+      </Text>
+      <Text style={styles.kpiLabel} numberOfLines={1}>Syllabus</Text>
+    </View>
+   </View>
+</ScrollView>
+
 
       {/* Action Bar */}
       <View style={[styles.actionBar, compact && styles.actionBarCompact]}>
@@ -1287,13 +1264,13 @@ const styles = StyleSheet.create({
 header: {
   flexDirection: 'row',
   alignItems: 'center',
-  padding: SPACING.xl,
-  paddingBottom: SPACING.lg,
+  paddingHorizontal: SPACING.xl,
+  paddingTop: SPACING.lg,      // was SPACING.xl
+  paddingBottom: SPACING.md,   // was SPACING.lg
   backgroundColor: COLORS.surface,
   borderBottomWidth: 1,
   borderBottomColor: COLORS.borderSoft,
 },
-
 headerIconWrap: {
   width: 40,
   height: 40,
@@ -1336,69 +1313,67 @@ viewToggleBtnActive: {
   inlineAlertTextSuccess: { color: '#065F46' },
   inlineAlertTextDanger: { color: COLORS.primary },
 
- overviewGrid: {
+overviewRow: {
   flexDirection: 'row',
-  flexWrap: 'wrap',
   paddingHorizontal: SPACING.lg,
-  paddingTop: SPACING.lg,
-  paddingBottom: SPACING.sm,
-  gap: SPACING.md,
+  paddingTop: SPACING.md,
+  paddingBottom: SPACING.md, // was SPACING.xs
+  gap: SPACING.sm,
 },
 kpiCard: {
-  flexBasis: '47%',
-  flexGrow: 1,
-  height: 100,              // fixed height — kills the "jump then settle" bug
-  backgroundColor: COLORS.surface,
-  borderRadius: RADIUS.lg,
-  borderWidth: 1,
-  borderColor: COLORS.borderFaint,
-  padding: SPACING.md,
-  justifyContent: 'space-between',
-  overflow: 'hidden',
-  ...SHADOW.card,
-},
-kpiCardTablet: {
-  flexBasis: '23%',
-  height: 108,
-},
-kpiTopRow: {
   flexDirection: 'row',
   alignItems: 'center',
-  justifyContent: 'space-between',
+  width: 138,               // was 122 — gives text col more room
+  height: 58,
+  backgroundColor: COLORS.surface,
+  borderRadius: RADIUS.md,
+  borderWidth: 1,
+  borderColor: COLORS.borderFaint,
+  paddingHorizontal: 8,
+  gap: 6,                   // was 7
+  ...SHADOW.card,
 },
 kpiIconWrap: {
-  width: 28,
-  height: 28,
+  width: 26,                // was 28
+  height: 26,
   borderRadius: RADIUS.xs,
   justifyContent: 'center',
   alignItems: 'center',
+  flexShrink: 0,
 },
-kpiTrendDot: {
-  width: 6,
-  height: 6,
-  borderRadius: 3,
-  backgroundColor: COLORS.borderSoft,
+kpiTextCol: {
+  flex: 1,
+  minWidth: 0,
 },
 kpiLabel: {
-  fontSize: FONT.micro,
-  fontWeight: '800',
+  fontSize: 9,
+  fontWeight: '700',
   color: COLORS.muted,
-  letterSpacing: 0.6,
-  marginTop: SPACING.sm,
+  letterSpacing: 0.1,       // was 0.2 — saves a hair of width
+  marginTop: 1,
 },
 kpiValue: {
-  fontSize: 24,
+  fontSize: 16,
   fontWeight: '800',
   color: COLORS.ink,
-  includeFontPadding: false,   // Android: stops icon-font style clipping/offset
+  includeFontPadding: false,
+  lineHeight: 18,
 },
 kpiValueText: {
-  fontSize: FONT.h3,
+  fontSize: 12,
   fontWeight: '800',
   color: COLORS.success,
   includeFontPadding: false,
+  lineHeight: 14,
 },
-  actionBar: { flexDirection: 'row', paddingHorizontal: SPACING.lg, alignItems: 'center', gap: SPACING.md, zIndex: 10 },
+actionBar: {
+  flexDirection: 'row',
+  paddingHorizontal: SPACING.lg,
+  alignItems: 'center',
+  gap: SPACING.md,
+  marginTop: 6, // pehle SPACING.xs tha
+  zIndex: 10,
+},
   actionBarCompact: { flexDirection: 'column', alignItems: 'stretch' },
   searchContainer: {
     flex: 1,
@@ -1435,8 +1410,14 @@ primaryBadge: {
   addBtnCompact: { marginTop: SPACING.sm },
   addBtnDisabled: { opacity: 0.5 },
   addBtnText: { color: '#fff', fontSize: FONT.small, fontWeight: '700' },
-  showingText: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, fontSize: FONT.tiny, color: COLORS.muted, fontWeight: '500', textAlign: 'right' },
-
+showingText: {
+  paddingHorizontal: SPACING.lg,
+  paddingTop: 4,          // was SPACING.md
+  fontSize: FONT.tiny,
+  color: COLORS.muted,
+  fontWeight: '500',
+  textAlign: 'right',
+},
   listContent: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.xl, paddingTop: SPACING.sm },
   columnWrapper: { gap: SPACING.lg },
 

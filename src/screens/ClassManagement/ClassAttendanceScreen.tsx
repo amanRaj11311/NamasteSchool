@@ -12,6 +12,7 @@ import XLSX from 'xlsx';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { API_BASE } from '../../network/api';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -81,6 +82,23 @@ const formatPretty = (dateStr: string): string => {
 };
 const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
 const getInitials = (name: string) => (name || '?').trim().charAt(0).toUpperCase();
+
+// Builds the nested { studentKey: { dateStr: status } } matrix from the flat
+// records array returned by the API / stored in cache. This is only called
+// on a full fetch (network or cache) — single-cell edits patch the map
+// directly instead of rebuilding it, which is what keeps taps fast.
+const buildAttendanceMap = (records: any[]): Record<string, Record<string, string>> => {
+  const map: Record<string, Record<string, string>> = {};
+  records.forEach(record => {
+    const d = record.date.split('T')[0];
+    const key = record.rollNo?.toString() || record.studentName;
+    if (key) {
+      if (!map[key]) map[key] = {};
+      map[key][d] = record.status;
+    }
+  });
+  return map;
+};
 
 // Debounce hook — keeps search filtering from re-running on every keystroke
 // when the student list is large.
@@ -235,6 +253,7 @@ const SkeletonRow = ({ delay = 0 }: { delay?: number }) => (
 );
 
 export default function ClassAttendanceScreen() {
+  const insets = useSafeAreaInsets();
   const { width: winWidth } = useWindowDimensions();
   const isTablet = winWidth >= 768;
   const isCompactPhone = winWidth < 360;
@@ -248,7 +267,8 @@ export default function ClassAttendanceScreen() {
   // Data States
   const [classes, setClasses] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
-  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+ 
+  const [attendanceMap, setAttendanceMap] = useState<Record<string, Record<string, string>>>({});
 
   // Selection States
   const [selectedClassId, setSelectedClassId] = useState<string>('');
@@ -362,7 +382,7 @@ export default function ClassAttendanceScreen() {
         if (cached) {
           const parsed = JSON.parse(cached);
           setStudents(parsed.students || []);
-          setAttendanceRecords(parsed.attendanceRecords || []);
+          setAttendanceMap(buildAttendanceMap(parsed.attendanceRecords || []));
           setLoading(false);
           paintedFromCache = true;
         }
@@ -383,7 +403,7 @@ export default function ClassAttendanceScreen() {
       const freshAttendance = attRes.data?.data || [];
 
       setStudents(freshStudents);
-      setAttendanceRecords(freshAttendance);
+      setAttendanceMap(buildAttendanceMap(freshAttendance));
 
       AsyncStorage.setItem(cacheKey, JSON.stringify({ students: freshStudents, attendanceRecords: freshAttendance })).catch(() => {});
     } catch (e) { console.error(e); }
@@ -410,20 +430,6 @@ export default function ClassAttendanceScreen() {
     return students.filter(s => s.name?.toLowerCase().includes(q) || s.rollNo?.toString().includes(q));
   }, [students, dailySearch]);
 
-  // Map backend flat records to a nested structure linked by RollNo
-  const attendanceMap = useMemo(() => {
-    const map: Record<string, Record<string, string>> = {};
-    attendanceRecords.forEach(record => {
-      const d = record.date.split('T')[0];
-      const key = record.rollNo?.toString() || record.studentName;
-      if (key) {
-        if (!map[key]) map[key] = {};
-        map[key][d] = record.status;
-      }
-    });
-    return map;
-  }, [attendanceRecords]);
-
   // Per-student monthly attendance percentage — shown as a small badge in
   // the sticky column and used to color-code the row.
   const studentPctMap = useMemo(() => {
@@ -439,16 +445,16 @@ export default function ClassAttendanceScreen() {
     return map;
   }, [students, attendanceMap]);
 
-  const statsScopeRecords = useMemo(() => {
-    if (!selectedStatDate) return [];
-    return attendanceRecords.filter(r => r.date.split('T')[0] === selectedStatDate);
-  }, [attendanceRecords, selectedStatDate]);
-
   const scopedStats = useMemo(() => {
     const counts: Record<string, number> = { Present: 0, Absent: 0, Leave: 0, 'Half-Day': 0, Holiday: 0 };
-    statsScopeRecords.forEach(r => { if (counts[r.status] !== undefined) counts[r.status] += 1; });
+    if (!selectedStatDate) return counts;
+    students.forEach(s => {
+      const key = s.rollNo?.toString() || s.name;
+      const status = attendanceMap[key]?.[selectedStatDate];
+      if (status && counts[status] !== undefined) counts[status] += 1;
+    });
     return counts;
-  }, [statsScopeRecords]);
+  }, [students, attendanceMap, selectedStatDate]);
 
   const daysInMonth = getDaysInMonth(selectedMonth.getFullYear(), selectedMonth.getMonth());
   const daysArray = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => i + 1), [daysInMonth]);
@@ -820,14 +826,13 @@ export default function ClassAttendanceScreen() {
       return;
     }
 
-    // Optimistic update so the checkbox flips instantly.
-    setAttendanceRecords(prev => {
-      const withoutThisCell = prev.filter(r => {
-        const rKey = r.rollNo?.toString() || r.studentName;
-        return !(rKey === key && r.date.split('T')[0] === dateStr);
-      });
-      return [...withoutThisCell, { rollNo: student.rollNo, studentName: student.name, date: dateStr, status: nextStatus }];
-    });
+    // Optimistic update so the checkbox flips instantly — only this one
+    // student's inner object gets a new reference, everyone else's stays
+    // identical, so the rest of the visible rows don't re-render at all.
+    setAttendanceMap(prev => ({
+      ...prev,
+      [key]: { ...(prev[key] || {}), [dateStr]: nextStatus },
+    }));
 
     setPendingCellKeys(prev => new Set(prev).add(cellKey));
     try {
@@ -932,8 +937,6 @@ export default function ClassAttendanceScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Filter bar — class, month, search, mark daily. Directly below this
-          the student list opens, so teachers reach marking in one glance. */}
       <View style={styles.filterSection}>
         <View style={{ flexDirection: 'row', gap: 10, zIndex: 10 }}>
           <View style={{ flex: 1.3 }}>
@@ -1040,12 +1043,12 @@ export default function ClassAttendanceScreen() {
                 renderItem={renderStudentRow}
                 getItemLayout={getItemLayout}
                 showsVerticalScrollIndicator={true}
-                contentContainerStyle={{ paddingBottom: 110 }}
+                contentContainerStyle={{ paddingBottom: 110 + insets.bottom }}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchGridData(authToken, selectedClassId, selectedMonth, true)} colors={[C.primary]} />}
-                initialNumToRender={14}
-                maxToRenderPerBatch={14}
-                windowSize={7}
-                removeClippedSubviews={Platform.OS === 'android'}
+                initialNumToRender={16}
+                maxToRenderPerBatch={16}
+                windowSize={9}
+                removeClippedSubviews={false}
                 updateCellsBatchingPeriod={50}
               />
             </View>
@@ -1055,8 +1058,12 @@ export default function ClassAttendanceScreen() {
 
       {/* Floating action button — Excel actions live here so they never take
           up permanent header space. Tap to expand the speed-dial. */}
+      {!loading && fabOpen && (
+        <TouchableOpacity style={styles.fabBackdrop} activeOpacity={1} onPress={closeFab} />
+      )}
+
       {!loading && (
-        <View style={styles.fabWrap} pointerEvents="box-none">
+        <View style={[styles.fabWrap, { bottom: 22 + insets.bottom }]} pointerEvents="box-none">
           {fabOpen && (
             <View style={styles.fabActions}>
               <TouchableOpacity
@@ -1105,7 +1112,7 @@ export default function ClassAttendanceScreen() {
           matrix header, so it never eats permanent screen space. */}
       <Modal visible={!!selectedStatDate} animationType="slide" transparent onRequestClose={() => setSelectedStatDate(null)}>
         <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setSelectedStatDate(null)}>
-          <TouchableOpacity activeOpacity={1} style={styles.sheetCard} onPress={() => {}}>
+          <TouchableOpacity activeOpacity={1} style={[styles.sheetCard, { paddingBottom: 26 + insets.bottom }]} onPress={() => {}}>
             <View style={styles.sheetHandle} />
             <View style={styles.sheetHeaderRow}>
               <View style={styles.statsScopeChip}>
@@ -1274,7 +1281,7 @@ export default function ClassAttendanceScreen() {
               }}
             />
 
-            <View style={styles.modalFooter}>
+            <View style={[styles.modalFooter, { paddingBottom: 16 + insets.bottom }]}>
               <TouchableOpacity style={styles.ghostBtn} onPress={() => setDailyModalVisible(false)}><Text style={styles.ghostBtnText}>Cancel</Text></TouchableOpacity>
               <TouchableOpacity style={styles.saveBtnFull} onPress={handleSaveDaily} disabled={saving} activeOpacity={0.9}>
                 {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnFullText}>Save Attendance</Text>}
@@ -1376,9 +1383,6 @@ export default function ClassAttendanceScreen() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -1423,7 +1427,8 @@ const styles = StyleSheet.create({
   excelActionText: { fontSize: 11.5, fontWeight: '800' },
 
   // Floating action button (speed dial) for Excel actions
-  fabWrap: { position: 'absolute', right: 18, bottom: 22, alignItems: 'flex-end' },
+  fabBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(13,15,22,0.28)' },
+  fabWrap: { position: 'absolute', right: 18, alignItems: 'flex-end' },
   fabMain: { width: 56, height: 56, borderRadius: 28, backgroundColor: C.primary, justifyContent: 'center', alignItems: 'center', ...SHADOW.fab },
   fabActions: { marginBottom: 14, gap: 12, alignItems: 'flex-end' },
   fabActionRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },

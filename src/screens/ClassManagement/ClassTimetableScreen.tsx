@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   SafeAreaView,
   TextInput,
   Modal,
@@ -14,11 +15,14 @@ import {
   ActivityIndicator,
   RefreshControl,
   useWindowDimensions,
+  Animated,
+  Easing,
+  PanResponder,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
-import DocumentPicker from '@react-native-documents/picker';
+import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
 import * as XLSX from 'xlsx';
@@ -28,6 +32,18 @@ import { COLORS, RADIUS, SPACING, FONT, SHADOW, TOUCH_TARGET, isSmallDevice } fr
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const PERIOD_NUMBERS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
 const BRAND = COLORS.primary;
+
+const FAB_BASE_BOTTOM = Platform.OS === 'android' ? 40 : 28;
+const FAB_PRIMARY_SIZE = 56;
+
+// --- Draggable Excel FAB sizing ---
+const EXCEL_FAB_SIZE = 50;
+const EXCEL_MINI_SIZE = 46;
+const EXCEL_FAB_GAP = 12;
+const DRAG_EDGE_MARGIN = SPACING.md;
+const DRAG_TOP_BOUND = 110; // keep clear of the header/filter bar
+
+const clampVal = (val: number, min: number, max: number) => Math.min(Math.max(val, min), max);
 
 // --- Types ---
 interface Permission {
@@ -90,7 +106,7 @@ export default function ClassTimetableScreen({ route }: any) {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
   const [authToken, setAuthToken] = useState<string | null>(null);
-  const { width } = useWindowDimensions();
+  const { width, height: winHeight } = useWindowDimensions();
   const twoCol = width >= 480; // period cards go two-up on larger phones
 
   // Data States
@@ -114,6 +130,26 @@ export default function ClassTimetableScreen({ route }: any) {
 
   // Unified Inline Dropdown State
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+
+  // Floating Action Button (speed-dial) state
+  const [fabOpen, setFabOpen] = useState(false);
+  const fabAnim = useRef(new Animated.Value(0)).current;
+
+  // --- Draggable Excel FAB: position + gesture handling ---
+  const initialExcelPos = useRef({
+    x: width - EXCEL_FAB_SIZE - SPACING.lg,
+    y: Math.round(winHeight * 0.42),
+  }).current;
+  const excelPan = useRef(new Animated.ValueXY(initialExcelPos)).current;
+  const [excelFabPos, setExcelFabPos] = useState(initialExcelPos);
+  const [excelDragging, setExcelDragging] = useState(false);
+  const excelMovedRef = useRef(false);
+
+  useEffect(() => {
+    const id = excelPan.addListener((value) => setExcelFabPos(value));
+    return () => excelPan.removeListener(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const initialStaffId = route?.params?.staffId || null;
 
@@ -200,6 +236,7 @@ export default function ClassTimetableScreen({ route }: any) {
 
   // --- CRUD Actions ---
   const openAddForm = () => {
+    closeFabMenu();
     if (!selectedClassId) {
       Alert.alert('Notice', 'Please select a class first.');
       return;
@@ -323,50 +360,224 @@ export default function ClassTimetableScreen({ route }: any) {
     writeAndShareWorkbook([header, ...rows], `${clsName}_Weekly_Timetable.xlsx`);
   };
 
+  // ---------------------------------------------------------------------
+  // EXCEL — Upload Excel (bulk import periods for the selected class)
+  // Reads the file on-device with RNFS + parses it with XLSX (same pattern
+  // used successfully in the Class Attendance screen) instead of sending
+  // the raw file as multipart/form-data, then posts parsed JSON rows.
+  // ---------------------------------------------------------------------
   const handleUploadExcel = async () => {
     if (!selectedClassId) {
       Alert.alert('Notice', 'Please select a class first.');
       return;
     }
+
+    let picked;
     try {
-      const res = await DocumentPicker.pick({ type: [DocumentPicker.types.csv, DocumentPicker.types.xls, DocumentPicker.types.xlsx] });
-      setIsUploading(true);
+      const res = await pick({ type: [types.csv, types.xls, types.xlsx] });
+      picked = res[0];
+    } catch (err) {
+      const userCancelled = isErrorWithCode(err) && err.code === errorCodes.OPERATION_CANCELED;
+      if (!userCancelled) {
+        Alert.alert('Could not open file picker', 'Please try again.');
+      }
+      return;
+    }
 
-      const uploadData = new FormData();
-      uploadData.append('file', { uri: res[0].uri, type: res[0].type, name: res[0].name } as any);
-      uploadData.append('classId', selectedClassId);
+    setIsUploading(true);
+    try {
+      const base64 = await RNFS.readFile(picked.uri, 'base64');
+      const workbook = XLSX.read(base64, { type: 'base64' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const jsonRows: any[] = XLSX.utils.sheet_to_json(sheet);
 
-      await axios.post(`${API_BASE}/timetable/bulk`, uploadData, {
-        headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'multipart/form-data' },
+      const validDayLookup = DAYS_OF_WEEK.reduce<Record<string, string>>((acc, d) => {
+        acc[d.toLowerCase()] = d;
+        return acc;
+      }, {});
+
+      const periods: any[] = [];
+      const rowErrors: string[] = [];
+
+      jsonRows.forEach((row, idx) => {
+        const rawDay = String(row['Day'] ?? row['day'] ?? '').trim();
+        const periodNumber = String(row['Period Number'] ?? row['periodNumber'] ?? '').trim();
+        const subjectName = String(row['Subject Name'] ?? row['subjectName'] ?? '').trim();
+        const startTime = String(row['Start Time'] ?? row['startTime'] ?? '').trim();
+        const endTime = String(row['End Time'] ?? row['endTime'] ?? '').trim();
+        const roomNumber = String(row['Room Number'] ?? row['roomNumber'] ?? '').trim();
+        const teacherName = String(row['Teacher Name'] ?? row['teacherName'] ?? '').trim();
+
+        // Skip fully blank rows silently
+        if (!rawDay && !periodNumber && !subjectName) return;
+
+        const day = validDayLookup[rawDay.toLowerCase()];
+        if (!day) {
+          rowErrors.push(`Row ${idx + 2}: invalid or missing Day ("${rawDay}").`);
+          return;
+        }
+        if (!periodNumber || isNaN(Number(periodNumber))) {
+          rowErrors.push(`Row ${idx + 2}: Period Number is required and must be a number.`);
+          return;
+        }
+        if (!subjectName) {
+          rowErrors.push(`Row ${idx + 2}: Subject Name is required.`);
+          return;
+        }
+
+        const matchedStaff = teacherName
+          ? staffList.find((s) => s.name.toLowerCase() === teacherName.toLowerCase())
+          : null;
+
+        periods.push({
+          classId: selectedClassId,
+          day,
+          periodNumber: Number(periodNumber),
+          subjectName,
+          startTime,
+          endTime,
+          roomNumber,
+          staffId: matchedStaff?._id || undefined,
+        });
       });
 
-      Alert.alert('Success', 'Timetable slots uploaded successfully!');
+      if (periods.length === 0) {
+        Alert.alert(
+          'No data found',
+          rowErrors.length ? rowErrors.slice(0, 5).join('\n') : 'No valid rows were found in the selected file.'
+        );
+        return;
+      }
+
+      const res = await axios.post(
+        `${API_BASE}/timetable/bulk`,
+        { classId: selectedClassId, periods },
+        { headers: { Authorization: `Bearer ${authToken}` } }
+      );
+
+      if (res.data?.success === false) {
+        throw new Error(res.data?.message || 'Upload failed.');
+      }
+
+      if (rowErrors.length > 0) {
+        Alert.alert(
+          'Uploaded with some rows skipped',
+          `${periods.length} period(s) uploaded.\n\n${rowErrors.slice(0, 5).join('\n')}`
+        );
+      } else {
+        Alert.alert('Success', 'Timetable slots uploaded successfully!');
+      }
       onRefresh();
     } catch (err: any) {
-      if (!DocumentPicker.isCancel(err)) Alert.alert('Upload Error', err.response?.data?.message || 'Failed to upload.');
+      Alert.alert('Upload Error', err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to upload.');
     } finally {
       setIsUploading(false);
     }
   };
 
-  // --- Inline Dropdown UI ---
-  const toggleDropdown = (field: string) => setActiveDropdown(activeDropdown === field ? null : field);
+  // --- Floating Action Buttons ---
+  const canAddPeriod = hasPermission('create');
+  const fabActions = [
+    { key: 'upload', icon: 'upload', label: 'Upload Excel', onPress: handleUploadExcel, visible: canAddPeriod, tint: BRAND },
+    { key: 'export', icon: 'file-text', label: 'Export Excel', onPress: handleExportExcel, visible: true, tint: COLORS.success },
+    { key: 'download', icon: 'download', label: 'Download Format', onPress: handleDownloadFormat, visible: true, tint: COLORS.success },
+  ].filter((a) => a.visible);
+
+  // Menu opens away from the nearest screen edge so it never gets clipped
+  // or collides with the fixed "Add Period" button at the bottom.
+  const openUpward = excelFabPos.y > winHeight / 2;
+
+  const toggleFabMenu = () => {
+    setActiveDropdown(null);
+    const toValue = fabOpen ? 0 : 1;
+    Animated.timing(fabAnim, {
+      toValue,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+    setFabOpen((prev) => !prev);
+  };
+
+  const closeFabMenu = () => {
+    if (!fabOpen) return;
+    Animated.timing(fabAnim, { toValue: 0, duration: 160, useNativeDriver: true }).start();
+    setFabOpen(false);
+  };
+
+  const runFabAction = (action: () => void) => {
+    closeFabMenu();
+    action();
+  };
+
+  // Drag handling for the Excel FAB. A release with negligible movement is
+  // treated as a tap (opens/closes the speed-dial); anything past the
+  // threshold is treated as a drag and the button springs to a clamped,
+  // on-screen position so it can never be dragged off-screen.
+  const excelPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_evt, g) => Math.abs(g.dx) > 2 || Math.abs(g.dy) > 2,
+      onPanResponderGrant: () => {
+        excelMovedRef.current = false;
+        excelPan.setOffset({
+          // @ts-ignore - reading the current animated value to use as the drag offset base
+          x: (excelPan.x as any)._value,
+          // @ts-ignore
+          y: (excelPan.y as any)._value,
+        });
+        excelPan.setValue({ x: 0, y: 0 });
+        setExcelDragging(true);
+      },
+      onPanResponderMove: (evt, g) => {
+        if (Math.abs(g.dx) > 4 || Math.abs(g.dy) > 4) excelMovedRef.current = true;
+        Animated.event([null, { dx: excelPan.x, dy: excelPan.y }], { useNativeDriver: false })(evt, g);
+      },
+      onPanResponderRelease: () => {
+        excelPan.flattenOffset();
+        setExcelDragging(false);
+
+        // @ts-ignore
+        const rawX = (excelPan.x as any)._value as number;
+        // @ts-ignore
+        const rawY = (excelPan.y as any)._value as number;
+        const clampedX = clampVal(rawX, DRAG_EDGE_MARGIN, width - EXCEL_FAB_SIZE - DRAG_EDGE_MARGIN);
+        const clampedY = clampVal(rawY, DRAG_TOP_BOUND, winHeight - EXCEL_FAB_SIZE - DRAG_EDGE_MARGIN);
+
+        Animated.spring(excelPan, {
+          toValue: { x: clampedX, y: clampedY },
+          friction: 6,
+          useNativeDriver: false,
+        }).start();
+
+        if (!excelMovedRef.current) {
+          toggleFabMenu();
+        }
+      },
+    })
+  ).current;
+
+  // --- Inline Dropdown UI (used inside the Add/Edit form) ---
+  const toggleDropdown = (field: string) => {
+    closeFabMenu();
+    setActiveDropdown(activeDropdown === field ? null : field);
+  };
 
   const renderInlineDropdown = (
-    fieldKey: keyof FormData | 'classSelector',
+    fieldKey: keyof FormData,
     label: string,
-    options: { label: string; value: string }[],
-    isMainFilter = false
+    options: { label: string; value: string }[]
   ) => {
     const isOpen = activeDropdown === fieldKey;
-    const currentValue = isMainFilter ? selectedClassId : formData[fieldKey as keyof FormData];
+    const currentValue = formData[fieldKey];
     const selectedObj = options.find((o) => o.value === currentValue);
 
     return (
-      <View style={[styles.inputWrapper, isMainFilter && { marginBottom: 0, zIndex: isOpen ? 50 : 1 }]}>
-        {!isMainFilter && <Text style={styles.inputLabel}>{label}</Text>}
+      <View style={styles.inputWrapper}>
+        <Text style={styles.inputLabel}>{label}</Text>
         <TouchableOpacity
-          style={[styles.dropdownHeader, isOpen && styles.dropdownHeaderActive, isMainFilter && styles.dropdownHeaderMain]}
+          style={[styles.dropdownHeader, isOpen && styles.dropdownHeaderActive]}
           onPress={() => toggleDropdown(fieldKey as string)}
           activeOpacity={0.75}
         >
@@ -377,15 +588,14 @@ export default function ClassTimetableScreen({ route }: any) {
         </TouchableOpacity>
 
         {isOpen && (
-          <View style={[styles.dropdownListContainer, isMainFilter && { position: 'absolute', top: 54, left: 0, right: 0 }]}>
+          <View style={styles.dropdownListContainer}>
             <ScrollView nestedScrollEnabled style={styles.dropdownScroll} showsVerticalScrollIndicator={false}>
               {options.map((opt, index) => (
                 <TouchableOpacity
                   key={opt.value}
                   style={[styles.dropdownItem, index !== options.length - 1 && styles.dropdownItemBorder, currentValue === opt.value && styles.dropdownItemActive]}
                   onPress={() => {
-                    if (isMainFilter) handleClassSelect(opt.value);
-                    else setFormData({ ...formData, [fieldKey]: opt.value });
+                    setFormData({ ...formData, [fieldKey]: opt.value });
                     setActiveDropdown(null);
                   }}
                 >
@@ -408,6 +618,8 @@ export default function ClassTimetableScreen({ route }: any) {
     ...staffList.filter((s) => s.staffType && s.staffType.toLowerCase() === 'teacher').map((s) => ({ label: s.name, value: s._id })),
   ];
 
+  const isClassDropdownOpen = activeDropdown === 'classSelector';
+
   return (
     <SafeAreaView style={styles.container}>
       {/* --- HEADER --- */}
@@ -427,114 +639,57 @@ export default function ClassTimetableScreen({ route }: any) {
         </View>
       </View>
 
-      {/* --- ACTION GRID --- */}
-      <View style={styles.actionGrid}>
-        <TouchableOpacity style={styles.actionCard} onPress={handleDownloadFormat} activeOpacity={0.85}>
-          <View style={[styles.actionIconWrap, { backgroundColor: COLORS.successSoft }]}>
-            <Feather name="download" size={18} color={COLORS.success} />
-          </View>
-          <View style={styles.actionTextWrap}>
-            <Text style={styles.actionCardTitle} numberOfLines={1}>
-              Download Format
-            </Text>
-            <Text style={styles.actionCardSub} numberOfLines={1}>
-              Blank Excel template
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionCard} onPress={handleExportExcel} activeOpacity={0.85}>
-          <View style={[styles.actionIconWrap, { backgroundColor: COLORS.successSoft }]}>
-            <Feather name="file-text" size={18} color={COLORS.success} />
-          </View>
-          <View style={styles.actionTextWrap}>
-            <Text style={styles.actionCardTitle} numberOfLines={1}>
-              Export Excel
-            </Text>
-            <Text style={styles.actionCardSub} numberOfLines={1}>
-              Full class timetable
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        {hasPermission('create') && (
-          <TouchableOpacity style={styles.actionCard} onPress={handleUploadExcel} disabled={isUploading} activeOpacity={0.85}>
-            <View style={[styles.actionIconWrap, { backgroundColor: COLORS.primarySoft }]}>
-              {isUploading ? <ActivityIndicator size="small" color={BRAND} /> : <Feather name="upload" size={18} color={BRAND} />}
-            </View>
-            <View style={styles.actionTextWrap}>
-              <Text style={styles.actionCardTitle} numberOfLines={1}>
-                Upload Excel
-              </Text>
-              <Text style={styles.actionCardSub} numberOfLines={1}>
-                Bulk import slots
-              </Text>
-            </View>
-          </TouchableOpacity>
-        )}
-
-        {hasPermission('create') && (
-          <TouchableOpacity style={[styles.actionCard, styles.actionCardPrimary]} onPress={openAddForm} activeOpacity={0.9}>
-            <View style={[styles.actionIconWrap, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-              <Feather name="plus" size={18} color="#fff" />
-            </View>
-            <View style={styles.actionTextWrap}>
-              <Text style={[styles.actionCardTitle, { color: '#fff' }]} numberOfLines={1}>
-                Add Period Slot
-              </Text>
-              <Text style={[styles.actionCardSub, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>
-                New class period
-              </Text>
-            </View>
-          </TouchableOpacity>
-        )}
-      </View>
-
       <ScrollView
         style={{ flex: 1, zIndex: 10 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[BRAND]} tintColor={BRAND} />}
         showsVerticalScrollIndicator={false}
       >
-        {/* Class Selection Card */}
-        <View style={styles.classSelectionCard}>
-          <View style={styles.classCardHeaderRow}>
-            <View style={styles.classCardIconWrap}>
-              <Feather name="layers" size={14} color={BRAND} />
+        {/* --- MODERN FILTER BAR: Class / Teacher / Syllabus in one row --- */}
+        <View style={styles.filterCard}>
+          <View style={styles.filterBar}>
+            <TouchableOpacity
+              style={[styles.filterClassPill, isClassDropdownOpen && styles.filterClassPillActive]}
+              onPress={() => toggleDropdown('classSelector')}
+              activeOpacity={0.8}
+            >
+              <Feather name="layers" size={13} color={BRAND} />
+              <Text style={styles.filterClassText} numberOfLines={1}>
+                {activeClassDetails ? `${activeClassDetails.className}${activeClassDetails.division ? ` ${activeClassDetails.division}` : ''}` : 'Select Class'}
+              </Text>
+              <Feather name={isClassDropdownOpen ? 'chevron-up' : 'chevron-down'} size={14} color={COLORS.muted} />
+            </TouchableOpacity>
+
+            <View style={styles.filterInfoPill}>
+              <Feather name="user" size={12} color={COLORS.secondary} />
+              <Text style={styles.filterInfoText} numberOfLines={1}>
+                {activeClassDetails?.classTeacher?.name || 'No Teacher'}
+              </Text>
             </View>
-            <Text style={styles.sectionHeading}>SELECT TARGET CLASS</Text>
+
+            <View style={styles.filterInfoPill}>
+              <Feather name="book-open" size={12} color={COLORS.secondary} />
+              <Text style={styles.filterInfoText} numberOfLines={1}>
+                {activeClassDetails?.syllabus || 'N/A'}
+              </Text>
+            </View>
           </View>
 
-          {renderInlineDropdown(
-            'classSelector',
-            'Class',
-            classes.map((c) => ({ label: `${c.className} ${c.division ? `(${c.division})` : ''}`, value: c._id })),
-            true
-          )}
-
-          {activeClassDetails && (
-            <View style={styles.classMetaRow}>
-              <View style={styles.metaBadge}>
-                <View style={styles.metaIconWrap}>
-                  <Feather name="user" size={12} color={COLORS.secondary} />
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.metaLabel}>CLASS TEACHER</Text>
-                  <Text style={styles.metaValue} numberOfLines={1}>
-                    {activeClassDetails.classTeacher?.name || 'Unassigned'}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.metaBadge}>
-                <View style={styles.metaIconWrap}>
-                  <Feather name="book-open" size={12} color={COLORS.secondary} />
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.metaLabel}>SYLLABUS</Text>
-                  <Text style={styles.metaValue} numberOfLines={1}>
-                    {activeClassDetails.syllabus || 'N/A'}
-                  </Text>
-                </View>
-              </View>
+          {isClassDropdownOpen && (
+            <View style={styles.filterDropdownList}>
+              <ScrollView nestedScrollEnabled style={styles.dropdownScroll} showsVerticalScrollIndicator={false}>
+                {classes.map((c, index) => (
+                  <TouchableOpacity
+                    key={c._id}
+                    style={[styles.dropdownItem, index !== classes.length - 1 && styles.dropdownItemBorder, selectedClassId === c._id && styles.dropdownItemActive]}
+                    onPress={() => handleClassSelect(c._id)}
+                  >
+                    <Text style={[styles.dropdownItemText, selectedClassId === c._id && styles.dropdownItemTextActive]}>
+                      {c.className} {c.division ? `(${c.division})` : ''}
+                    </Text>
+                    {selectedClassId === c._id && <Feather name="check" size={16} color={BRAND} />}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           )}
         </View>
@@ -565,7 +720,7 @@ export default function ClassTimetableScreen({ route }: any) {
             </View>
 
             {/* Periods Grid */}
-            <View style={styles.periodsContainer}>
+            <View style={[styles.periodsContainer, { paddingBottom: FAB_BASE_BOTTOM + FAB_PRIMARY_SIZE + SPACING.xxl }]}>
               {filteredPeriods.length === 0 ? (
                 <View style={styles.emptyState}>
                   <View style={styles.emptyIconWrap}>
@@ -650,6 +805,80 @@ export default function ClassTimetableScreen({ route }: any) {
           </View>
         )}
       </ScrollView>
+
+      {/* --- Backdrop, shown only while the Excel speed-dial is open --- */}
+      {fabOpen && (
+        <TouchableWithoutFeedback onPress={closeFabMenu}>
+          <View style={styles.fabBackdrop} />
+        </TouchableWithoutFeedback>
+      )}
+
+      {/* --- DRAGGABLE EXCEL FAB: Upload / Export / Download --- */}
+      {fabActions.length > 0 && (
+        <Animated.View
+          {...excelPanResponder.panHandlers}
+          style={[
+            styles.excelFabWrap,
+            {
+              left: excelPan.x,
+              top: excelPan.y,
+              transform: [{ scale: excelDragging ? 1.1 : 1 }],
+            },
+          ]}
+        >
+          {fabOpen &&
+            fabActions.map((action, idx) => {
+              const offset = (idx + 1) * (EXCEL_MINI_SIZE + EXCEL_FAB_GAP);
+              return (
+                <Animated.View
+                  key={action.key}
+                  pointerEvents="box-none"
+                  style={[
+                    styles.excelMiniRow,
+                    {
+                      top: openUpward ? -offset : offset,
+                      opacity: fabAnim,
+                      transform: [
+                        {
+                          translateY: fabAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [openUpward ? 14 : -14, 0],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <View style={styles.fabMiniLabelWrap}>
+                    <Text style={styles.fabMiniLabel}>{action.label}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.fabMiniBtn, { backgroundColor: action.tint }]}
+                    onPress={() => runFabAction(action.onPress)}
+                    activeOpacity={0.85}
+                  >
+                    {action.key === 'upload' && isUploading ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Feather name={action.icon as any} size={18} color="#fff" />
+                    )}
+                  </TouchableOpacity>
+                </Animated.View>
+              );
+            })}
+
+          <View style={[styles.excelFabMain, excelDragging && styles.excelFabMainDragging]}>
+            <Feather name={fabOpen ? 'x' : 'file-text'} size={20} color="#fff" />
+          </View>
+        </Animated.View>
+      )}
+
+      {/* --- FIXED ADD PERIOD BUTTON: stays on screen, not draggable --- */}
+      {canAddPeriod && (
+        <TouchableOpacity style={[styles.fabPrimaryBtn, { bottom: FAB_BASE_BOTTOM }]} onPress={openAddForm} activeOpacity={0.9}>
+          <Feather name="plus" size={24} color="#fff" />
+        </TouchableOpacity>
+      )}
 
       {/* --- ADD/EDIT COMPACT MODAL --- */}
       <Modal visible={isFormVisible} animationType="fade" transparent={true} onRequestClose={() => setFormVisible(false)}>
@@ -752,30 +981,21 @@ const styles = StyleSheet.create({
   center: { padding: 40, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: SPACING.md, color: COLORS.muted, fontSize: FONT.small, fontWeight: '600' },
 
-  header: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.xl, paddingBottom: SPACING.md, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.borderSoft },
+  header: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg, paddingBottom: SPACING.md, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.borderSoft },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   headerIconWrap: { width: 40, height: 40, borderRadius: RADIUS.md, backgroundColor: COLORS.primarySoft, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.md },
   title: { fontSize: FONT.h1, fontWeight: '800', color: COLORS.ink },
   subtitle: { fontSize: FONT.tiny, color: COLORS.faint, marginTop: 2 },
 
-  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.xs, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.borderSoft },
-  actionCard: { width: '48%', flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background, borderRadius: RADIUS.md, paddingVertical: SPACING.md, paddingHorizontal: SPACING.md, marginBottom: SPACING.sm, gap: SPACING.sm, borderWidth: 1, borderColor: COLORS.borderFaint, minHeight: TOUCH_TARGET + 16 },
-  actionCardPrimary: { backgroundColor: COLORS.primary, borderColor: COLORS.primary, ...SHADOW.button },
-  actionIconWrap: { width: 36, height: 36, borderRadius: RADIUS.sm, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
-  actionTextWrap: { flex: 1, minWidth: 0 },
-  actionCardTitle: { fontSize: FONT.small, fontWeight: '700', color: COLORS.ink },
-  actionCardSub: { fontSize: FONT.micro, color: COLORS.faint, marginTop: 1 },
-
-  classSelectionCard: { backgroundColor: COLORS.surface, marginHorizontal: SPACING.lg, marginTop: SPACING.lg, marginBottom: SPACING.xs, padding: SPACING.lg, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.borderFaint, ...SHADOW.card, zIndex: 50 },
-  classCardHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md, gap: SPACING.sm },
-  classCardIconWrap: { width: 24, height: 24, borderRadius: RADIUS.xs, backgroundColor: COLORS.primarySoft, justifyContent: 'center', alignItems: 'center' },
-  sectionHeading: { fontSize: FONT.tiny, fontWeight: '800', color: BRAND, letterSpacing: 0.6 },
-
-  classMetaRow: { flexDirection: 'row', marginTop: SPACING.lg, gap: SPACING.sm, zIndex: -1 },
-  metaBadge: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.background, padding: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.borderFaint, gap: SPACING.sm },
-  metaIconWrap: { width: 26, height: 26, borderRadius: RADIUS.xs, backgroundColor: COLORS.secondarySoft, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
-  metaLabel: { fontSize: FONT.micro, color: COLORS.faint, fontWeight: '800', letterSpacing: 0.4, marginBottom: 2 },
-  metaValue: { fontSize: FONT.small, color: COLORS.ink, fontWeight: '700' },
+  // --- Modern one-row filter bar: Class / Teacher / Syllabus ---
+  filterCard: { backgroundColor: COLORS.surface, marginHorizontal: SPACING.lg, marginTop: SPACING.md, marginBottom: SPACING.xs, padding: SPACING.sm, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: COLORS.borderFaint, ...SHADOW.card, zIndex: 50, position: 'relative' },
+  filterBar: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  filterClassPill: { flex: 1.3, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.primarySoft, borderRadius: RADIUS.pill, paddingHorizontal: 12, height: 40, borderWidth: 1, borderColor: 'transparent' },
+  filterClassPillActive: { borderColor: BRAND },
+  filterClassText: { flex: 1, fontSize: FONT.small, fontWeight: '700', color: BRAND },
+  filterInfoPill: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.background, borderRadius: RADIUS.pill, paddingHorizontal: 10, height: 40, borderWidth: 1, borderColor: COLORS.borderFaint },
+  filterInfoText: { flex: 1, fontSize: FONT.tiny, fontWeight: '700', color: COLORS.body },
+  filterDropdownList: { marginTop: SPACING.sm, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, overflow: 'hidden', ...SHADOW.raised },
 
   timetableBoard: { marginTop: SPACING.xs, zIndex: -1 },
   tabsWrapper: { backgroundColor: 'transparent' },
@@ -822,6 +1042,19 @@ const styles = StyleSheet.create({
   addPeriodOutlineBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.primarySoft, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: RADIUS.sm, gap: 6, minHeight: TOUCH_TARGET },
   addPeriodOutlineBtnText: { color: BRAND, fontWeight: '700', fontSize: FONT.small },
 
+  // --- Fixed "Add Period" FAB ---
+  fabBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,23,42,0.35)', zIndex: 40 },
+  fabPrimaryBtn: { position: 'absolute', right: SPACING.lg, width: FAB_PRIMARY_SIZE, height: FAB_PRIMARY_SIZE, borderRadius: FAB_PRIMARY_SIZE / 2, backgroundColor: BRAND, justifyContent: 'center', alignItems: 'center', zIndex: 60, ...SHADOW.raised },
+
+  // --- Draggable Excel FAB ---
+  excelFabWrap: { position: 'absolute', width: EXCEL_FAB_SIZE, height: EXCEL_FAB_SIZE, zIndex: 65 },
+  excelFabMain: { width: EXCEL_FAB_SIZE, height: EXCEL_FAB_SIZE, borderRadius: EXCEL_FAB_SIZE / 2, backgroundColor: COLORS.secondary, justifyContent: 'center', alignItems: 'center', ...SHADOW.button },
+  excelFabMainDragging: { ...SHADOW.raised },
+  excelMiniRow: { position: 'absolute', right: 0, flexDirection: 'row', alignItems: 'center', gap: 10, zIndex: 66 },
+  fabMiniLabelWrap: { backgroundColor: COLORS.ink, paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.sm },
+  fabMiniLabel: { color: '#fff', fontSize: FONT.tiny, fontWeight: '700' },
+  fabMiniBtn: { width: EXCEL_MINI_SIZE, height: EXCEL_MINI_SIZE, borderRadius: EXCEL_MINI_SIZE / 2, justifyContent: 'center', alignItems: 'center', ...SHADOW.button },
+
   modalOverlay: { flex: 1, backgroundColor: COLORS.overlay, justifyContent: 'center', padding: SPACING.md },
   compactModalContainer: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, maxHeight: '90%', overflow: 'hidden', ...SHADOW.raised },
   formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.lg, paddingHorizontal: SPACING.xl, backgroundColor: COLORS.surface, borderBottomWidth: 1, borderBottomColor: COLORS.borderSoft },
@@ -840,7 +1073,6 @@ const styles = StyleSheet.create({
 
   dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.sm, paddingHorizontal: SPACING.md, height: TOUCH_TARGET + 2, backgroundColor: COLORS.background },
   dropdownHeaderActive: { borderColor: BRAND, backgroundColor: COLORS.primarySoft },
-  dropdownHeaderMain: { height: TOUCH_TARGET + 4, backgroundColor: COLORS.surface, borderColor: COLORS.border },
   dropdownSelectedText: { color: COLORS.ink, fontSize: FONT.body, fontWeight: '600' },
   dropdownPlaceholder: { color: COLORS.faint, fontSize: FONT.body },
   dropdownListContainer: { position: 'absolute', top: 76, left: 0, right: 0, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, overflow: 'hidden', ...SHADOW.raised, zIndex: 100 },

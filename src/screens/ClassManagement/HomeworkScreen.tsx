@@ -24,14 +24,12 @@ const C = {
   textMuted: '#6B7280',
   textFaint: '#9AA0AC',
 
-  // Brand red — used sparingly now, as an accent rather than a wash.
   primary: '#B3122A',
   primaryBright: '#D2263F',
   primaryDeep: '#7A0C1D',
   primarySoft: '#FBEEEF',
   primaryTint: '#F3D6D9',
 
-  // Ink — the new anchor surface (header, dark buttons, active states).
   ink: '#0D0F16',
   inkSoft: '#181B24',
   inkFaint: 'rgba(255,255,255,0.62)',
@@ -61,6 +59,7 @@ export default function ClassHomeworkScreen() {
   const [filterClassId, setFilterClassId] = useState('');
   const [filterSubjectId, setFilterSubjectId] = useState('');
   const [searchTitle, setSearchTitle] = useState('');
+  const [searchExpanded, setSearchExpanded] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -270,7 +269,7 @@ export default function ClassHomeworkScreen() {
         </TouchableOpacity>
         {isOpen && (
           <View style={styles.dropdownListContainer}>
-            <ScrollView nestedScrollEnabled style={{ maxHeight: 190 }}>
+            <ScrollView nestedScrollEnabled style={{ maxHeight: 160 }}>
               {options.map(opt => (
                 <TouchableOpacity key={opt.value || 'all'} style={styles.dropdownItem} onPress={() => { onSelect(opt.value); setActiveDropdown(null); }}>
                   <Text style={[styles.dropdownItemText, value === opt.value && styles.textBrand]}>{opt.label}</Text>
@@ -309,13 +308,12 @@ export default function ClassHomeworkScreen() {
                   <Text style={styles.title}>Homework</Text>
                   <Text style={styles.subtitle}>Teachers can assign homework • Students can submit • Teachers can check</Text>
                 </View>
+                {hasPermission('create') && (
+                  <TouchableOpacity style={styles.addBtnSmall} onPress={openCreateForm} activeOpacity={0.9}>
+                    <Feather name="plus" size={18} color="#fff" />
+                  </TouchableOpacity>
+                )}
               </View>
-              {hasPermission('create') && (
-                <TouchableOpacity style={styles.addBtn} onPress={openCreateForm} activeOpacity={0.9}>
-                  <Feather name="plus" size={15} color="#fff" />
-                  <Text style={styles.addBtnText}>Assign Homework</Text>
-                </TouchableOpacity>
-              )}
             </View>
 
             <View style={styles.kpiGrid}>
@@ -336,27 +334,49 @@ export default function ClassHomeworkScreen() {
             </View>
 
             <View style={styles.filterCard}>
-              <View style={styles.filterGrid}>
-                <View style={{ flex: 1, zIndex: 40 }}>{renderInlineDropdown('classFilter', '', classOptions, filterClassId, (v) => { setFilterClassId(v); fetchHomeworks(authToken, true, { classId: v }); }, 'All Classes', false)}</View>
-                <View style={{ flex: 1, zIndex: 30 }}>{renderInlineDropdown('subjectFilter', '', subjectFilterOptions, filterSubjectId, (v) => { setFilterSubjectId(v); fetchHomeworks(authToken, true, { subjectId: v }); }, 'All Subjects', false)}</View>
-              </View>
-              <View style={styles.searchRow}>
-                <View style={styles.searchBox}>
-                  <Feather name="search" size={14} color={C.textFaint} />
-                  <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search title..."
-                    placeholderTextColor={C.textFaint}
-                    value={searchTitle}
-                    onChangeText={setSearchTitle}
-                    onSubmitEditing={() => fetchHomeworks(authToken, true)}
-                    returnKeyType="search"
-                  />
+              {searchExpanded ? (
+                <View style={styles.searchRow}>
+                  <View style={styles.searchBoxExpanded}>
+                    <Feather name="search" size={14} color={C.textFaint} />
+                    <TextInput
+                      style={styles.searchInput}
+                      placeholder="Search title..."
+                      placeholderTextColor={C.textFaint}
+                      value={searchTitle}
+                      onChangeText={setSearchTitle}
+                      onSubmitEditing={() => fetchHomeworks(authToken, true)}
+                      returnKeyType="search"
+                      autoFocus
+                    />
+                    {!!searchTitle && (
+                      <TouchableOpacity onPress={() => { setSearchTitle(''); fetchHomeworks(authToken, true, { search: '' }); }}>
+                        <Feather name="x-circle" size={14} color={C.textFaint} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    style={styles.refreshBtn}
+                    onPress={() => { setSearchExpanded(false); fetchHomeworks(authToken, true); }}
+                  >
+                    <Feather name="check" size={16} color={C.green} />
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={styles.refreshBtn} onPress={() => fetchHomeworks(authToken, true)}>
-                  <Feather name="refresh-ccw" size={15} color={C.textMuted} />
-                </TouchableOpacity>
-              </View>
+              ) : (
+                <View style={styles.filterGrid}>
+                  <View style={{ flex: 1, zIndex: 40 }}>
+                    {renderInlineDropdown('classFilter', '', classOptions, filterClassId, (v) => { setFilterClassId(v); fetchHomeworks(authToken, true, { classId: v }); }, 'All Classes', false)}
+                  </View>
+                  <View style={{ flex: 1, zIndex: 30 }}>
+                    {renderInlineDropdown('subjectFilter', '', subjectFilterOptions, filterSubjectId, (v) => { setFilterSubjectId(v); fetchHomeworks(authToken, true, { subjectId: v }); }, 'All Subjects', false)}
+                  </View>
+                  <TouchableOpacity style={styles.searchIconBtn} onPress={() => { setActiveDropdown(null); setSearchExpanded(true); }}>
+                    <Feather name="search" size={16} color={C.textMuted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.refreshBtn} onPress={() => fetchHomeworks(authToken, true)}>
+                    <Feather name="refresh-ccw" size={15} color={C.textMuted} />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
 
             {loading && <View style={styles.center}><ActivityIndicator size="large" color={C.primary} /></View>}
@@ -479,7 +499,7 @@ export default function ClassHomeworkScreen() {
           <View style={styles.compactModalContainer}>
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>{editingId ? 'Edit Homework' : 'Assign Homework'}</Text>
-              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}><Feather name="x" size={20} color={C.textMuted} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}><Feather name="x" size={18} color="#fff" /></TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
 
@@ -510,7 +530,7 @@ export default function ClassHomeworkScreen() {
 
               <View style={styles.inputWrapper}>
                 <Text style={styles.inputLabel}>Description</Text>
-                <TextInput style={[styles.input, { height: 90, textAlignVertical: 'top' }]} multiline placeholder="Instructions..." placeholderTextColor={C.textFaint} value={formData.description} onChangeText={t => setFormData({ ...formData, description: t })} />
+                <TextInput style={[styles.input, { height: 70, textAlignVertical: 'top' }]} multiline placeholder="Instructions..." placeholderTextColor={C.textFaint} value={formData.description} onChangeText={t => setFormData({ ...formData, description: t })} />
               </View>
 
               <View style={styles.row}>
@@ -556,9 +576,9 @@ export default function ClassHomeworkScreen() {
             <View style={styles.formHeader}>
               <View>
                 <Text style={styles.formTitle}>Submit Homework</Text>
-                {!!submitFor && <Text style={styles.formSubtitle}>Submitting for: {submitFor.title}</Text>}
+                {!!submitFor && <Text style={styles.formSubtitle}>For: {submitFor.title}</Text>}
               </View>
-              <TouchableOpacity onPress={() => setSubmitModalVisible(false)} style={styles.closeBtnIcon}><Feather name="x" size={20} color={C.textMuted} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setSubmitModalVisible(false)} style={styles.closeBtnIcon}><Feather name="x" size={18} color="#fff" /></TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
               <View style={styles.inputWrapper}>
@@ -577,7 +597,7 @@ export default function ClassHomeworkScreen() {
               </View>
               <View style={styles.inputWrapper}>
                 <Text style={styles.inputLabel}>Answer / Notes</Text>
-                <TextInput style={[styles.input, { height: 90, textAlignVertical: 'top' }]} multiline value={submitForm.notes} onChangeText={t => setSubmitForm({ ...submitForm, notes: t })} />
+                <TextInput style={[styles.input, { height: 70, textAlignVertical: 'top' }]} multiline value={submitForm.notes} onChangeText={t => setSubmitForm({ ...submitForm, notes: t })} />
               </View>
               <Text style={styles.inputLabel}>Attach Files</Text>
               <TouchableOpacity
@@ -609,13 +629,17 @@ const styles = StyleSheet.create({
   center: { padding: 30, justifyContent: 'center', alignItems: 'center' },
 
   headerCard: { backgroundColor: C.surface, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: C.border, marginBottom: 14, shadowColor: '#0F172A', shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 1 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 14 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   headerIconBadge: { width: 44, height: 44, borderRadius: 14, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
   title: { fontSize: 22, fontWeight: '800', color: C.text, letterSpacing: -0.3 },
   subtitle: { fontSize: 12, color: C.textMuted, marginTop: 3, lineHeight: 16 },
 
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: C.primary, paddingVertical: 13, borderRadius: 14, gap: 8, shadowColor: C.primary, shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
-  addBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  addBtnSmall: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: C.primary, justifyContent: 'center', alignItems: 'center',
+    shadowColor: C.primary, shadowOpacity: 0.25, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 }, elevation: 3,
+  },
 
   kpiGrid: { flexDirection: 'row', gap: 12, marginBottom: 14 },
   kpiCard: { flex: 1, backgroundColor: C.surface, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: C.border },
@@ -625,11 +649,22 @@ const styles = StyleSheet.create({
   kpiLabel: { fontSize: 9, fontWeight: '800', color: C.textMuted, letterSpacing: 0.5 },
 
   filterCard: { backgroundColor: C.surface, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: C.border, marginBottom: 16, zIndex: 50 },
-  filterGrid: { flexDirection: 'row', gap: 10, marginBottom: 10 },
+  filterGrid: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   searchRow: { flexDirection: 'row', gap: 10 },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, height: 44, backgroundColor: C.surfaceSoft },
   searchInput: { flex: 1, fontSize: 13.5, color: C.text },
   refreshBtn: { width: 44, height: 44, borderRadius: 12, borderWidth: 1, borderColor: C.border, justifyContent: 'center', alignItems: 'center', backgroundColor: C.surfaceSoft },
+
+  searchIconBtn: {
+    width: 44, height: 44, borderRadius: 12, borderWidth: 1, borderColor: C.border,
+    justifyContent: 'center', alignItems: 'center', backgroundColor: C.surfaceSoft,
+  },
+
+  searchBoxExpanded: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1, borderColor: C.primary, borderRadius: 12,
+    paddingHorizontal: 12, height: 44, backgroundColor: C.surfaceSoft,
+  },
 
   emptyState: { alignItems: 'center', padding: 36, backgroundColor: C.surface, borderRadius: 18, borderWidth: 1.5, borderColor: C.border, borderStyle: 'dashed' },
   emptyTitle: { fontSize: 15, fontWeight: '800', color: C.text, marginTop: 12 },
@@ -687,38 +722,64 @@ const styles = StyleSheet.create({
   iconBtnEdit: { padding: 9, backgroundColor: C.surfaceSoft, borderRadius: 10, borderWidth: 1, borderColor: C.border },
   iconBtnDelete: { padding: 9, backgroundColor: '#FEF2F2', borderRadius: 10, borderWidth: 1, borderColor: '#FEE2E2' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'center', padding: 16 },
-  compactModalContainer: { backgroundColor: C.surface, borderRadius: 22, maxHeight: '90%', elevation: 10, overflow: 'hidden' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: C.primary },
-  formTitle: { fontSize: 17, fontWeight: '800', color: '#fff' },
+  // --- MODAL STYLING UPDATES ---
+  modalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(15,23,42,0.65)', // Darker, slightly richer overlay 
+    justifyContent: 'center', 
+    alignItems: 'center', // Centers the compact form horizontally 
+    padding: 16 
+  },
+  compactModalContainer: { 
+    backgroundColor: C.surface, 
+    borderRadius: 24, // Smoother modern curve 
+    width: '100%', 
+    maxWidth: 400, // Prevents full-width stretch on tablets/large screens
+    maxHeight: '85%', 
+    elevation: 15, 
+    shadowColor: '#000', 
+    shadowOpacity: 0.2, 
+    shadowRadius: 20, 
+    shadowOffset: { width: 0, height: 10 },
+    overflow: 'hidden' 
+  },
+  formHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 20, 
+    paddingVertical: 16, 
+    backgroundColor: C.primary 
+  },
+  formTitle: { fontSize: 16, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
   formSubtitle: { fontSize: 11.5, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
-  closeBtnIcon: { padding: 6, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 20 },
-  formScroll: { padding: 20 },
+  closeBtnIcon: { padding: 6, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
+  formScroll: { padding: 18 },
 
-  inputWrapper: { marginBottom: 16 },
+  inputWrapper: { marginBottom: 14 }, // Tighter spacing
   inputLabel: { fontSize: 12, fontWeight: '700', color: '#14161F', marginBottom: 6, marginLeft: 2 },
-  input: { borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, height: 48, backgroundColor: C.surfaceSoft, fontSize: 14, color: C.text },
-  row: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 16, zIndex: 2 },
+  input: { borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, height: 44, backgroundColor: C.surfaceSoft, fontSize: 13.5, color: C.text }, // Reduced height from 48 -> 44
+  row: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 14, zIndex: 2 }, // Tighter spacing
 
-  allowLateRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, height: 48 },
+  allowLateRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, height: 44 }, // Reduced height from 48 -> 44
   checkbox: { width: 18, height: 18, borderRadius: 5, borderWidth: 1.5, borderColor: C.border, justifyContent: 'center', alignItems: 'center', backgroundColor: C.surfaceSoft },
   checkboxChecked: { backgroundColor: C.primary, borderColor: C.primary },
   checkboxLabel: { fontSize: 12, color: C.textMuted, fontWeight: '600' },
 
-  datePickerBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, height: 48, backgroundColor: C.surfaceSoft },
+  datePickerBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, height: 44, backgroundColor: C.surfaceSoft }, // Reduced height from 48 -> 44
   datePickerText: { fontSize: 13.5, color: C.text },
 
-  dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, height: 46, backgroundColor: C.surfaceSoft },
+  dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, height: 44, backgroundColor: C.surfaceSoft }, // Reduced height from 46 -> 44
   dropdownHeaderActive: { borderColor: C.primary },
   dropdownSelectedText: { fontSize: 13.5, color: C.text, fontWeight: '500' },
   dropdownPlaceholder: { fontSize: 13.5, color: C.textFaint },
-  dropdownListContainer: { position: 'absolute', top: 72, left: 0, right: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, elevation: 6, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8 },
+  dropdownListContainer: { position: 'absolute', top: 66, left: 0, right: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, elevation: 6, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8 }, // Adjusted top distance
   dropdownItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 13, borderBottomWidth: 1, borderBottomColor: C.border },
-  dropdownItemText: { fontSize: 14, color:  '#14161F', fontWeight: '500' },
+  dropdownItemText: { fontSize: 13.5, color:  '#14161F', fontWeight: '500' },
   textBrand: { color: C.primary, fontWeight: '700' },
 
-  uploadBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderStyle: 'dashed', borderRadius: 12, padding: 14, backgroundColor: C.surfaceSoft, gap: 8, marginTop: 6, marginBottom: 16 },
+  uploadBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderStyle: 'dashed', borderRadius: 12, padding: 12, backgroundColor: C.surfaceSoft, gap: 8, marginTop: 4, marginBottom: 14 },
 
-  saveBtnFull: { backgroundColor: C.primary, height: 50, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 6, shadowColor: C.primary, shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
-  saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  saveBtnFull: { backgroundColor: C.primary, height: 46, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 4, shadowColor: C.primary, shadowOpacity: 0.25, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  saveBtnFullText: { color: '#fff', fontSize: 14.5, fontWeight: '800' },
 });

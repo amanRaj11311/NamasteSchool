@@ -932,16 +932,16 @@ const DashboardScreen: React.FC = () => {
     ? 'Student Portal'
     : `${data.userRole} Workspace`;
 
-  /* ------------------------------ Shared blocks ------------------------------ */
 
   const NoticesSection = (
-    <View style={styles.cardContainer}>
-      <SectionHeader
-        icon="volume-2"
-        title="Notices & Circulars"
-        subtitle="Official announcements from administration"
-        onViewAll={go('Notice Board')}
-      />
+  <View style={styles.cardContainer}>
+    <SectionHeader
+      icon="volume-2"
+      title="Notices & Circulars"
+      subtitle="Official announcements from administration"
+      onViewAll={go(isStudent || isParent ? 'StudentNotices' : 'NoticeBoard')}
+    />
+  
       {data.recentNotices && data.recentNotices.length > 0 ? (
         data.recentNotices.map((notice) => (
           <NoticeCard key={notice._id} notice={notice} onPress={() => setSelectedNotice(notice)} />
@@ -954,7 +954,7 @@ const DashboardScreen: React.FC = () => {
 
   const HolidaysSection = (
     <View style={styles.cardContainer}>
-      <SectionHeader icon="sun" title="School Holidays" subtitle="Official vacation dates" onViewAll={go('Holidays')} />
+      <SectionHeader icon="sun" title="School Holidays" subtitle="Official vacation dates" onViewAll={go('StudentHolidays')} />
       {data.upcomingHolidays && data.upcomingHolidays.length > 0 ? (
         data.upcomingHolidays.map((h, i) => <HolidayRow key={h._id || i} holiday={h} />)
       ) : (
@@ -1000,7 +1000,7 @@ const DashboardScreen: React.FC = () => {
 
       {/* Finance Overview */}
       <View style={styles.cardContainer}>
-        <SectionHeader icon="pie-chart" title="Finance Overview" onViewAll={go('Finance')} />
+        <SectionHeader icon="pie-chart" title="Finance Overview" onViewAll={go('ExpenseReports')} />
         <View style={styles.financeRow}>
           <View style={styles.financeItem}>
             <View style={[styles.financeIcon, { backgroundColor: '#F0FDF4' }]}>
@@ -1214,7 +1214,7 @@ const DashboardScreen: React.FC = () => {
       {/* Library snapshot */}
       {data.librarianData ? (
         <View style={styles.cardContainer}>
-          <SectionHeader icon="book" title="Library Snapshot" onViewAll={go('Library')} />
+          <SectionHeader icon="book" title="Library Snapshot" onViewAll={go('LibraryReports')} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
             <AttendanceCard icon="book" title="Titles" value={data.librarianData.totalBooks} color="#2563EB" bgColor="#EFF6FF" />
             <AttendanceCard icon="copy" title="Copies" value={data.librarianData.totalCopies} color="#8b5cf6" bgColor="#F5F3FF" />
@@ -1228,7 +1228,7 @@ const DashboardScreen: React.FC = () => {
       {/* Admissions funnel */}
       {data.receptionistData ? (
         <View style={styles.cardContainer}>
-          <SectionHeader icon="user-plus" title="Admission Enquiries" onViewAll={go('Enquiries')} />
+          <SectionHeader icon="user-plus" title="Admission Enquiries" onViewAll={go('EnquiryFunnelReport')} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
             <AttendanceCard icon="inbox" title="Total" value={data.receptionistData.totalEnquiries} color="#2563EB" bgColor="#EFF6FF" />
             <AttendanceCard icon="star" title="New" value={data.receptionistData.newEnquiries} color="#f59e0b" bgColor="#FFFBEB" />
@@ -1380,14 +1380,16 @@ const DashboardScreen: React.FC = () => {
         </ScrollView>
 
         {/* Today's timetable */}
-        <View style={styles.cardContainer}>
-          <SectionHeader
-            icon="calendar"
-            title="My Schedule Today"
-            subtitle="Live timetable for today"
-            actionLabel="Full week"
-            onViewAll={go('Class Timetable')}
-          />
+       {/* Today's timetable */}
+<View style={styles.cardContainer}>
+  <SectionHeader
+    icon="calendar"
+    title="My Schedule Today"
+    subtitle="Live timetable for today"
+    actionLabel="Full week"
+    onViewAll={go('Class Timetable')}   // teacher/admin route — has a space, that's correct here
+  />
+ 
           {p.todaySchedule && p.todaySchedule.length > 0 ? (
             p.todaySchedule.map((period, i) => <ScheduleRow key={period._id || i} period={period} />)
           ) : (
@@ -1641,7 +1643,7 @@ const DashboardScreen: React.FC = () => {
             icon="edit-3"
             title={forParent ? `Homework Given to ${profile.name.split(' ')[0]}` : 'My Homework'}
             subtitle="Assignments and home tasks"
-            onViewAll={go('Homework')}
+            onViewAll={go('StudentHomework')}
           />
           {homeworkList && homeworkList.length > 0 ? (
             homeworkList.map((hw) => <HomeworkRow key={hw._id} hw={hw} />)
@@ -1652,7 +1654,7 @@ const DashboardScreen: React.FC = () => {
 
         {/* Attendance detail */}
         <View style={styles.cardContainer}>
-          <SectionHeader icon="check-square" title="Attendance Summary" onViewAll={go('Student Attendance')} />
+          <SectionHeader icon="check-square" title="Attendance Summary" onViewAll={go('StudentAttendance')} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScroll}>
             <AttendanceCard icon="check-circle" title="Present" value={attendance.presentDays} color="#22c55e" bgColor="#F0FDF4" />
             <AttendanceCard icon="x-circle" title="Absent" value={attendance.absentDays} color={C.primary} bgColor={C.primarySoft} />
@@ -1683,7 +1685,7 @@ const DashboardScreen: React.FC = () => {
 
         {/* Exam results */}
         <View style={styles.cardContainer}>
-          <SectionHeader icon="award" title="Exam Results" onViewAll={go('Exam Results')} />
+          <SectionHeader icon="award" title="Exam Results" onViewAll={go('StudentResults')} />
           {academics.recentResults && academics.recentResults.length > 0 ? (
             academics.recentResults.map((r, i) => (
               <View key={r._id || i} style={styles.listItem}>
@@ -1707,7 +1709,7 @@ const DashboardScreen: React.FC = () => {
 
         {/* Fee account */}
         <View style={styles.cardContainer}>
-          <SectionHeader icon="credit-card" title="Fee Account" subtitle={fees.structureName} onViewAll={go('Fees & Payment')} />
+          <SectionHeader icon="credit-card" title="Fee Account" subtitle={fees.structureName} onViewAll={go('StudentFees')} />
           <FeeSummary fees={fees} />
           {fees.components && fees.components.length > 0 ? (
             <View style={{ marginTop: 14 }}>
@@ -1733,7 +1735,7 @@ const DashboardScreen: React.FC = () => {
             title="Leave Applications"
             subtitle={forParent ? `Leave status for ${profile.name.split(' ')[0]}` : undefined}
             actionLabel="Apply Leave"
-            onViewAll={go('Apply Leave')}
+            onViewAll={go('StudentLeave')}
           />
           {leaves && leaves.length > 0 ? (
             leaves.map((l, i) => <LeaveRow key={l._id || i} leave={l} />)
