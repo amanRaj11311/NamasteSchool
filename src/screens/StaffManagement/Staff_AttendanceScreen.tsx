@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import {
   Platform,
   LayoutAnimation,
   UIManager,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import { API_BASE } from '../../network/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,6 +27,7 @@ import XLSX from 'xlsx';
 import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -87,7 +90,7 @@ type SavedState = 'idle' | 'saving' | 'saved' | 'unsaved' | 'error';
 
 const getInitials = (name: string) => (name || '?').trim().charAt(0).toUpperCase();
 
-// Debounce hook — avoids re-filtering the staff list on every keystroke.
+// Debounce hook
 function useDebouncedValue<T>(value: T, delay = 250): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
@@ -110,7 +113,13 @@ export default function AttendanceScreen() {
   const [savedState, setSavedState] = useState<Record<string, SavedState>>({});
 
   // Daily View States
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebouncedValue(searchQuery, 250);
   const [bulkAction, setBulkAction] = useState<'present' | 'absent' | 'clear' | null>(null);
@@ -126,11 +135,40 @@ export default function AttendanceScreen() {
   const [dateSelectorVisible, setDateSelectorVisible] = useState(false);
   const [showLegendModal, setShowLegendModal] = useState(false);
 
+  // FAB Drag & Drop State
   const [fabOpen, setFabOpen] = useState(false);
+  const pan = useRef(new Animated.ValueXY()).current;
+  const panVal = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    pan.addListener((value) => { panVal.current = value; });
+    return () => { pan.removeAllListeners(); };
+  }, [pan]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
+      },
+      onPanResponderGrant: () => {
+        pan.setOffset({ x: panVal.current.x, y: panVal.current.y });
+        pan.setValue({ x: 0, y: 0 });
+      },
+      onPanResponderMove: Animated.event(
+        [null, { dx: pan.x, dy: pan.y }],
+        { useNativeDriver: false }
+      ),
+      onPanResponderRelease: () => {
+        pan.flattenOffset();
+      }
+    })
+  ).current;
+
   const toggleFab = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setFabOpen(o => !o);
   }, []);
+
   const closeFab = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setFabOpen(false);
@@ -151,13 +189,11 @@ export default function AttendanceScreen() {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
 
-      // 1. Fetch School ID (Required for Saving Attendance)
       const schoolsRes = await axios.get(`${API_BASE}/schools`, { headers: { Authorization: `Bearer ${token}` } });
       if (schoolsRes.data?.success && schoolsRes.data.data.length > 0) {
         setActiveSchoolId(schoolsRes.data.data[0]._id);
       }
 
-      // 2. Fetch Staff List
       const staffRes = await axios.get(`${API_BASE}/staff`, { headers: { Authorization: `Bearer ${token}` } });
       const staff = staffRes.data?.data || [];
       setStaffList(staff);
@@ -194,6 +230,7 @@ export default function AttendanceScreen() {
     [staffList, attendanceData]
   );
   const absentCount = totalStaff - presentCount;
+
   const saveStaffRecord = useCallback(async (staffId: string, overrides?: Partial<AttendanceRecord>) => {
     if (!activeSchoolId) {
       Alert.alert('Error', 'School Branch ID not found. Please pull to refresh.');
@@ -259,6 +296,7 @@ export default function AttendanceScreen() {
       setBulkAction(null);
     }
   };
+
   const clearAll = () => {
     if (staffList.length === 0) return;
     Alert.alert(
@@ -290,6 +328,24 @@ export default function AttendanceScreen() {
         },
       ]
     );
+  };
+
+  const handleDateChange = (event: any, selected?: Date) => {
+    if (Platform.OS === 'android') {
+      setDateSelectorVisible(false);
+    }
+    if (event.type === 'dismissed') return;
+    if (selected) {
+      const yyyy = selected.getFullYear();
+      const mm = String(selected.getMonth() + 1).padStart(2, '0');
+      const dd = String(selected.getDate()).padStart(2, '0');
+      setSelectedDate(`${yyyy}-${mm}-${dd}`);
+    }
+  };
+
+  const getSelectedDateObj = () => {
+    const d = new Date(selectedDate);
+    return isNaN(d.getTime()) ? new Date() : d;
   };
 
   const downloadSampleAttendanceTemplate = async () => {
@@ -400,7 +456,6 @@ export default function AttendanceScreen() {
     }
   };
 
-  // --- UI Renderers ---
   const renderDailyCard = ({ item }: { item: Staff }) => {
     const record = attendanceData[item._id];
     if (!record) return null;
@@ -422,7 +477,6 @@ export default function AttendanceScreen() {
             </View>
           </View>
 
-          {/* Checkbox + Present/Absent pill — one tappable control, same as web */}
           <TouchableOpacity
             style={[styles.attendancePill, isPresent ? styles.attendancePillPresent : styles.attendancePillAbsent]}
             onPress={() => toggleAttendance(item._id)}
@@ -468,7 +522,6 @@ export default function AttendanceScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header — quiet, premium, one restrained red accent (same language as Settings) */}
       <View style={styles.header}>
         <View style={styles.headerGlow} pointerEvents="none" />
         <View style={styles.headerRow}>
@@ -479,7 +532,7 @@ export default function AttendanceScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>Staff Attendance</Text>
-            <Text style={styles.subtitle} numberOfLines={1}>{viewMode === 'Daily' ? selectedDate : 'Monthly overview'}</Text>
+            <Text style={styles.subtitle} numberOfLines={1}>Manage all teaching/non-teaching staff members.</Text>
           </View>
           <TouchableOpacity style={styles.headerInfoBtn} onPress={() => setShowLegendModal(true)} activeOpacity={0.75}>
             <Feather name="info" size={16} color={C.textMuted} />
@@ -488,7 +541,6 @@ export default function AttendanceScreen() {
         <View style={styles.headerAccentBar} />
       </View>
 
-      {/* View toggle — segmented control, red only as a thin active fill */}
       <View style={styles.tabContainerWrapper}>
         <View style={styles.toggleContainer}>
           <TouchableOpacity style={[styles.toggleBtn, viewMode === 'Daily' && styles.toggleBtnActive]} onPress={() => setViewMode('Daily')} activeOpacity={0.85}>
@@ -502,30 +554,34 @@ export default function AttendanceScreen() {
         </View>
       </View>
 
-      {/* Filter bar (Daily) */}
       {viewMode === 'Daily' && (
         <View style={styles.filterSection}>
-          <Text style={styles.filterLabel}>ATTENDANCE DATE</Text>
-          <TouchableOpacity style={styles.datePickerBtn} onPress={() => setDateSelectorVisible(true)} activeOpacity={0.85}>
-            <Text style={styles.dateValue} numberOfLines={1}>{selectedDate}</Text>
-            <View style={styles.dateIconBadge}><Feather name="calendar" size={13} color={C.primary} /></View>
-          </TouchableOpacity>
+          <View style={styles.dateSearchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.filterLabel}>DATE</Text>
+              <TouchableOpacity style={styles.datePickerBtn} onPress={() => setDateSelectorVisible(true)} activeOpacity={0.85}>
+                <Text style={styles.dateValue} numberOfLines={1}>{selectedDate}</Text>
+                <View style={styles.dateIconBadge}><Feather name="calendar" size={12} color={C.primary} /></View>
+              </TouchableOpacity>
+            </View>
 
-          <View style={styles.searchRow}>
-            <View style={styles.searchContainer}>
-              <Feather name="search" size={16} color={C.textFaint} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Name or Staff ID..."
-                placeholderTextColor={C.textFaint}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Feather name="x-circle" size={15} color={C.textFaint} />
-                </TouchableOpacity>
-              )}
+            <View style={{ flex: 1.2 }}>
+              <Text style={styles.filterLabel}>SEARCH</Text>
+              <View style={styles.searchContainer}>
+                <Feather name="search" size={14} color={C.textFaint} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Name or ID..."
+                  placeholderTextColor={C.textFaint}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                    <Feather name="x-circle" size={15} color={C.textFaint} />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           </View>
 
@@ -559,11 +615,9 @@ export default function AttendanceScreen() {
               <Text style={[styles.statChipText, { color: C.primary }]}>Absent: {absentCount}</Text>
             </View>
           </View>
-          <Text style={styles.hintText}>Checked = Present · Empty = Absent — tap a row to toggle instantly</Text>
         </View>
       )}
 
-      {/* Main List / Calendar */}
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color={C.primary} /></View>
       ) : viewMode === 'Daily' ? (
@@ -610,9 +664,12 @@ export default function AttendanceScreen() {
         </ScrollView>
       )}
 
-      {/* Floating action button — Download Format & Upload Excel */}
+      {/* Movable Floating action button */}
       {!loading && (
-        <View style={styles.fabWrap} pointerEvents="box-none">
+        <Animated.View 
+          style={[styles.fabWrap, { transform: [{ translateX: pan.x }, { translateY: pan.y }] }]} 
+          pointerEvents="box-none"
+        >
           {fabOpen && (
             <View style={styles.fabActions}>
               <TouchableOpacity style={styles.fabActionRow} activeOpacity={0.85} onPress={() => { closeFab(); setUploadModalVisible(true); }}>
@@ -629,17 +686,17 @@ export default function AttendanceScreen() {
               </TouchableOpacity>
             </View>
           )}
-          <LinearGradient colors={BRAND_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.fabMain, SHADOW_BRAND]}>
-            <TouchableOpacity onPress={toggleFab} activeOpacity={0.9} style={styles.fabMainTouchable}>
-              <Feather name={fabOpen ? 'x' : 'grid'} size={22} color="#fff" />
-            </TouchableOpacity>
-          </LinearGradient>
-        </View>
+          <Animated.View {...panResponder.panHandlers}>
+            <LinearGradient colors={BRAND_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.fabMain, SHADOW_BRAND]}>
+              <TouchableOpacity onPress={toggleFab} activeOpacity={0.9} style={styles.fabMainTouchable}>
+                <Feather name={fabOpen ? 'x' : 'grid'} size={22} color="#fff" />
+              </TouchableOpacity>
+            </LinearGradient>
+          </Animated.View>
+        </Animated.View>
       )}
 
       {/* --- MODALS --- */}
-
-      {/* Legend / help */}
       <Modal visible={showLegendModal} transparent animationType="fade" onRequestClose={() => setShowLegendModal(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowLegendModal(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.legendCard} onPress={() => {}}>
@@ -654,29 +711,36 @@ export default function AttendanceScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Custom Date Picker Modal */}
-      <Modal visible={dateSelectorVisible} transparent animationType="slide">
-        <View style={styles.bottomSheetOverlay}>
-          <View style={[styles.bottomSheet, { maxHeight: '60%' }]}>
-            <View style={styles.bsHeader}>
-              <Text style={styles.bsTitle}>Select Date</Text>
-              <TouchableOpacity onPress={() => setDateSelectorVisible(false)}><Feather name="x" size={20} color={C.textMuted} /></TouchableOpacity>
-            </View>
-            <FlatList
-              data={Array.from({ length: 15 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return d.toISOString().split('T')[0]; })}
-              keyExtractor={item => item}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.bsItem} onPress={() => { setSelectedDate(item); setDateSelectorVisible(false); }}>
-                  <Text style={[styles.bsItemText, selectedDate === item && styles.textBrand]}>{item}</Text>
-                  {selectedDate === item && <Feather name="check" color={C.primary} size={18} />}
+      {/* Native Calendar Picker Modal */}
+      {dateSelectorVisible && Platform.OS === 'ios' && (
+        <Modal transparent animationType="slide" onRequestClose={() => setDateSelectorVisible(false)}>
+          <View style={styles.bottomSheetOverlay}>
+            <View style={styles.iosDatePickerBar}>
+              <View style={styles.iosDatePickerHeader}>
+                <Text style={styles.iosDatePickerTitle}>Select Date</Text>
+                <TouchableOpacity onPress={() => setDateSelectorVisible(false)}>
+                  <Text style={styles.iosDatePickerDone}>Done</Text>
                 </TouchableOpacity>
-              )}
-            />
+              </View>
+              <DateTimePicker
+                value={getSelectedDateObj()}
+                mode="date"
+                display="inline"
+                onChange={handleDateChange}
+              />
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
+      {dateSelectorVisible && Platform.OS !== 'ios' && (
+        <DateTimePicker
+          value={getSelectedDateObj()}
+          mode="date"
+          display="default"
+          onChange={handleDateChange}
+        />
+      )}
 
-      {/* Excel Upload Modal */}
       <Modal visible={uploadModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.uploadBox}>
@@ -748,7 +812,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  // ---- Header ----
   header: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16, backgroundColor: C.surface, overflow: 'hidden' },
   headerGlow: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(179, 18, 42, 0.03)', top: -100, right: -50 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -759,7 +822,6 @@ const styles = StyleSheet.create({
   headerInfoBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.surfaceSunken, justifyContent: 'center', alignItems: 'center' },
   headerAccentBar: { height: 2, width: 40, backgroundColor: C.primary, borderRadius: 2, marginTop: 14 },
 
-  // ---- Tabs ----
   tabContainerWrapper: { backgroundColor: C.surface, paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderColor: C.border, ...SHADOW_SM },
   toggleContainer: { flexDirection: 'row', backgroundColor: C.surfaceSunken, borderRadius: 13, padding: 4 },
   toggleBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, gap: 6 },
@@ -769,15 +831,16 @@ const styles = StyleSheet.create({
 
   filterSection: { backgroundColor: C.surface, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16, borderBottomWidth: 1, borderColor: C.border, ...SHADOW_SM },
   filterLabel: { fontSize: 10.5, fontWeight: '800', color: C.textMuted, marginBottom: 7, letterSpacing: 0.5, textTransform: 'uppercase' },
-  datePickerBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: C.surfaceSoft, paddingHorizontal: 14, height: 48, borderRadius: 12, borderWidth: 1.5, borderColor: C.border },
-  dateValue: { fontSize: 13.5, fontWeight: '700', color: C.text },
-  dateIconBadge: { width: 26, height: 26, borderRadius: 8, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
 
-  searchRow: { marginTop: 12 },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceSoft, borderWidth: 1.5, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, height: 48 },
-  searchInput: { flex: 1, marginLeft: 8, fontSize: 13, color: C.text, fontWeight: '500' },
+  dateSearchRow: { flexDirection: 'row', gap: 10 },
+  datePickerBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: C.surfaceSoft, paddingHorizontal: 10, height: 46, borderRadius: 12, borderWidth: 1.5, borderColor: C.border },
+  dateValue: { fontSize: 12.5, fontWeight: '700', color: C.text },
+  dateIconBadge: { width: 24, height: 24, borderRadius: 6, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
+  
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceSoft, borderWidth: 1.5, borderColor: C.border, borderRadius: 12, paddingHorizontal: 10, height: 46 },
+  searchInput: { flex: 1, marginLeft: 8, fontSize: 12.5, color: C.text, fontWeight: '500' },
 
-  bulkActionsRow: { flexDirection: 'row', gap: 8, marginTop: 12, alignItems: 'stretch' },
+  bulkActionsRow: { flexDirection: 'row', gap: 8, marginTop: 14, alignItems: 'stretch' },
   bulkBtnFill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 46, borderRadius: 12 },
   bulkBtnFillText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   bulkBtnOutline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: C.surface, height: 46, borderRadius: 12, borderWidth: 1.5, borderColor: C.primary },
@@ -787,7 +850,6 @@ const styles = StyleSheet.create({
   statsRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
   statChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.surfaceSoft, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 20 },
   statChipText: { fontSize: 11.5, fontWeight: '800', color: C.textMuted },
-  hintText: { fontSize: 10.5, color: C.textFaint, marginTop: 10, fontWeight: '600' },
 
   emptyState: { alignItems: 'center', padding: 40, marginTop: 20 },
   emptyTitle: { fontSize: 14, fontWeight: '700', color: C.text, marginTop: 10 },
@@ -819,8 +881,8 @@ const styles = StyleSheet.create({
   savedBadgeNeutral: { minWidth: 27, height: 27, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   savedBadgeNeutralText: { fontSize: 12, color: C.textFaint, fontWeight: '700' },
 
-  // Floating action button
-  fabWrap: { position: 'absolute', right: 18, bottom: 22, alignItems: 'flex-end' },
+  // Movable Floating action button 
+  fabWrap: { position: 'absolute', right: 18, bottom: 90, alignItems: 'flex-end', zIndex: 999 },
   fabMain: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
   fabMainTouchable: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
   fabActions: { marginBottom: 14, gap: 12, alignItems: 'flex-end' },
@@ -849,8 +911,6 @@ const styles = StyleSheet.create({
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   legendText: { fontSize: 13, color: C.text, fontWeight: '600' },
 
-  statusBox: { backgroundColor: C.surface, width: 220, borderRadius: 16, padding: 16, ...SHADOW_LG },
-
   uploadBox: { backgroundColor: C.surface, width: '100%', borderRadius: 20, padding: 20, ...SHADOW_LG },
   uploadHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   uploadHeaderIconBadge: { width: 34, height: 34, borderRadius: 11, backgroundColor: C.greenSoft, justifyContent: 'center', alignItems: 'center', marginRight: 8 },
@@ -871,5 +931,9 @@ const styles = StyleSheet.create({
   bsTitle: { fontSize: 17, fontWeight: '800', color: C.text },
   bsItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.surfaceSoft },
   bsItemText: { fontSize: 14.5, color: C.text, fontWeight: '600' },
-  textBrand: { color: C.primary, fontWeight: '800' },
+
+  iosDatePickerBar: { backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 30, ...SHADOW_LG },
+  iosDatePickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, borderBottomWidth: 1, borderColor: C.border },
+  iosDatePickerTitle: { fontSize: 16, fontWeight: '800', color: C.text },
+  iosDatePickerDone: { fontSize: 16, fontWeight: '800', color: C.primary },
 });

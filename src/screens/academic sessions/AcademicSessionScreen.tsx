@@ -19,6 +19,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Feather from "react-native-vector-icons/Feather";
 import axios from "axios";
 import { API_BASE } from "../../network/api";
+
 interface Permission {
   module: string;
   action: string;
@@ -282,7 +283,7 @@ export default function AcademicSessionsScreen() {
     
     const payload = {
       schoolId: formData.schoolId,
-      name: formData.sessionName.trim(), // Assuming 'name' is accepted, fallback to 'year' if backend strictness requires it
+      name: formData.sessionName.trim(), 
       year: formData.sessionName.trim(),
       startDate: formData.startDate,
       endDate: formData.endDate,
@@ -370,7 +371,7 @@ export default function AcademicSessionsScreen() {
           </View>
           <View style={item.isActive ? styles.badgeActive : styles.badgeInactive}>
             <Text style={item.isActive ? styles.badgeActiveText : styles.badgeInactiveText}>
-              {item.isActive ? 'ACTIVE SESSION' : 'INACTIVE'}
+              {item.isActive ? 'ACTIVE' : 'INACTIVE'}
             </Text>
           </View>
         </View>
@@ -441,69 +442,92 @@ export default function AcademicSessionsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header with Title, Subtitle, and Add Button */}
       <View style={styles.header}>
-        <Text style={styles.title}>Academic Sessions</Text>
-        <Text style={styles.subtitle}>Define academic sessions, set active terms, and configure promotion criteria.</Text>
-      </View>
-
-      {/* 2x2 KPI Grid */}
-      <View style={styles.kpiGrid}>
-        <View style={styles.kpiCard}>
-          <View style={styles.kpiRow}>
-            <View style={[styles.iconCircle, { backgroundColor: '#E0F2FE' }]}><Feather name="calendar" size={16} color="#0ea5e9" /></View>
-            <Text style={styles.kpiValue}>{loading ? "—" : sessions.length}</Text>
-          </View>
-          <Text style={styles.kpiLabel}>TOTAL SESSIONS</Text>
-        </View>
-        <View style={styles.kpiCard}>
-          <View style={styles.kpiRow}>
-            <View style={[styles.iconCircle, { backgroundColor: '#ECFDF5' }]}><Feather name="check-circle" size={16} color="#10B981" /></View>
-            <Text style={styles.kpiValue} >{loading ? "—" : activeSession ? activeSession.name : "None"}</Text>
-          </View>
-          <Text style={styles.kpiLabel}>ACTIVE SESSION</Text>
-        </View>
-        <View style={styles.kpiCard}>
-          <View style={styles.kpiRow}>
-            <View style={[styles.iconCircle, { backgroundColor: '#FEF3C7' }]}><Feather name="clock" size={16} color="#F59E0B" /></View>
-            <Text style={styles.kpiValue}>{loading || !activeSession ? "—" : `${durationInDays(activeSession.startDate, activeSession.endDate)}D`}</Text>
-          </View>
-          <Text style={styles.kpiLabel}>ACTIVE DURATION</Text>
-        </View>
-        <View style={styles.kpiCard}>
-          <View style={styles.kpiRow}>
-            <View style={[styles.iconCircle, { backgroundColor: '#F3E8FF' }]}><Feather name="percent" size={16} color="#D946EF" /></View>
-            <Text style={styles.kpiValue}>{loading ? "—" : `${avgOverallThreshold}%`}</Text>
-          </View>
-          <Text style={styles.kpiLabel}>AVG OVERALL %</Text>
-        </View>
-      </View>
-
-      <View style={styles.actionBar}>
-        <View style={styles.searchContainer}>
-          <Feather name="search" size={16} color="#9CA3AF" />
-          <TextInput style={styles.searchInput} placeholder="Search sessions..." value={searchQuery} onChangeText={setSearchQuery} />
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.title}>Academic Sessions</Text>
+          <Text style={styles.subtitle} numberOfLines={2}>Define sessions, active terms, and promotions.</Text>
         </View>
         {hasPermission('create') && (
-          <TouchableOpacity style={styles.addBtn} onPress={openCreate}>
+          <TouchableOpacity style={styles.headerAddBtn} onPress={openCreate} activeOpacity={0.85}>
             <Feather name="plus" size={16} color="#fff" />
-            <Text style={styles.addBtnText}>Add Session</Text>
+            <Text style={styles.headerAddBtnText}>Add</Text>
           </TouchableOpacity>
         )}
       </View>
 
+      {/* Horizontal Scrollable KPI Grid */}
+      <View style={styles.kpiWrapper}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          contentContainerStyle={styles.kpiScrollContent}
+        >
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiRow}>
+              <View style={[styles.iconCircle, { backgroundColor: '#E0F2FE' }]}><Feather name="calendar" size={14} color="#0ea5e9" /></View>
+              <Text style={styles.kpiValue}>{loading ? "—" : sessions.length}</Text>
+            </View>
+            <Text style={styles.kpiLabel}>TOTAL SESSIONS</Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiRow}>
+              <View style={[styles.iconCircle, { backgroundColor: '#ECFDF5' }]}><Feather name="check-circle" size={14} color="#10B981" /></View>
+              <Text style={styles.kpiValue} numberOfLines={1} adjustsFontSizeToFit>{loading ? "—" : activeSession ? activeSession.name : "None"}</Text>
+            </View>
+            <Text style={styles.kpiLabel}>ACTIVE SESSION</Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiRow}>
+              <View style={[styles.iconCircle, { backgroundColor: '#FEF3C7' }]}><Feather name="clock" size={14} color="#F59E0B" /></View>
+              <Text style={styles.kpiValue}>{loading || !activeSession ? "—" : `${durationInDays(activeSession.startDate, activeSession.endDate)}D`}</Text>
+            </View>
+            <Text style={styles.kpiLabel}>ACTIVE DURATION</Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiRow}>
+              <View style={[styles.iconCircle, { backgroundColor: '#F3E8FF' }]}><Feather name="percent" size={14} color="#D946EF" /></View>
+              <Text style={styles.kpiValue}>{loading ? "—" : `${avgOverallThreshold}%`}</Text>
+            </View>
+            <Text style={styles.kpiLabel}>AVG OVERALL %</Text>
+          </View>
+        </ScrollView>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.actionBar}>
+        <View style={styles.searchContainer}>
+          <Feather name="search" size={16} color="#9CA3AF" />
+          <TextInput 
+            style={styles.searchInput} 
+            placeholder="Search sessions..." 
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery} 
+            onChangeText={setSearchQuery} 
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")}>
+              <Feather name="x-circle" size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* Main List */}
       {loading ? (
-        <View style={styles.center}><ActivityIndicator size="large" color="#ef4444" /></View>
+        <View style={styles.center}><ActivityIndicator size="large" color="#B3122A" /></View>
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={(item) => item._id}
           renderItem={renderCard}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#ef4444']} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#B3122A']} />}
+          showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Feather name="calendar" size={40} color="#D1D5DB" />
-              <Text style={{color: '#6B7280', marginTop: 10, fontWeight: '500'}}>No sessions found.</Text>
+              <Feather name="calendar" size={36} color="#D1D5DB" />
+              <Text style={styles.emptyStateText}>No sessions found.</Text>
             </View>
           }
         />
@@ -515,7 +539,7 @@ export default function AcademicSessionsScreen() {
           <View style={styles.compactModalContainer}>
             
             <View style={styles.formHeader}>
-              <Text style={styles.formTitle}>{editingId ? 'Edit Academic Session' : 'Add Academic Session'}</Text>
+              <Text style={styles.formTitle}>{editingId ? 'Edit Session' : 'Add Session'}</Text>
               <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}>
                 <Feather name="x" size={20} color="#4B5563" />
               </TouchableOpacity>
@@ -544,7 +568,7 @@ export default function AcademicSessionsScreen() {
                 </View>
               </View>
 
-              <Text style={styles.sectionDividerText}>PROMOTION CRITERIA CONFIGURATION</Text>
+              <Text style={styles.sectionDividerText}>PROMOTION CRITERIA</Text>
               
               <View style={styles.row}>
                 <View style={[styles.inputWrapper, {flex: 1, marginRight: 8}]}>
@@ -566,7 +590,7 @@ export default function AcademicSessionsScreen() {
                 <TextInput style={styles.input} placeholder="Leave blank if not enforced" keyboardType="numeric" value={formData.minAttendancePercent} onChangeText={t => setFormData({...formData, minAttendancePercent: t})} />
               </View>
 
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleSave}>
+              <TouchableOpacity style={styles.saveBtnFull} onPress={handleSave} activeOpacity={0.85}>
                 <Text style={styles.saveBtnFullText}>{editingId ? 'Update Session' : 'Create Session'}</Text>
               </TouchableOpacity>
 
@@ -626,102 +650,156 @@ export default function AcademicSessionsScreen() {
 // --- Styles ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F7F9' },
-  center: { padding: 40, justifyContent: 'center', alignItems: 'center' },
-  header: { padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  title: { fontSize: 24, fontWeight: '800', color: '#111827' },
-  subtitle: { fontSize: 13, color: '#6B7280', marginTop: 4 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   
-  // 2x2 KPI Grid
-  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 16 },
-  kpiCard: { width: '48%', backgroundColor: '#fff', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 12, elevation: 1 },
-  kpiRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
-  iconCircle: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
-  kpiValue: { fontSize: 22, fontWeight: '800', color: '#111827', flex: 1 },
-  kpiLabel: { fontSize: 10, fontWeight: '800', color: '#6B7280', letterSpacing: 0.5 },
+  // Header with Add Button
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 16, 
+    paddingTop: 16, 
+    paddingBottom: 10, 
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F1F3'
+  },
+  headerTextContainer: { flex: 1, paddingRight: 10 },
+  title: { fontSize: 22, fontWeight: '800', color: '#111827', letterSpacing: -0.3 },
+  subtitle: { fontSize: 12, color: '#6B7280', marginTop: 2, fontWeight: '500' },
+  headerAddBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#B3122A', 
+    paddingHorizontal: 12, 
+    paddingVertical: 8, 
+    borderRadius: 10, 
+    gap: 4,
+    shadowColor: '#B3122A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  headerAddBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  
+  // Scrollable KPI Grid
+  kpiWrapper: { backgroundColor: '#F4F7F9', paddingVertical: 12 },
+  kpiScrollContent: { paddingHorizontal: 16, gap: 10 },
+  kpiCard: { 
+    width: 135, 
+    backgroundColor: '#fff', 
+    padding: 12, 
+    borderRadius: 14, 
+    borderWidth: 1, 
+    borderColor: '#E5E7EB', 
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  kpiRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  iconCircle: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  kpiValue: { fontSize: 18, fontWeight: '800', color: '#111827', flex: 1 },
+  kpiLabel: { fontSize: 9.5, fontWeight: '800', color: '#6B7280', letterSpacing: 0.5 },
 
-  // Action Bar
-  actionBar: { flexDirection: 'row', paddingHorizontal: 16, alignItems: 'center', gap: 10, zIndex: 10, marginTop: 4 },
-  searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, paddingHorizontal: 12, height: 46, elevation: 1 },
+  // Search Bar (Full Width)
+  actionBar: { paddingHorizontal: 16, marginBottom: 4 },
+  searchContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#fff', 
+    borderWidth: 1, 
+    borderColor: '#E5E7EB', 
+    borderRadius: 12, 
+    paddingHorizontal: 12, 
+    height: 46, 
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+  },
   searchInput: { flex: 1, marginLeft: 8, fontSize: 14, color: '#111827' },
-  addBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor:  '#B3122A', paddingHorizontal: 16, height: 46, borderRadius: 12, gap: 6, elevation: 2 },
-  addBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
   // Cards
-  listContent: { paddingHorizontal: 16, paddingBottom: 20, paddingTop: 16 },
-  card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#F3F4F6', elevation: 2 },
+  listContent: { paddingHorizontal: 16, paddingBottom: 20, paddingTop: 8 },
+  card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#F0F1F3', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   statusDot: { width: 10, height: 10, borderRadius: 5 },
-  cardName: { fontSize: 18, fontWeight: '800', color: '#111827' },
+  cardName: { fontSize: 17, fontWeight: '800', color: '#111827' },
   schoolSubText: { fontSize: 12, color: '#6B7280', fontWeight: '600', marginBottom: 14, marginLeft: 18 },
   
-  badgeActive: { backgroundColor: '#ECFDF5', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#D1FAE5' },
-  badgeActiveText: { color: '#059669', fontSize: 11, fontWeight: '800' },
-  badgeInactive: { backgroundColor: '#F3F4F6', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' },
-  badgeInactiveText: { color: '#6B7280', fontSize: 11, fontWeight: '700' },
+  badgeActive: { backgroundColor: '#ECFDF5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#D1FAE5' },
+  badgeActiveText: { color: '#059669', fontSize: 10.5, fontWeight: '800' },
+  badgeInactive: { backgroundColor: '#F3F4F6', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' },
+  badgeInactiveText: { color: '#6B7280', fontSize: 10.5, fontWeight: '700' },
 
-  datesRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#F9FAFB', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#F3F4F6', marginBottom: 12 },
+  datesRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#F9FAFB', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#F0F1F3', marginBottom: 12 },
   dateBox: { alignItems: 'flex-start' },
   dateLabel: { fontSize: 10, color: '#6B7280', fontWeight: '700', textTransform: 'uppercase', marginBottom: 4 },
-  dateValue: { fontSize: 13, color: '#111827', fontWeight: '600' },
+  dateValue: { fontSize: 12.5, color: '#111827', fontWeight: '700' },
 
   criteriaGrid: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  criteriaTile: { flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 10, alignItems: 'center' },
-  criteriaK: { fontSize: 10, textTransform: 'uppercase', color: '#6B7280', fontWeight: '700', marginBottom: 4 },
-  criteriaV: { fontWeight: '800', color:  '#B3122A', fontSize: 14 },
+  criteriaTile: { flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0F1F3', borderRadius: 10, padding: 10, alignItems: 'center' },
+  criteriaK: { fontSize: 9.5, textTransform: 'uppercase', color: '#6B7280', fontWeight: '700', marginBottom: 4 },
+  criteriaV: { fontWeight: '800', color: '#B3122A', fontSize: 14 },
 
   cardActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 16 },
   actionBtnGroup: { flexDirection: 'row', gap: 8 },
-  iconBtnPrimary: { padding: 8, backgroundColor: '#0ea5e9', borderRadius: 8 },
+  iconBtnPrimary: { padding: 8, backgroundColor: '#E0F2FE', borderRadius: 8, borderWidth: 1, borderColor: '#BAE6FD' },
   iconBtnEdit: { padding: 8, backgroundColor: '#ECFDF5', borderRadius: 8, borderWidth: 1, borderColor: '#D1FAE5' },
   iconBtnDelete: { padding: 8, backgroundColor: '#FEF2F2', borderRadius: 8, borderWidth: 1, borderColor: '#FEE2E2' },
 
   activateBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ECFDF5', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 6, borderWidth: 1, borderColor: '#D1FAE5' },
   activateBtnText: { color: '#059669', fontSize: 12, fontWeight: '700' },
 
-  emptyState: { alignItems: "center", padding: 40, backgroundColor: "#fff", borderRadius: 16, borderWidth: 2, borderColor: "#E5E7EB", borderStyle: "dashed" },
+  emptyState: { alignItems: "center", padding: 40, backgroundColor: "#fff", borderRadius: 16, borderWidth: 1.5, borderColor: "#E5E7EB", borderStyle: "dashed", marginTop: 10 },
+  emptyStateText: { color: '#6B7280', marginTop: 12, fontWeight: '600', fontSize: 14 },
 
   // Modal Form (Compact Floating)
   modalOverlay: { flex: 1, backgroundColor: 'rgba(17,24,39,0.6)', justifyContent: 'center', padding: 16 },
   compactModalContainer: { backgroundColor: '#fff', borderRadius: 20, maxHeight: '90%', elevation: 10, overflow: 'hidden' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  formTitle: { fontSize: 18, fontWeight: '800', color: '#111827' },
+  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F0F1F3' },
+  formTitle: { fontSize: 17, fontWeight: '800', color: '#111827' },
   closeBtnIcon: { padding: 6, backgroundColor: '#F3F4F6', borderRadius: 20 },
   formScroll: { padding: 20 },
   
   sectionDividerText: { fontSize: 11, fontWeight: '800', color: '#B3122A', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 12, marginTop: 4 },
   
-  inputWrapper: { marginBottom: 16, zIndex: 1 },
+  inputWrapper: { marginBottom: 14, zIndex: 1 },
   inputLabel: { fontSize: 12, fontWeight: '700', color: '#4B5563', marginBottom: 6, marginLeft: 2 },
   asterisk: { color: '#B3122A' },
-  input: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, height: 46, backgroundColor: '#F9FAFB', fontSize: 14, color: '#111827' },
+  input: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, height: 44, backgroundColor: '#F9FAFB', fontSize: 13.5, color: '#111827' },
   inputError: { borderColor: '#B3122A', backgroundColor: '#FEF2F2' },
-  errorText: { color: '#B3122A', fontSize: 12, marginTop: 4, fontWeight: '500' },
+  errorText: { color: '#B3122A', fontSize: 11.5, marginTop: 4, fontWeight: '500' },
   row: { flexDirection: 'row', justifyContent: 'space-between', zIndex: 2 },
 
-  dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, height: 46, backgroundColor: '#F9FAFB' },
+  dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 14, height: 44, backgroundColor: '#F9FAFB' },
   dropdownHeaderActive: { borderColor: '#B3122A', backgroundColor: '#FEF2F2' },
-  dropdownSelectedText: { color: '#111827', fontSize: 14, fontWeight: '500' },
-  dropdownPlaceholder: { color: '#9CA3AF', fontSize: 14 },
-  dropdownListContainer: { position: 'absolute', top: 70, left: 0, right: 0, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, backgroundColor: '#fff', overflow: 'hidden', elevation: 5, zIndex: 100 },
+  dropdownSelectedText: { color: '#111827', fontSize: 13.5, fontWeight: '500' },
+  dropdownPlaceholder: { color: '#9CA3AF', fontSize: 13.5 },
+  dropdownListContainer: { position: 'absolute', top: 68, left: 0, right: 0, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, backgroundColor: '#fff', overflow: 'hidden', elevation: 5, zIndex: 100 },
   dropdownScroll: { maxHeight: 150 },
   dropdownItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 14 },
   dropdownItemBorder: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  dropdownItemText: { fontSize: 14, color: '#374151', fontWeight: '500' },
+  dropdownItemText: { fontSize: 13.5, color: '#374151', fontWeight: '500' },
   dropdownItemTextActive: { color: '#B3122A', fontWeight: '700' },
 
-  saveBtnFull: { backgroundColor: '#B3122A', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2 },
-  saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  saveBtnFull: { backgroundColor: '#B3122A', height: 46, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2, shadowColor: '#B3122A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
+  saveBtnFullText: { color: '#fff', fontSize: 14.5, fontWeight: '800' },
 
   // View Full Spec Modal
   overlay: { flex: 1, backgroundColor: 'rgba(17,24,39,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   viewModalContainer: { backgroundColor: '#F9FAFB', width: '100%', borderRadius: 24, maxHeight: '85%', overflow: 'hidden', elevation: 10 },
   viewHeaderRed: { backgroundColor: '#B3122A', padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  viewTitle: { color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 0.5 },
-  viewName: { fontSize: 24, fontWeight: '800', color: '#111827' },
+  viewTitle: { color: '#fff', fontSize: 17, fontWeight: '800', letterSpacing: 0.5 },
+  viewName: { fontSize: 22, fontWeight: '800', color: '#111827' },
   
   sectionHeaderRed: { fontSize: 11, fontWeight: '800', color: '#B3122A', marginTop: 10, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
-  viewDetailsBox: { backgroundColor: '#fff', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 12 },
+  viewDetailsBox: { backgroundColor: '#fff', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#F0F1F3', marginBottom: 12 },
   viewLabel: { fontSize: 11, color: '#9CA3AF', fontWeight: '700', marginBottom: 4 },
   viewVal: { fontSize: 13, color: '#111827', fontWeight: '700' },
 });

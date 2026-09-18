@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,9 +14,14 @@ import {
   TextInput,
   useWindowDimensions,
   Platform,
+  LayoutAnimation,
+  UIManager,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
+import LinearGradient from 'react-native-linear-gradient';
 import axios from 'axios';
 import * as XLSX from 'xlsx';
 import RNFS from 'react-native-fs';
@@ -25,9 +30,22 @@ import { pick, types as DocTypes, isErrorWithCode, errorCodes } from '@react-nat
 import RNPrint from 'react-native-print';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { API_BASE } from '../../network/api';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const ALL_STAFF_ID = 'ALL_STAFF';
 const BRAND = '#B3122A';
+
+const BRAND_GRADIENT = ['#B3122A', '#7A0C1D'];
+const GREEN_GRADIENT = ['#0F9D6B', '#0B7C55'];
+const GRAY_GRADIENT = ['#4B5563', '#1F2937'];
+
+const SHADOW_SM = { elevation: 2, shadowColor: '#0F172A', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } };
+const SHADOW_BRAND = { elevation: 4, shadowColor: BRAND, shadowOpacity: 0.22, shadowRadius: 16, shadowOffset: { width: 0, height: 8 } };
+const SHADOW_GREEN = { elevation: 4, shadowColor: '#0F9D6B', shadowOpacity: 0.2, shadowRadius: 16, shadowOffset: { width: 0, height: 8 } };
 
 interface Permission {
   module: string;
@@ -99,6 +117,7 @@ const EMPTY_FORM = {
   className: '',
   roomNumber: '',
 };
+
 const formatTime = (date: Date) => {
   let hours = date.getHours();
   const minutes = date.getMinutes();
@@ -163,6 +182,45 @@ export default function TimetableScreen({ route }: any) {
   const [formData, setFormData] = useState({ ...EMPTY_FORM });
 
   const initialStaffId = route?.params?.staffId || null;
+
+  // --- FAB Drag State ---
+  const [fabOpen, setFabOpen] = useState(false);
+  const pan = useRef(new Animated.ValueXY()).current;
+  const panVal = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    pan.addListener((value) => { panVal.current = value; });
+    return () => { pan.removeAllListeners(); };
+  }, [pan]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 5 || Math.abs(gestureState.dy) > 5;
+      },
+      onPanResponderGrant: () => {
+        pan.setOffset({ x: panVal.current.x, y: panVal.current.y });
+        pan.setValue({ x: 0, y: 0 });
+      },
+      onPanResponderMove: Animated.event(
+        [null, { dx: pan.x, dy: pan.y }],
+        { useNativeDriver: false }
+      ),
+      onPanResponderRelease: () => {
+        pan.flattenOffset();
+      }
+    })
+  ).current;
+
+  const toggleFab = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFabOpen(o => !o);
+  }, []);
+
+  const closeFab = useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFabOpen(false);
+  }, []);
 
   useEffect(() => {
     initialize();
@@ -281,7 +339,7 @@ export default function TimetableScreen({ route }: any) {
       if (isSuperAdmin) return true;
       return permissions.some((p) => (p.module === 'timetable' || p.module === 'staff') && p.action === action);
     },
-    [permissions, isSuperAdmin],
+    [permissions, isSuperAdmin]
   );
 
   // --- Add / Edit period ---
@@ -453,7 +511,7 @@ export default function TimetableScreen({ route }: any) {
   };
 
   // ============================================================
-  // EXCEL: UPLOAD -> real bulk endpoint, backend parses the file
+  // EXCEL: UPLOAD
   // ============================================================
   const handleUploadExcel = async () => {
     if (!selectedStaff || selectedStaff._id === ALL_STAFF_ID) {
@@ -563,8 +621,7 @@ export default function TimetableScreen({ route }: any) {
 
   // --- Derived data ---
   const filteredPeriods = timetableData.filter((p) => p.day === selectedDay).sort((a, b) => a.periodNumber - b.periodNumber);
-  const totalAssigned = timetableData.length;
-
+  
   const periodsByDay = useMemo(() => {
     const map: Record<string, TimetablePeriod[]> = {};
     DAYS_OF_WEEK.forEach((d) => {
@@ -577,104 +634,70 @@ export default function TimetableScreen({ route }: any) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {/* Top Header */}
       <View style={styles.header}>
         <View style={styles.headerInner}>
           <Feather name="calendar" size={24} color={BRAND} style={{ marginRight: 10 }} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.title} numberOfLines={1}>Staff Personal Timetable</Text>
-            <Text style={styles.subtitle} numberOfLines={1}>Manage periods & weekly schedule</Text>
+            <Text style={styles.title} numberOfLines={1}>Staff Timetable</Text>
+            <Text style={styles.subtitle} numberOfLines={1}>Manage all teaching/non-teaching staff.</Text>
           </View>
+          {hasPermission('create') && (
+            <TouchableOpacity style={styles.headerAddBtn} onPress={openAddModal} activeOpacity={0.85}>
+              <Feather name="plus" size={16} color="#fff" />
+              <Text style={styles.headerAddBtnText}>Add Period</Text>
+            </TouchableOpacity>
+          )}
         </View>
-      </View>
-
-      {/* Action Grid */}
-      <View style={styles.actionGrid}>
-        <TouchableOpacity style={[styles.actionCard, isNarrow && styles.actionCardNarrow]} onPress={downloadFormat}>
-          <View style={[styles.actionIconWrap, { backgroundColor: '#ECFDF5' }]}>
-            <Feather name="download" size={18} color="#10B981" />
-          </View>
-          <View style={styles.actionTextContainer}>
-            <Text style={styles.actionCardTitle} numberOfLines={1}>Download Format</Text>
-            <Text style={styles.actionCardSub} numberOfLines={1}>Blank Excel template</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.actionCard, isNarrow && styles.actionCardNarrow]} onPress={handleUploadExcel}>
-          <View style={[styles.actionIconWrap, { backgroundColor: '#FEF2F2' }]}>
-            <Feather name="upload" size={18} color={BRAND} />
-          </View>
-          <View style={styles.actionTextContainer}>
-            <Text style={styles.actionCardTitle} numberOfLines={1}>Upload Excel</Text>
-            <Text style={styles.actionCardSub} numberOfLines={1}>Bulk add periods</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.actionCard, isNarrow && styles.actionCardNarrow]} onPress={() => setPrintMenuVisible(true)}>
-          <View style={[styles.actionIconWrap, { backgroundColor: '#F3F4F6' }]}>
-            <Feather name="printer" size={18} color="#4B5563" />
-          </View>
-          <View style={styles.actionTextContainer}>
-            <Text style={styles.actionCardTitle} numberOfLines={1}>Print & Export</Text>
-            <Text style={styles.actionCardSub} numberOfLines={1}>PDF / Excel</Text>
-          </View>
-          <Feather name="chevron-down" size={16} color="#9CA3AF" />
-        </TouchableOpacity>
-
-        {hasPermission('create') && (
-          <TouchableOpacity style={[styles.actionCard, styles.actionCardPrimary, isNarrow && styles.actionCardNarrow]} onPress={openAddModal}>
-            <View style={[styles.actionIconWrap, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-              <Feather name="plus" size={18} color="#fff" />
-            </View>
-            <View style={styles.actionTextContainer}>
-              <Text style={[styles.actionCardTitle, { color: '#fff' }]} numberOfLines={1}>Add Period Slot</Text>
-              <Text style={[styles.actionCardSub, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>New class period</Text>
-            </View>
-          </TouchableOpacity>
-        )}
       </View>
 
       <ScrollView style={{ flex: 1 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[BRAND]} />} showsVerticalScrollIndicator={false}>
-        {/* Staff Selector & View Controls */}
+        
+        {/* Controls Section (Select Staff & View Toggle in one row) */}
         <View style={styles.controlSection}>
-          <View style={styles.staffSelectorContainer}>
-            <Text style={styles.label}>SELECT STAFF MEMBER</Text>
-            <TouchableOpacity style={styles.staffDropdown} onPress={() => setStaffSelectorVisible(true)}>
-              <View style={styles.staffDropdownInner}>
-                <View style={styles.avatarMini}>
-                  {selectedStaff?._id === ALL_STAFF_ID ? (
-                    <Feather name="sun" size={12} color={BRAND} />
-                  ) : (
-                    <Text style={styles.avatarMiniText}>{selectedStaff?.name?.charAt(0) || 'A'}</Text>
-                  )}
+          <View style={styles.controlRow}>
+            {/* Staff Selector */}
+            <View style={styles.staffSelectorContainer}>
+              <Text style={styles.label}>SELECT STAFF MEMBER</Text>
+              <TouchableOpacity style={styles.staffDropdown} onPress={() => setStaffSelectorVisible(true)}>
+                <View style={styles.staffDropdownInner}>
+                  <View style={styles.avatarMini}>
+                    {selectedStaff?._id === ALL_STAFF_ID ? (
+                      <Feather name="sun" size={12} color={BRAND} />
+                    ) : (
+                      <Text style={styles.avatarMiniText}>{selectedStaff?.name?.charAt(0) || 'A'}</Text>
+                    )}
+                  </View>
+                  <Text style={styles.staffDropdownText} numberOfLines={1} ellipsizeMode="tail">
+                    {selectedStaff
+                      ? selectedStaff._id === ALL_STAFF_ID
+                        ? 'ALL STAFF MEMBERS'
+                        : `${selectedStaff.name} (${selectedStaff.staffId})`
+                      : 'SELECT STAFF'}
+                  </Text>
                 </View>
-                <Text style={styles.staffDropdownText} numberOfLines={1} ellipsizeMode="tail">
-                  {selectedStaff
-                    ? selectedStaff._id === ALL_STAFF_ID
-                      ? 'ALL STAFF MEMBERS'
-                      : `${selectedStaff.name} (${selectedStaff.staffId}) - ${selectedStaff.staffType}`
-                    : 'SELECT STAFF'}
-                </Text>
-              </View>
-              <Feather name="chevron-down" size={18} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
+                <Feather name="chevron-down" size={18} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
 
-          <View style={styles.viewControlsContainer}>
-            <Text style={styles.totalAssignedText} numberOfLines={1}>{totalAssigned} Total Periods</Text>
-            <View style={[styles.viewToggleGroup, isVeryNarrow && styles.viewToggleGroupNarrow]}>
-              <TouchableOpacity style={[styles.viewToggleBtn, viewMode === 'Day' && styles.viewToggleBtnActive]} onPress={() => setViewMode('Day')}>
-                <Feather name="list" size={14} color={viewMode === 'Day' ? '#fff' : BRAND} />
-                {!isVeryNarrow && <Text style={[styles.viewToggleText, viewMode === 'Day' && styles.viewToggleTextActive]}>Day View</Text>}
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.viewToggleBtn, viewMode === 'Grid' && styles.viewToggleBtnActive]} onPress={() => setViewMode('Grid')}>
-                <Feather name="grid" size={14} color={viewMode === 'Grid' ? '#fff' : BRAND} />
-                {!isVeryNarrow && <Text style={[styles.viewToggleText, viewMode === 'Grid' && styles.viewToggleTextActive]}>Weekly Grid</Text>}
-              </TouchableOpacity>
+            {/* View Mode Toggle */}
+            <View style={styles.viewToggleContainer}>
+              <Text style={styles.label}>VIEW MODE</Text>
+              <View style={[styles.viewToggleGroup, isVeryNarrow && styles.viewToggleGroupNarrow]}>
+                <TouchableOpacity style={[styles.viewToggleBtn, viewMode === 'Day' && styles.viewToggleBtnActive]} onPress={() => setViewMode('Day')}>
+                  <Feather name="list" size={14} color={viewMode === 'Day' ? '#fff' : BRAND} />
+                  {!isVeryNarrow && <Text style={[styles.viewToggleText, viewMode === 'Day' && styles.viewToggleTextActive]}>Day</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.viewToggleBtn, viewMode === 'Grid' && styles.viewToggleBtnActive]} onPress={() => setViewMode('Grid')}>
+                  <Feather name="grid" size={14} color={viewMode === 'Grid' ? '#fff' : BRAND} />
+                  {!isVeryNarrow && <Text style={[styles.viewToggleText, viewMode === 'Grid' && styles.viewToggleTextActive]}>Weekly</Text>}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
 
+        {/* Loading State */}
         {loading ? (
           <View style={styles.loadingContainer}><ActivityIndicator size="large" color={BRAND} /></View>
         ) : viewMode === 'Day' ? (
@@ -701,13 +724,7 @@ export default function TimetableScreen({ route }: any) {
                 <View style={styles.emptyState}>
                   <Feather name="calendar" size={30} color="#D1D5DB" />
                   <Text style={styles.emptyTitle}>No Classes Scheduled for {selectedDay}</Text>
-                  <Text style={styles.emptySub}>Click "Add Period Slot" to assign a class to this staff member.</Text>
-                  {hasPermission('create') && (
-                    <TouchableOpacity style={styles.addPeriodOutlineBtn} onPress={openAddModal}>
-                      <Feather name="plus" size={16} color={BRAND} />
-                      <Text style={styles.addPeriodOutlineBtnText}>Add {selectedDay} Period</Text>
-                    </TouchableOpacity>
-                  )}
+                  <Text style={styles.emptySub}>Click "Add Period" to assign a class.</Text>
                 </View>
               ) : (
                 <View style={styles.periodGrid}>
@@ -793,6 +810,44 @@ export default function TimetableScreen({ route }: any) {
           </View>
         )}
       </ScrollView>
+
+      {/* Movable Floating action button */}
+      {!loading && (
+        <Animated.View 
+          style={[styles.fabWrap, { transform: [{ translateX: pan.x }, { translateY: pan.y }] }]} 
+          pointerEvents="box-none"
+        >
+          {fabOpen && (
+            <View style={styles.fabActions}>
+              <TouchableOpacity style={styles.fabActionRow} activeOpacity={0.85} onPress={() => { closeFab(); handleUploadExcel(); }}>
+                <View style={styles.fabLabelChip}><Text style={styles.fabLabelText}>Upload Excel</Text></View>
+                <LinearGradient colors={BRAND_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.fabMini, SHADOW_BRAND]}>
+                  <Feather name="upload" size={17} color="#fff" />
+                </LinearGradient>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.fabActionRow} activeOpacity={0.85} onPress={() => { closeFab(); downloadFormat(); }}>
+                <View style={styles.fabLabelChip}><Text style={styles.fabLabelText}>Download Format</Text></View>
+                <LinearGradient colors={GREEN_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.fabMini, SHADOW_GREEN]}>
+                  <Feather name="download" size={17} color="#fff" />
+                </LinearGradient>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.fabActionRow} activeOpacity={0.85} onPress={() => { closeFab(); setPrintMenuVisible(true); }}>
+                <View style={styles.fabLabelChip}><Text style={styles.fabLabelText}>Print & Export</Text></View>
+                <LinearGradient colors={GRAY_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.fabMini, SHADOW_SM]}>
+                  <Feather name="printer" size={17} color="#fff" />
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          )}
+          <Animated.View {...panResponder.panHandlers}>
+            <LinearGradient colors={BRAND_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.fabMain, SHADOW_BRAND]}>
+              <TouchableOpacity onPress={toggleFab} activeOpacity={0.9} style={styles.fabMainTouchable}>
+                <Feather name={fabOpen ? 'x' : 'menu'} size={22} color="#fff" />
+              </TouchableOpacity>
+            </LinearGradient>
+          </Animated.View>
+        </Animated.View>
+      )}
 
       {/* Staff Selector Modal */}
       <Modal visible={staffSelectorVisible} transparent animationType="slide">
@@ -890,7 +945,7 @@ export default function TimetableScreen({ route }: any) {
 
       {/* Print & Export Menu */}
       <Modal visible={printMenuVisible} transparent animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} onPress={() => setPrintMenuVisible(false)} activeOpacity={1}>
+        <TouchableOpacity style={styles.modalOverlayMenu} onPress={() => setPrintMenuVisible(false)} activeOpacity={1}>
           <View style={styles.menuDropdown}>
             <TouchableOpacity style={styles.menuItem} onPress={printCurrentTeacher}>
               <Feather name="printer" size={16} color="#374151" />
@@ -917,7 +972,6 @@ export default function TimetableScreen({ route }: any) {
               <TouchableOpacity onPress={() => setPeriodModalVisible(false)}><Feather name="x" size={20} color="#4B5563" /></TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
-              {/* Day chips — replaces the old broken dropdown, no overlap issues */}
               <View style={styles.formGroup}>
                 <Text style={styles.inputLabel}>Day of Week *</Text>
                 <View style={styles.dayChipsRow}>
@@ -1029,32 +1083,25 @@ export default function TimetableScreen({ route }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F4F7F9' },
 
-  header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  header: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   headerInner: { flexDirection: 'row', alignItems: 'center' },
   title: { fontSize: 20, fontWeight: '800', color: '#111827' },
   subtitle: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
-
-  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, backgroundColor: '#fff' },
-  actionCard: { width: '48%', minWidth: 0, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 12, marginBottom: 10, gap: 10, borderWidth: 1, borderColor: '#F0F1F3' },
-  actionCardNarrow: { width: '100%' },
-  actionCardPrimary: { backgroundColor: BRAND, borderColor: BRAND },
-  actionIconWrap: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
-  actionTextContainer: { flex: 1, minWidth: 0 },
-  actionCardTitle: { fontSize: 13, fontWeight: '700', color: '#111827' },
-  actionCardSub: { fontSize: 10.5, color: '#9CA3AF', marginTop: 1 },
+  headerAddBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: BRAND, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, gap: 6, ...SHADOW_BRAND },
+  headerAddBtnText: { color: '#fff', fontSize: 13.5, fontWeight: '700' },
 
   controlSection: { padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  staffSelectorContainer: { width: '100%' },
+  controlRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  staffSelectorContainer: { flex: 1, marginRight: 12 },
   label: { fontSize: 11, fontWeight: '700', color: '#9CA3AF', marginBottom: 6, letterSpacing: 0.5 },
   staffDropdown: { width: '100%', height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 12, backgroundColor: '#F9FAFB' },
   staffDropdownInner: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center' },
-  staffDropdownText: { flex: 1, minWidth: 0, fontSize: 14, fontWeight: '600', color: '#111827' },
+  staffDropdownText: { flex: 1, minWidth: 0, fontSize: 13, fontWeight: '600', color: '#111827' },
   avatarMini: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FEE2E2', justifyContent: 'center', alignItems: 'center', marginRight: 8, flexShrink: 0 },
   avatarMiniText: { color: BRAND, fontSize: 10, fontWeight: 'bold' },
 
-  viewControlsContainer: { width: '100%', marginTop: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  totalAssignedText: { flex: 1, minWidth: 0, fontSize: 12, fontWeight: '700', color: BRAND, marginRight: 10 },
-  viewToggleGroup: { flexDirection: 'row', backgroundColor: '#FEE2E2', borderRadius: 8, padding: 3, flexShrink: 0 },
+  viewToggleContainer: { flexShrink: 0 },
+  viewToggleGroup: { flexDirection: 'row', backgroundColor: '#FEE2E2', borderRadius: 8, padding: 3 },
   viewToggleGroupNarrow: { padding: 2 },
   viewToggleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 6, gap: 4 },
   viewToggleBtnActive: { backgroundColor: BRAND },
@@ -1063,7 +1110,7 @@ const styles = StyleSheet.create({
 
   loadingContainer: { padding: 50, alignItems: 'center' },
 
-  timetableBoard: { marginTop: 16 },
+  timetableBoard: { marginTop: 10 },
   tabsWrapper: { borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#fff' },
   dayTab: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 2, borderBottomColor: 'transparent', marginRight: 10 },
   dayTabActive: { borderBottomColor: BRAND },
@@ -1083,10 +1130,10 @@ const styles = StyleSheet.create({
   periodBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   periodTimeContainer: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, marginLeft: 8 },
   periodTime: { fontSize: 12, color: '#6B7280', fontWeight: '500', marginLeft: 4, flexShrink: 1 },
-  subjectName: { fontSize: 18, fontWeight: '800', color: '#111827', marginBottom: 12 },
+  subjectName: { fontSize: 16, fontWeight: '800', color: '#111827', marginBottom: 12 },
   periodDetails: { borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 12, marginBottom: 12 },
   detailRow: { flexDirection: 'row', alignItems: 'center' },
-  teacherName: { flex: 1, minWidth: 0, fontSize: 13, color: '#4B5563', fontWeight: '500', marginLeft: 6 },
+  teacherName: { flex: 1, minWidth: 0, fontSize: 12, color: '#4B5563', fontWeight: '500', marginLeft: 6 },
   periodActions: { flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', gap: 16 },
   pActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   pActionText: { fontSize: 13, fontWeight: '600', color: BRAND },
@@ -1094,8 +1141,6 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', padding: 40, backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', borderStyle: 'dashed' },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginTop: 12, textAlign: 'center' },
   emptySub: { fontSize: 13, color: '#6B7280', textAlign: 'center', marginTop: 4, marginBottom: 16 },
-  addPeriodOutlineBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: BRAND, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, gap: 6 },
-  addPeriodOutlineBtnText: { color: BRAND, fontWeight: '600', fontSize: 13 },
 
   weeklyGrid: { margin: 16, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#F0F1F3', overflow: 'hidden' },
   weeklyGridHeaderRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', paddingVertical: 10, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: '#F0F1F3' },
@@ -1114,7 +1159,17 @@ const styles = StyleSheet.create({
   weeklyGridPillSubject: { fontSize: 13, fontWeight: '800', color: '#111827', marginTop: 2 },
   weeklyGridPillTeacher: { fontSize: 10.5, color: '#6B7280', marginTop: 2 },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  // Movable Floating action button 
+  fabWrap: { position: 'absolute', right: 18, bottom: 65, alignItems: 'flex-end', zIndex: 999 },
+  fabMain: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
+  fabMainTouchable: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
+  fabActions: { marginBottom: 14, gap: 12, alignItems: 'flex-end' },
+  fabActionRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  fabLabelChip: { backgroundColor: '#0D0F16', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, ...SHADOW_SM },
+  fabLabelText: { color: '#fff', fontSize: 11.5, fontWeight: '700' },
+  fabMini: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+
+  modalOverlayMenu: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'center', alignItems: 'center' },
   menuDropdown: { backgroundColor: '#fff', borderRadius: 12, padding: 8, width: 220, position: 'absolute', top: 120, right: 20, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
   menuItem: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   menuItemText: { fontSize: 14, color: '#374151', fontWeight: '500' },
@@ -1126,7 +1181,7 @@ const styles = StyleSheet.create({
   bsItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F9FAFB', gap: 4 },
   bsItemAll: { backgroundColor: '#FFFBEB', marginHorizontal: -20, paddingHorizontal: 20, borderRadius: 8 },
   bsItemSelected: { backgroundColor: '#FEF2F2', marginHorizontal: -20, paddingHorizontal: 20 },
-  bsItemText: { flex: 1, minWidth: 0, fontSize: 15, color: '#374151', fontWeight: '500', marginLeft: 10 },
+  bsItemText: { flex: 1, minWidth: 0, fontSize: 14, color: '#374151', fontWeight: '500', marginLeft: 10 },
 
   formRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
   formHalf: { flex: 1, minWidth: 0, marginRight: 10 },
@@ -1152,5 +1207,5 @@ const styles = StyleSheet.create({
 
   busyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
   busyCard: { backgroundColor: '#fff', borderRadius: 16, paddingVertical: 24, paddingHorizontal: 30, alignItems: 'center', minWidth: 220 },
-  busyText: { fontSize: 14, fontWeight: '600', color: '#374151', textAlign: 'center', marginTop: 12 },
+  busyText: { fontSize: 13, fontWeight: '600', color: '#374151', textAlign: 'center', marginTop: 12 },
 });
