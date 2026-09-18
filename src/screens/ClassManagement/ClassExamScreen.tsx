@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, SafeAreaView, TextInput, Modal,
+  View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList, TextInput, Modal,
   KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, RefreshControl,
+  Pressable
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
@@ -13,6 +14,7 @@ import RNFS from 'react-native-fs';
 import Share from 'react-native-share';
 import { pick, types, isErrorWithCode, errorCodes } from '@react-native-documents/picker';
 import XLSX from 'xlsx';
+
 const C = {
   bg: '#F6F4F1',
   surface: '#FFFFFF',
@@ -57,7 +59,7 @@ type Option = { label: string; value: string };
 const EXAM_STATUSES = ['Scheduled', 'Completed', 'Cancelled'];
 const TERMS = ['Term 1', 'Term 2', 'Term 3', 'Annual'];
 
-// --- Time helpers (kept from source; web stores a single free-text slot) ---
+// --- Time helpers ---
 const formatTime24 = (d: Date) => {
   const h = d.getHours().toString().padStart(2, '0');
   const m = d.getMinutes().toString().padStart(2, '0');
@@ -93,7 +95,7 @@ type MarksRow = {
   studentId: string | null;
   rollNo: string;
   studentName: string;
-  marksObtained: string; // kept as string for controlled TextInput
+  marksObtained: string;
   grade: string;
   remarks: string;
   resultId?: string;
@@ -137,7 +139,7 @@ export default function ClassExamsScreen() {
   const emptyCatForm = { name: '', term: 'Term 1', weightage: '20', defaultMax: '100', defaultPass: '33', description: '' };
   const [catFormData, setCatFormData] = useState(emptyCatForm);
 
-  // --- Marks entry state (rebuilt to mirror the web Results workflow) ---
+  // --- Marks entry state ---
   const [marksRows, setMarksRows] = useState<MarksRow[]>([]);
   const [marksLoading, setMarksLoading] = useState(false);
   const [marksSaving, setMarksSaving] = useState(false);
@@ -334,12 +336,7 @@ export default function ClassExamsScreen() {
     ]);
   };
 
-  // ---------------------------------------------------------------------
-  // Marks entry — rebuilt to match the web app's real source of truth:
-  // the /results (ExamResult) module, not the legacy embedded exam.marks.
-  // Same two-step merge as web: class roster first, then existing results
-  // layered on top, with grade auto-computed from percentage.
-  // ---------------------------------------------------------------------
+  // ---- Marks Entry ----
   const openMarksModal = async (exam: any) => {
     setActiveExam(exam);
     setMarksModalVisible(true);
@@ -365,7 +362,6 @@ export default function ClassExamsScreen() {
           };
         });
       } catch {
-        // fallback: attendance roster, same as web
         try {
           const attRes = await axios.get(`${API_BASE}/attendance/class`, {
             ...authHeaders(authToken),
@@ -411,7 +407,6 @@ export default function ClassExamsScreen() {
           studentMap[key] = base;
         });
       } catch {
-        // legacy embedded marks
         (exam.marks || []).forEach((m: any) => {
           const key = m.studentId || m.rollNo || m.studentName;
           if (studentMap[key]) {
@@ -523,7 +518,7 @@ export default function ClassExamsScreen() {
       });
 
       const form = new FormData();
-      // @ts-ignore — React Native FormData file shape
+      // @ts-ignore
       form.append('file', { uri: file.uri, name: file.name || 'marks.xlsx', type: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       form.append('classId', selectedClassId);
       form.append('examId', activeExam._id || activeExam.id);
@@ -546,9 +541,6 @@ export default function ClassExamsScreen() {
     } finally { setMarksSaving(false); }
   };
 
-  // Client-side timetable export — mirrors the web app's downloadExamScheduleExcel,
-  // which builds the workbook in the browser with xlsx-js-style rather than
-  // calling the server. Same column set and styling intent, done with RNFS + Share.
   const handleExportTimetable = async () => {
     if (exams.length === 0) {
       Alert.alert('Nothing to export', 'There are no scheduled exams for this class yet.');
@@ -613,7 +605,7 @@ export default function ClassExamsScreen() {
         </TouchableOpacity>
         {isOpen && (
           <View style={styles.dropdownListContainer}>
-            <ScrollView nestedScrollEnabled style={{ maxHeight: 190 }}>
+            <ScrollView nestedScrollEnabled style={{ maxHeight: 190 }} showsVerticalScrollIndicator={false}>
               {options.length === 0 && <Text style={styles.dropdownEmptyText}>No options available</Text>}
               {options.map(opt => (
                 <TouchableOpacity
@@ -640,183 +632,195 @@ export default function ClassExamsScreen() {
 
   const completedCount = exams.filter(e => e.status === 'Completed').length;
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchExams(authToken, selectedClassId, true)} colors={[C.garnet]} tintColor={C.garnet} />}
-        contentContainerStyle={{ paddingBottom: 40 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
-          <View style={styles.headerIconBadge}><Feather name="award" size={20} color={C.garnet} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Class Exams</Text>
-            <Text style={styles.subtitle}>Schedules, categories and grading for this class.</Text>
-          </View>
+  // --- Layout extraction ---
+  const renderListHeader = () => (
+    <View style={{ zIndex: 10 }}>
+      {/* KPI Grid */}
+      <View style={styles.kpiGrid}>
+        <View style={styles.kpiCard}>
+          <View style={[styles.iconCircle, { backgroundColor: C.garnetSoft }]}><Feather name="file-text" size={15} color={C.garnet} /></View>
+          <Text style={styles.kpiValue}>{exams.length}</Text>
+          <Text style={styles.kpiLabel}>Total exams</Text>
         </View>
-
-        <View style={styles.kpiGrid}>
-          <View style={styles.kpiCard}>
-            <View style={[styles.iconCircle, { backgroundColor: C.garnetSoft }]}><Feather name="file-text" size={15} color={C.garnet} /></View>
-            <Text style={styles.kpiValue}>{exams.length}</Text>
-            <Text style={styles.kpiLabel}>Total exams</Text>
-          </View>
-          <View style={styles.kpiCard}>
-            <View style={[styles.iconCircle, { backgroundColor: C.amberSoft }]}><Feather name="tag" size={15} color={C.amber} /></View>
-            <Text style={styles.kpiValue}>{examCategories.length}</Text>
-            <Text style={styles.kpiLabel}>Categories</Text>
-          </View>
-          <View style={styles.kpiCard}>
-            <View style={[styles.iconCircle, { backgroundColor: C.greenSoft }]}><Feather name="check-circle" size={15} color={C.green} /></View>
-            <Text style={styles.kpiValue}>{completedCount}</Text>
-            <Text style={styles.kpiLabel}>Completed</Text>
-          </View>
+        <View style={styles.kpiCard}>
+          <View style={[styles.iconCircle, { backgroundColor: C.amberSoft }]}><Feather name="tag" size={15} color={C.amber} /></View>
+          <Text style={styles.kpiValue}>{examCategories.length}</Text>
+          <Text style={styles.kpiLabel}>Categories</Text>
         </View>
-
-        {/* Master Categories */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={styles.sectionTitleRow}>
-              <Feather name="folder" size={15} color={C.garnet} />
-              <Text style={styles.sectionTitle}>Master exam categories</Text>
-            </View>
-            {hasPermission('create') && (
-              <TouchableOpacity onPress={() => setCategoryModalVisible(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.linkAction}>+ Create</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {examCategories.length === 0 ? (
-            <Text style={styles.mutedText}>No categories yet — create one to schedule exams against it.</Text>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 4 }}>
-              {examCategories.map(cat => (
-                <View key={cat._id} style={styles.categoryScrollCard}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <View style={styles.termPill}><Text style={styles.termPillText}>{cat.term}</Text></View>
-                    {hasPermission('delete') && (
-                      <TouchableOpacity onPress={() => handleDeleteCategory(cat._id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Feather name="x" size={14} color={C.textFaint} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                  <Text style={styles.categoryScrollName} numberOfLines={1}>{cat.name}</Text>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={styles.categoryScrollMax}>Max {cat.defaultMaxMarks ?? '-'}</Text>
-                    <Text style={styles.categoryScrollMax}>Pass {cat.defaultPassMarks ?? '-'}</Text>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-          )}
+        <View style={styles.kpiCard}>
+          <View style={[styles.iconCircle, { backgroundColor: C.greenSoft }]}><Feather name="check-circle" size={15} color={C.green} /></View>
+          <Text style={styles.kpiValue}>{completedCount}</Text>
+          <Text style={styles.kpiLabel}>Completed</Text>
         </View>
+      </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.inputLabel}>Class</Text>
-          {renderInlineDropdown('classFilter', '', classOptions, selectedClassId, (v) => { setSelectedClassId(v); fetchExams(authToken, v); }, 'Choose a class')}
-          {selectedClass && (
-            <View style={[styles.chipWrap, { marginTop: 4 }]}>
-              <View style={styles.classPill}><Text style={styles.classPillText}>{selectedClass.className}{selectedClass.division ? ` · Div ${selectedClass.division}` : ''}</Text></View>
-              <View style={styles.syllabusPill}><Text style={styles.syllabusPillText}>{selectedClass.syllabus || 'CBSE'}</Text></View>
-              <View style={styles.neutralPill}><Text style={styles.neutralPillText}>Marks & grades</Text></View>
-            </View>
-          )}
-        </View>
-
-        {/* Timetable */}
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={styles.sectionTitleRow}>
-              <Feather name="calendar" size={15} color={C.garnet} />
-              <Text style={styles.sectionTitle}>Exam timetable{selectedClass ? ` · ${selectedClass.className}` : ''}</Text>
-            </View>
-            {exams.length > 0 && (
-              <TouchableOpacity onPress={handleExportTimetable} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={styles.exportLink}>
-                <Feather name="file-text" size={13} color={C.green} />
-                <Text style={styles.exportLinkText}>Export</Text>
-              </TouchableOpacity>
-            )}
+      {/* Master Categories */}
+      <View style={[styles.sectionCard, { zIndex: 1 }]}>
+        <View style={styles.sectionHeaderRow}>
+          <View style={styles.sectionTitleRow}>
+            <Feather name="folder" size={15} color={C.garnet} />
+            <Text style={styles.sectionTitle}>Master exam categories</Text>
           </View>
-
           {hasPermission('create') && (
-            <TouchableOpacity style={styles.addBtn} onPress={openCreateForm} activeOpacity={0.9}>
-              <Feather name="calendar" size={15} color="#fff" />
-              <Text style={styles.addBtnText}>Schedule exam slot</Text>
+            <TouchableOpacity onPress={() => setCategoryModalVisible(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.linkAction}>+ Create</Text>
             </TouchableOpacity>
           )}
+        </View>
 
-          {loading ? (
-            <View style={styles.center}><ActivityIndicator size="large" color={C.garnet} /></View>
-          ) : exams.length === 0 ? (
+        {examCategories.length === 0 ? (
+          <Text style={styles.mutedText}>No categories yet — create one to schedule exams against it.</Text>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 4 }}>
+            {examCategories.map(cat => (
+              <View key={cat._id} style={styles.categoryScrollCard}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <View style={styles.termPill}><Text style={styles.termPillText}>{cat.term}</Text></View>
+                  {hasPermission('delete') && (
+                    <TouchableOpacity onPress={() => handleDeleteCategory(cat._id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Feather name="x" size={14} color={C.textFaint} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <Text style={styles.categoryScrollName} numberOfLines={1}>{cat.name}</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={styles.categoryScrollMax}>Max {cat.defaultMaxMarks ?? '-'}</Text>
+                  <Text style={styles.categoryScrollMax}>Pass {cat.defaultPassMarks ?? '-'}</Text>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+
+      {/* Class Dropdown - Elevated zIndex */}
+      <View style={[styles.sectionCard, { zIndex: 100, elevation: 10, paddingBottom: 8 }]}>
+        <Text style={styles.inputLabel}>Class</Text>
+        {renderInlineDropdown('classFilter', '', classOptions, selectedClassId, (v) => { setSelectedClassId(v); fetchExams(authToken, v); }, 'Choose a class')}
+        {selectedClass && (
+          <View style={[styles.chipWrap, { marginTop: 4, paddingBottom: 8 }]}>
+            <View style={styles.classPill}><Text style={styles.classPillText}>{selectedClass.className}{selectedClass.division ? ` · Div ${selectedClass.division}` : ''}</Text></View>
+            <View style={styles.syllabusPill}><Text style={styles.syllabusPillText}>{selectedClass.syllabus || 'CBSE'}</Text></View>
+            <View style={styles.neutralPill}><Text style={styles.neutralPillText}>Marks & grades</Text></View>
+          </View>
+        )}
+      </View>
+
+      {/* Timetable Header */}
+      <View style={{ paddingHorizontal: 16, marginTop: 16, zIndex: 1 }}>
+        <View style={styles.sectionHeaderRow}>
+          <View style={styles.sectionTitleRow}>
+            <Feather name="calendar" size={15} color={C.garnet} />
+            <Text style={styles.sectionTitle}>Exam timetable{selectedClass ? ` · ${selectedClass.className}` : ''}</Text>
+          </View>
+          {exams.length > 0 && (
+            <TouchableOpacity onPress={handleExportTimetable} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={styles.exportLink}>
+              <Feather name="file-text" size={13} color={C.green} />
+              <Text style={styles.exportLinkText}>Export</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {hasPermission('create') && (
+          <TouchableOpacity style={styles.addBtn} onPress={openCreateForm} activeOpacity={0.9}>
+            <Feather name="calendar" size={15} color="#fff" />
+            <Text style={styles.addBtnText}>Schedule exam slot</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+
+  const renderExamCard = ({ item }: { item: any }) => {
+    const statusStyle = STATUS_STYLE[item.status] || STATUS_STYLE.Scheduled;
+    return (
+      <View style={styles.examCard}>
+        <View style={styles.examCardAccent} />
+        <View style={styles.examCardBody}>
+          <View style={styles.cardHeader}>
+            <View style={styles.catBadge}><Text style={styles.catBadgeText}>{item.examName || item.masterExamId?.name || 'Exam'}</Text></View>
+            <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+              <Text style={[styles.statusText, { color: statusStyle.fg }]}>{item.status || 'Scheduled'}</Text>
+            </View>
+          </View>
+          <Text style={styles.subjectName}>{item.subject}</Text>
+          <Text style={styles.slotTitle}>{item.title}</Text>
+
+          <View style={styles.detailsGrid}>
+            <View style={styles.detailBox}>
+              <Text style={styles.detailLbl}>Date & slot</Text>
+              <Text style={styles.detailVal}>{item.date ? new Date(item.date).toLocaleDateString() : '—'}{item.time ? ` · ${item.time}` : ''}</Text>
+            </View>
+            <View style={styles.detailBox}>
+              <Text style={styles.detailLbl}>Room</Text>
+              <Text style={styles.detailVal}>{item.room || 'N/A'}</Text>
+            </View>
+            <View style={styles.detailBox}>
+              <Text style={styles.detailLbl}>Max / pass</Text>
+              <Text style={styles.detailVal}>{item.maxMarks ?? '-'} / {item.passMarks ?? '-'}</Text>
+            </View>
+          </View>
+
+          {!!item.invigilator && (
+            <View style={styles.invigilatorRow}>
+              <Feather name="user-check" size={12} color={C.textMuted} />
+              <Text style={styles.invigilatorText}>Invigilator: {item.invigilator}</Text>
+            </View>
+          )}
+
+          <View style={styles.cardActions}>
+            <TouchableOpacity style={styles.outlineBtn} onPress={() => openMarksModal(item)} activeOpacity={0.85}>
+              <Feather name="check-square" size={14} color={C.green} />
+              <Text style={[styles.outlineBtnText, { color: C.green }]}>Marks</Text>
+            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              {hasPermission('update') && (
+                <TouchableOpacity style={styles.iconBtnEdit} onPress={() => openEditForm(item)}>
+                  <Feather name="edit-2" size={14} color={C.blue} />
+                </TouchableOpacity>
+              )}
+              {hasPermission('delete') && (
+                <TouchableOpacity style={styles.iconBtnDelete} onPress={() => handleDeleteExam(item._id)}>
+                  <Feather name="trash-2" size={14} color={C.garnet} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Top Header Fixed */}
+      <View style={styles.header}>
+        <View style={styles.headerIconBadge}><Feather name="award" size={20} color={C.garnet} /></View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Class Exams</Text>
+          <Text style={styles.subtitle}>Schedules, categories and grading for this class.</Text>
+        </View>
+      </View>
+
+      {/* Main FlatList mapping the exams */}
+      <FlatList
+        data={loading ? [] : exams}
+        keyExtractor={item => item._id}
+        ListHeaderComponent={renderListHeader}
+        renderItem={renderExamCard}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchExams(authToken, selectedClassId, true)} colors={[C.garnet]} tintColor={C.garnet} />}
+        ListEmptyComponent={
+          loading ? null : (
             <View style={styles.emptyState}>
               <Feather name="calendar" size={32} color={C.textFaint} />
               <Text style={styles.emptyTitle}>No exams scheduled</Text>
               <Text style={styles.emptySubtitle}>Schedule the first exam slot for this class to see it here.</Text>
             </View>
-          ) : (
-            exams.map(item => {
-              const statusStyle = STATUS_STYLE[item.status] || STATUS_STYLE.Scheduled;
-              return (
-                <View key={item._id} style={styles.examCard}>
-                  <View style={styles.examCardAccent} />
-                  <View style={styles.examCardBody}>
-                    <View style={styles.cardHeader}>
-                      <View style={styles.catBadge}><Text style={styles.catBadgeText}>{item.examName || item.masterExamId?.name || 'Exam'}</Text></View>
-                      <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                        <Text style={[styles.statusText, { color: statusStyle.fg }]}>{item.status || 'Scheduled'}</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.subjectName}>{item.subject}</Text>
-                    <Text style={styles.slotTitle}>{item.title}</Text>
-
-                    <View style={styles.detailsGrid}>
-                      <View style={styles.detailBox}>
-                        <Text style={styles.detailLbl}>Date & slot</Text>
-                        <Text style={styles.detailVal}>{item.date ? new Date(item.date).toLocaleDateString() : '—'}{item.time ? ` · ${item.time}` : ''}</Text>
-                      </View>
-                      <View style={styles.detailBox}>
-                        <Text style={styles.detailLbl}>Room</Text>
-                        <Text style={styles.detailVal}>{item.room || 'N/A'}</Text>
-                      </View>
-                      <View style={styles.detailBox}>
-                        <Text style={styles.detailLbl}>Max / pass</Text>
-                        <Text style={styles.detailVal}>{item.maxMarks ?? '-'} / {item.passMarks ?? '-'}</Text>
-                      </View>
-                    </View>
-
-                    {!!item.invigilator && (
-                      <View style={styles.invigilatorRow}>
-                        <Feather name="user-check" size={12} color={C.textMuted} />
-                        <Text style={styles.invigilatorText}>Invigilator: {item.invigilator}</Text>
-                      </View>
-                    )}
-
-                    <View style={styles.cardActions}>
-                      <TouchableOpacity style={styles.outlineBtn} onPress={() => openMarksModal(item)} activeOpacity={0.85}>
-                        <Feather name="check-square" size={14} color={C.green} />
-                        <Text style={[styles.outlineBtnText, { color: C.green }]}>Marks</Text>
-                      </TouchableOpacity>
-                      <View style={{ flexDirection: 'row', gap: 10 }}>
-                        {hasPermission('update') && (
-                          <TouchableOpacity style={styles.iconBtnEdit} onPress={() => openEditForm(item)}>
-                            <Feather name="edit-2" size={14} color={C.blue} />
-                          </TouchableOpacity>
-                        )}
-                        {hasPermission('delete') && (
-                          <TouchableOpacity style={styles.iconBtnDelete} onPress={() => handleDeleteExam(item._id)}>
-                            <Feather name="trash-2" size={14} color={C.garnet} />
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              );
-            })
-          )}
-        </View>
-      </ScrollView>
+          )
+        }
+      />
 
       {/* Schedule Exam Slot Modal */}
       <Modal visible={isFormVisible} animationType="fade" transparent>
@@ -824,7 +828,9 @@ export default function ClassExamsScreen() {
           <View style={styles.compactModalContainer}>
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>{editingExamId ? 'Edit exam slot' : 'Schedule exam slot'}</Text>
-              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}><Text style={{ fontSize: 18, color: '#fff' }}>✕</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setFormVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ fontSize: 20, color: '#fff', fontWeight: '600' }}>✕</Text>
+              </TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
 
@@ -911,9 +917,14 @@ export default function ClassExamsScreen() {
                 <TextInput style={[styles.input, { height: 80, textAlignVertical: 'top' }]} multiline placeholder="Syllabus details or instructions..." placeholderTextColor={C.textFaint} value={formData.remarks} onChangeText={t => setFormData({ ...formData, remarks: t })} />
               </View>
 
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleSaveExam} disabled={saving} activeOpacity={0.9}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>{editingExamId ? 'Save changes' : 'Save & schedule slot'}</Text>}
-              </TouchableOpacity>
+              <View style={styles.formActionRow}>
+                <TouchableOpacity style={styles.cancelBtnFull} onPress={() => setFormVisible(false)} activeOpacity={0.8}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.saveBtnFullRow} onPress={handleSaveExam} disabled={saving} activeOpacity={0.9}>
+                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>{editingExamId ? 'Save changes' : 'Save & schedule'}</Text>}
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -925,7 +936,9 @@ export default function ClassExamsScreen() {
           <View style={styles.compactModalContainer}>
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>Add master exam category</Text>
-              <TouchableOpacity onPress={() => setCategoryModalVisible(false)} style={styles.closeBtnIcon}><Text style={{ fontSize: 18, color: '#fff' }}>✕</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setCategoryModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ fontSize: 20, color: '#fff', fontWeight: '600' }}>✕</Text>
+              </TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
               <View style={styles.inputWrapper}>
@@ -958,11 +971,11 @@ export default function ClassExamsScreen() {
                 <TextInput style={[styles.input, { height: 70, textAlignVertical: 'top' }]} multiline placeholder="Optional category guidelines..." placeholderTextColor={C.textFaint} value={catFormData.description} onChangeText={t => setCatFormData({ ...catFormData, description: t })} />
               </View>
 
-              <View style={styles.row}>
-                <TouchableOpacity style={[styles.saveBtnFull, styles.cancelBtn, { flex: 1, marginRight: 10 }]} onPress={() => setCategoryModalVisible(false)}>
+              <View style={styles.formActionRow}>
+                <TouchableOpacity style={styles.cancelBtnFull} onPress={() => setCategoryModalVisible(false)} activeOpacity={0.8}>
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.saveBtnFull, { flex: 1 }]} onPress={handleCreateCategory} disabled={saving} activeOpacity={0.9}>
+                <TouchableOpacity style={styles.saveBtnFullRow} onPress={handleCreateCategory} disabled={saving} activeOpacity={0.9}>
                   {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>Create category</Text>}
                 </TouchableOpacity>
               </View>
@@ -971,7 +984,7 @@ export default function ClassExamsScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Marks Entry Modal — Results-module workflow, matching web */}
+      {/* Marks Entry Modal */}
       <Modal visible={isMarksModalVisible} animationType="fade" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.compactModalContainer}>
@@ -984,7 +997,9 @@ export default function ClassExamsScreen() {
                   </Text>
                 )}
               </View>
-              <TouchableOpacity onPress={() => setMarksModalVisible(false)} style={styles.closeBtnIcon}><Text style={{ fontSize: 18, color: '#fff' }}>✕</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setMarksModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ fontSize: 20, color: '#fff', fontWeight: '600' }}>✕</Text>
+              </TouchableOpacity>
             </View>
 
             <View style={styles.marksToolbar}>
@@ -1043,9 +1058,14 @@ export default function ClassExamsScreen() {
               )}
 
               {marksRows.length > 0 && (
-                <TouchableOpacity style={styles.saveBtnFull} onPress={handleSaveMarks} disabled={marksSaving} activeOpacity={0.9}>
-                  {marksSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>Save exam marks</Text>}
-                </TouchableOpacity>
+                <View style={[styles.formActionRow, { marginTop: 20 }]}>
+                  <TouchableOpacity style={styles.cancelBtnFull} onPress={() => setMarksModalVisible(false)} activeOpacity={0.8}>
+                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.saveBtnFullRow} onPress={handleSaveMarks} disabled={marksSaving} activeOpacity={0.9}>
+                    {marksSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>Save marks</Text>}
+                  </TouchableOpacity>
+                </View>
               )}
             </ScrollView>
           </View>
@@ -1070,7 +1090,7 @@ const styles = StyleSheet.create({
   kpiValue: { fontSize: 21, fontWeight: '800', color: C.text },
   kpiLabel: { fontSize: 11.5, fontWeight: '600', color: C.textMuted },
 
-  sectionCard: { backgroundColor: C.surface, margin: 16, marginBottom: 0, marginTop: 16, borderRadius: 20, padding: 16, borderWidth: 1, borderColor: C.border, shadowColor: '#1C1917', shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 1 },
+  sectionCard: { backgroundColor: C.surface, marginHorizontal: 16, marginTop: 16, borderRadius: 20, padding: 16, borderWidth: 1, borderColor: C.border, shadowColor: '#1C1917', shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 1, position: 'relative' },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionTitle: { fontSize: 15, fontWeight: '800', color: C.text },
@@ -1126,39 +1146,49 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: 12.5, color: C.textMuted, marginTop: 4, textAlign: 'center' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(28,25,23,0.6)', justifyContent: 'center', padding: 16 },
-  compactModalContainer: { backgroundColor: C.surface, borderRadius: 22, maxHeight: '90%', elevation: 10, overflow: 'hidden' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: C.garnet },
-  formTitle: { fontSize: 17, fontWeight: '800', color: '#fff' },
+  compactModalContainer: { backgroundColor: C.surface, borderRadius: 22, maxHeight: '90%', elevation: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' },
+  
+  formHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#B3122A', 
+  },
+  formTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
   formSubtitle: { fontSize: 11.5, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
-  closeBtnIcon: { padding: 6, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 20 },
+  closeBtnIcon: { padding: 4 },
   formScroll: { padding: 20 },
 
   marksToolbar: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingTop: 14 },
   toolbarBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.surfaceSoft },
   toolbarBtnText: { fontSize: 12, fontWeight: '700' },
 
-  inputWrapper: { marginBottom: 16 },
+  inputWrapper: { marginBottom: 16, zIndex: 1 },
   inputLabel: { fontSize: 12, fontWeight: '700', color: '#4B5563', marginBottom: 6, marginLeft: 2 },
-  input: { borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, height: 48, backgroundColor: C.surfaceSoft, fontSize: 14, color: C.text },
+  input: { borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingHorizontal: 14, height: 48, backgroundColor: C.surfaceSoft, fontSize: 14, color: C.text },
   row: { flexDirection: 'row', marginBottom: 16, zIndex: 2 },
 
   datePickerBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, height: 48, backgroundColor: C.surfaceSoft },
   datePickerText: { fontSize: 14, color: C.text },
 
   dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 14, height: 48, backgroundColor: C.surfaceSoft },
-  dropdownHeaderActive: { borderColor: C.garnet },
+  dropdownHeaderActive: { borderColor: C.garnet, backgroundColor: C.primarySoft },
   dropdownSelectedText: { fontSize: 14, color: C.text, fontWeight: '500' },
   dropdownPlaceholder: { fontSize: 14, color: C.textFaint },
-  dropdownListContainer: { position: 'absolute', top: 76, left: 0, right: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, elevation: 6, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8 },
+  dropdownListContainer: { position: 'absolute', top: 76, left: 0, right: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, elevation: 6, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, zIndex: 100 },
+  dropdownScroll: { maxHeight: 170 },
   dropdownItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 13, borderBottomWidth: 1, borderBottomColor: C.border },
   dropdownItemText: { fontSize: 14, color: '#374151', fontWeight: '500' },
   dropdownEmptyText: { padding: 14, color: C.textFaint, fontSize: 13 },
   textBrand: { color: C.garnet, fontWeight: '700' },
 
-  saveBtnFull: { backgroundColor: C.garnet, height: 50, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 6, shadowColor: C.garnet, shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
-  saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
-  cancelBtn: { backgroundColor: C.surfaceSoft, borderWidth: 1, borderColor: C.border, shadowOpacity: 0 },
-  cancelBtnText: { color: C.textMuted, fontSize: 15, fontWeight: '800' },
+  formActionRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginTop: 4 },
+  cancelBtnFull: { flex: 1, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: C.surfaceSunken, borderWidth: 1, borderColor: C.border },
+  cancelBtnText: { color: C.textMuted, fontSize: 14.5, fontWeight: '700' },
+  saveBtnFullRow: { flex: 1, flexDirection: 'row', backgroundColor: C.garnet, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: C.garnet, shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  saveBtnFullText: { color: '#fff', fontSize: 14.5, fontWeight: '800' },
 
   marksRow: { paddingVertical: 12, borderBottomWidth: 1, borderColor: C.border, gap: 8 },
   marksTopRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
