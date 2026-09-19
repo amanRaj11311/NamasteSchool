@@ -270,7 +270,7 @@ export default function LeaveBalancesScreen() {
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>Set Leave Balance</Text>
               <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}>
-                <Feather name="x" size={20} color="#4B5563" />
+                <Text style={{ fontSize: 20, }}>✖</Text>
               </TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
@@ -385,10 +385,24 @@ const styles = StyleSheet.create({
   // Floating Modal Form
   modalOverlay: { flex: 1, backgroundColor: 'rgba(17,24,39,0.6)', justifyContent: 'center', padding: 16 },
   compactModalContainer: { backgroundColor: '#fff', borderRadius: 20, maxHeight: '90%', elevation: 10, overflow: 'hidden' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  formTitle: { fontSize: 18, fontWeight: '800', color: '#111827' },
-  closeBtnIcon: { padding: 6, backgroundColor: '#E5E7EB', borderRadius: 20 },
-  formScroll: { padding: 20 },
+formHeader: {
+  backgroundColor: '#B3122A',
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: 20,
+  borderBottomWidth: 1,
+  borderBottomColor: '#B3122A',
+},  formTitle: {
+  fontSize: 19,
+  fontWeight: '800',
+  color: '#FFFFFF',
+},
+closeBtnIcon: {
+  padding: 8,
+  backgroundColor: '#FFFFFF',
+  borderRadius: 20,
+},  formScroll: { padding: 20 },
 
   inputWrapper: { marginBottom: 16 },
   inputLabel: { fontSize: 12, fontWeight: '700', color: '#4B5563', marginBottom: 6, marginLeft: 2 },

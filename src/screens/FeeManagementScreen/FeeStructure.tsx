@@ -8,7 +8,6 @@ import Feather from 'react-native-vector-icons/Feather';
 import axios from 'axios';
 import { API_BASE } from '../../network/api';
 
-
 const C = {
   bg: '#F3F5F9',
   surface: '#FFFFFF',
@@ -200,7 +199,7 @@ export default function FeeStructureScreen() {
 
   const structTotal = (items: any[]) => items.reduce((sum, i) => sum + Number(i.amount || 0) * (MULTIPLIER[i.frequency] || 1), 0);
 
-  // --- Dropdown: shows every option at once, scrolls only past 6 items ---
+  // --- Dropdown ---
   const MAX_VISIBLE_ITEMS = 6;
   const ITEM_HEIGHT = 44;
 
@@ -373,12 +372,14 @@ export default function FeeStructureScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.compactModalContainer}>
             <View style={styles.formHeader}>
-              <View style={styles.formHeaderIconBadge}><Feather name="tag" size={16} color={C.primary} /></View>
+              <View style={styles.formHeaderIconBadge}><Feather name="tag" size={16} color="#FFFFFF" /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.formTitle}>{editingCatId ? 'Edit Category' : 'Add Category'}</Text>
                 <Text style={styles.formHint}>A category groups related fee items, e.g. Tuition or Transport</Text>
               </View>
-              <TouchableOpacity onPress={() => setCatModal(false)} style={styles.closeBtnIcon}><Feather name="x" size={18} color={C.textMuted} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setCatModal(false)} style={styles.closeBtnIcon}>
+                <Text style={styles.closeIconText}>✕</Text>
+              </TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
               <View style={styles.inputWrapper}>
@@ -393,9 +394,15 @@ export default function FeeStructureScreen() {
                 <Text style={styles.inputLabel}>Description</Text>
                 <TextInput style={[styles.input, { height: 70, textAlignVertical: 'top' }]} multiline placeholderTextColor={C.textFaint} value={catForm.description} onChangeText={t => setCatForm({ ...catForm, description: t })} />
               </View>
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleSaveCat} disabled={saving} activeOpacity={0.9}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>{editingCatId ? 'Update' : 'Create'}</Text>}
-              </TouchableOpacity>
+              
+              <View style={styles.actionRow}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setCatModal(false)} activeOpacity={0.8}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.saveBtnHalf} onPress={handleSaveCat} disabled={saving} activeOpacity={0.9}>
+                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>{editingCatId ? 'Update' : 'Confirm'}</Text>}
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -406,12 +413,14 @@ export default function FeeStructureScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.compactModalContainer}>
             <View style={styles.formHeader}>
-              <View style={styles.formHeaderIconBadge}><Feather name="git-branch" size={16} color={C.primary} /></View>
+              <View style={styles.formHeaderIconBadge}><Feather name="git-branch" size={16} color="#FFFFFF" /></View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.formTitle}>{editingStructId ? 'Edit Fee Structure' : 'Add Fee Structure'}</Text>
                 <Text style={styles.formHint}>Combine fee items into a structure for a class or year</Text>
               </View>
-              <TouchableOpacity onPress={() => setStructModal(false)} style={styles.closeBtnIcon}><Feather name="x" size={18} color={C.textMuted} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setStructModal(false)} style={styles.closeBtnIcon}>
+                <Text style={styles.closeIconText}>✕</Text>
+              </TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
 
@@ -488,9 +497,14 @@ export default function FeeStructureScreen() {
                 <Text style={styles.totalCalcVal}>₹{structTotal(structForm.items).toLocaleString('en-IN')}</Text>
               </View>
 
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleSaveStruct} disabled={saving} activeOpacity={0.9}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>{editingStructId ? 'Update Structure' : 'Create Structure'}</Text>}
-              </TouchableOpacity>
+              <View style={styles.actionRow}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setStructModal(false)} activeOpacity={0.8}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.saveBtnHalf} onPress={handleSaveStruct} disabled={saving} activeOpacity={0.9}>
+                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>{editingStructId ? 'Update' : 'Confirm'}</Text>}
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -567,11 +581,14 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface, borderRadius: 26, maxHeight: '90%', overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 12,
   },
-  formHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 20, backgroundColor: C.surfaceSoft, borderBottomWidth: 1, borderBottomColor: C.border },
-  formHeaderIconBadge: { width: 38, height: 38, borderRadius: 11, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
-  formTitle: { fontSize: 16.5, fontWeight: '800', color: C.ink },
-  formHint: { fontSize: 11.5, color: C.textMuted, marginTop: 2, fontWeight: '600' },
-  closeBtnIcon: { padding: 8, backgroundColor: C.surfaceSunken, borderRadius: 20 },
+  
+  // MODAL HEADER STYLES UPDATED TO PRIMARY (RED)
+  formHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 20, backgroundColor: C.primary },
+  formHeaderIconBadge: { width: 38, height: 38, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+  formTitle: { fontSize: 16.5, fontWeight: '800', color: '#FFFFFF' },
+  formHint: { fontSize: 11.5, color: '#FCA5A5', marginTop: 2, fontWeight: '600' },
+  closeBtnIcon: { padding: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
+  closeIconText: { color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' },
   formScroll: { padding: 20 },
 
   inputWrapper: { marginBottom: 16 },
@@ -592,7 +609,6 @@ const styles = StyleSheet.create({
   totalCalcLbl: { fontSize: 13.5, fontWeight: '800', color: C.textMuted },
   totalCalcVal: { fontSize: 18, fontWeight: '800', color: C.ink },
 
-  // Dropdown — non-scrolling until options exceed MAX_VISIBLE_ITEMS
   dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, paddingRight: 8, height: 46, backgroundColor: C.surfaceSoft },
   dropdownHeaderActive: { borderColor: C.primary, backgroundColor: C.surface },
   dropdownSelectedText: { fontSize: 13, color: C.text, fontWeight: '600', flex: 1 },
@@ -613,6 +629,11 @@ const styles = StyleSheet.create({
 
   ghostBtn: { paddingVertical: 10, paddingHorizontal: 16, justifyContent: 'center' },
   ghostBtnText: { color: C.textMuted, fontSize: 14, fontWeight: '700' },
-  saveBtnFull: { backgroundColor: C.primary, height: 52, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginTop: 4, shadowColor: C.primary, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
-  saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+
+  // SIDE-BY-SIDE BUTTON STYLES UPDATED
+  actionRow: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  cancelBtn: { flex: 1, height: 52, borderRadius: 15, justifyContent: 'center', alignItems: 'center', backgroundColor: C.surfaceSunken, borderWidth: 1, borderColor: C.border },
+  cancelBtnText: { color: C.slate, fontSize: 15, fontWeight: '700' },
+  saveBtnHalf: { flex: 1, backgroundColor: C.primary, height: 52, borderRadius: 15, justifyContent: 'center', alignItems: 'center', shadowColor: C.primary, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
+  saveBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

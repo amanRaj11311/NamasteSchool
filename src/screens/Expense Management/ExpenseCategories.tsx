@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList, TextInput, Modal,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, RefreshControl
+  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, RefreshControl, ScrollView
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
@@ -84,21 +84,24 @@ export default function ExpenseCategoriesScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      
+      {/* UPDATED HEADER: Button moved here, 'tags' icon replaced with 'grid' so it renders */}
       <View style={styles.header}>
-        <View style={styles.headerIconBadge}><Feather name="tags" size={20} color={C.primary} /></View>
+        <View style={styles.headerIconBadge}><Feather name="grid" size={20} color={C.primary} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Expense Categories</Text>
           <Text style={styles.subtitle}>Manage categories for operating expenses.</Text>
         </View>
+        {hasPermission('create') && (
+          <TouchableOpacity style={styles.headerAddBtn} onPress={() => { setEditingId(null); setForm({ name: '', code: '', description: '', isActive: true }); setShowModal(true); }}>
+            <Feather name="plus" size={16} color="#fff" />
+            <Text style={styles.headerAddBtnText}>Add</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.filterSection}>
         <Text style={{fontSize: 13, fontWeight: '700', color: C.textMuted}}>Configured Categories: {categories.length}</Text>
-        {hasPermission('create') && (
-          <TouchableOpacity style={styles.addBtnFull} onPress={() => { setEditingId(null); setForm({ name: '', code: '', description: '', isActive: true }); setShowModal(true); }}>
-            <Feather name="plus" size={14} color="#fff" /><Text style={styles.addBtnTextFull}>Add Category</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {loading ? (
@@ -109,7 +112,7 @@ export default function ExpenseCategoriesScreen() {
           keyExtractor={item => item._id}
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchCategories(authToken, true)} colors={[C.primary]} />}
-          ListEmptyComponent={<View style={styles.emptyState}><Feather name="tags" size={40} color={C.textFaint} /><Text style={styles.emptyTitle}>No Categories</Text></View>}
+          ListEmptyComponent={<View style={styles.emptyState}><Feather name="grid" size={40} color={C.textFaint} /><Text style={styles.emptyTitle}>No Categories</Text></View>}
           renderItem={({ item }) => (
             <View style={styles.card}>
               <View style={styles.cardHeader}>
@@ -137,11 +140,19 @@ export default function ExpenseCategoriesScreen() {
       <Modal visible={showModal} animationType="fade" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.compactModalContainer}>
+            
+            {/* UPDATED MODAL HEADER: Project Color & X Icon */}
             <View style={styles.formHeader}>
-              <Text style={styles.formTitle}>{editingId ? 'Edit Category' : 'Add Category'}</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)} style={styles.closeBtnIcon}><Feather name="x" size={20} color={C.textMuted} /></TouchableOpacity>
+              <View>
+                <Text style={styles.formTitle}>{editingId ? 'Edit Category' : 'Add Category'}</Text>
+                <Text style={styles.formSubtitle}>{editingId ? 'Update category details' : 'Create a new expense category'}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowModal(false)} style={styles.closeBtnIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.formScroll}>
+            
+            <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
               <View style={styles.inputWrapper}>
                 <Text style={styles.inputLabel}>Category Name *</Text>
                 <TextInput style={styles.input} placeholder="e.g. Maintenance" value={form.name} onChangeText={t => setForm({...form, name: t})} />
@@ -155,15 +166,23 @@ export default function ExpenseCategoriesScreen() {
                 <TextInput style={[styles.input, { height: 70, textAlignVertical: 'top' }]} multiline value={form.description} onChangeText={t => setForm({...form, description: t})} />
               </View>
               
-              <TouchableOpacity style={styles.toggleRow} onPress={() => setForm({...form, isActive: !form.isActive})}>
+              <TouchableOpacity style={styles.toggleRow} onPress={() => setForm({...form, isActive: !form.isActive})} activeOpacity={0.8}>
                 <Feather name={form.isActive ? "check-square" : "square"} size={18} color={form.isActive ? C.primary : C.textMuted} />
                 <Text style={styles.toggleText}>Active Category</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleSave} disabled={saving}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>{editingId ? 'Update' : 'Create'}</Text>}
-              </TouchableOpacity>
-            </View>
+              {/* UPDATED ACTION BUTTONS: Side by Side layout */}
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowModal(false)} activeOpacity={0.9}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.saveBtnFull, { flex: 1, marginTop: 0 }, saving && { opacity: 0.7 }]} onPress={handleSave} disabled={saving} activeOpacity={0.9}>
+                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>{editingId ? 'Update' : 'Create'}</Text>}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -174,14 +193,28 @@ export default function ExpenseCategoriesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { padding: 40, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 20, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
-  headerIconBadge: { width: 44, height: 44, borderRadius: 14, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
+  
+  // UPDATED HEADER
+  header: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 20, paddingTop: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
+  headerIconBadge: { width: 36, height: 36, borderRadius: 18, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
   title: { fontSize: 20, fontWeight: '800', color: C.text },
   subtitle: { fontSize: 12, color: C.textMuted, marginTop: 2 },
+  headerAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  headerAddBtnText: { color: '#fff', fontSize: 13, fontWeight: '800', marginLeft: 6 },
   
   filterSection: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border, zIndex: 10 },
-  addBtnFull: { backgroundColor: '#B3122A', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, elevation: 2 },
-  addBtnTextFull: { color: '#fff', fontSize: 13, fontWeight: '800', marginLeft: 6 },
 
   listContent: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 16 },
   emptyState: { alignItems: 'center', padding: 36, marginTop: 20, backgroundColor: C.surface, borderRadius: 18, borderWidth: 1.5, borderColor: C.border, borderStyle: 'dashed' },
@@ -200,11 +233,13 @@ const styles = StyleSheet.create({
   iconBtnEdit: { padding: 8, backgroundColor: C.surfaceSoft, borderRadius: 8, borderWidth: 1, borderColor: C.border },
   iconBtnDelete: { padding: 8, backgroundColor: '#FEF2F2', borderRadius: 8, borderWidth: 1, borderColor: '#FECACA' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'center', padding: 16 },
-  compactModalContainer: { backgroundColor: C.surface, borderRadius: 20, elevation: 10, overflow: 'hidden' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: C.surfaceSoft, borderBottomWidth: 1, borderBottomColor: C.border },
-  formTitle: { fontSize: 16, fontWeight: '800', color: C.text },
-  closeBtnIcon: { padding: 6, backgroundColor: C.border, borderRadius: 20 },
+  // UPDATED MODAL STYLES
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.65)', justifyContent: 'center', padding: 16 },
+  compactModalContainer: { backgroundColor: C.surface, borderRadius: 20, elevation: 12, overflow: 'hidden' },
+  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: C.primary },
+  formTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  formSubtitle: { fontSize: 12, color: '#FCA5A5', marginTop: 3 },
+  closeBtnIcon: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center' },
   formScroll: { padding: 20 },
 
   inputWrapper: { marginBottom: 16 },
@@ -214,6 +249,9 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 20 },
   toggleText: { fontSize: 13, fontWeight: '700', color: C.text },
 
+  // SIDE BY SIDE BUTTONS
   saveBtnFull: { backgroundColor: C.primary, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', elevation: 2 },
   saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  cancelBtn: { flex: 1, height: 50, borderRadius: 12, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  cancelBtnText: { color: C.textMuted, fontSize: 15, fontWeight: '800' },
 });

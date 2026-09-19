@@ -68,9 +68,7 @@ export default function EnquiryFunnelReportScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={{top:10, bottom:10, left:10, right:10}}>
-          <Feather name="arrow-left" size={22} color={C.text} />
-        </TouchableOpacity>
+        
         <View style={styles.headerIconBadge}><Feather name="pie-chart" size={20} color={C.purpleDark} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Funnel Analytics</Text>

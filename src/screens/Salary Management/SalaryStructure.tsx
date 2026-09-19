@@ -8,6 +8,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 import { API_BASE } from '../../network/api';
+
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
@@ -175,18 +176,33 @@ export default function SalaryStructureScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      
       <View style={styles.header}>
-        <View style={styles.headerIconBadge}><Feather name="sitemap" size={20} color={C.primary} /></View>
+        {/* Replaced 'sitemap' with 'layers' to fix the missing icon bug */}
+        <View style={styles.headerIconBadge}><Feather name="layers" size={20} color={C.primary} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Salary Structure Setup</Text>
           <Text style={styles.subtitle}>Configure pay scales and assign them.</Text>
         </View>
+        
+        {tab === 'structures' && canManageStructure && (
+          <TouchableOpacity style={styles.headerAddBtn} onPress={() => { setEditingStructId(null); setStructForm(getEmptyStructureForm()); setStructModal(true); }}>
+            <Feather name="plus" size={16} color="#fff" />
+            <Text style={styles.headerAddBtnText}>Add</Text>
+          </TouchableOpacity>
+        )}
+        {tab === 'assignments' && canAssign && (
+          <TouchableOpacity style={styles.headerAddBtn} onPress={() => { setAssignForm(getEmptyAssignForm()); setAssignModal(true); }}>
+            <Feather name="plus" size={16} color="#fff" />
+            <Text style={styles.headerAddBtnText}>Assign</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.filterSection}>
         <View style={styles.tabContainer}>
           <TouchableOpacity style={[styles.tabBtn, tab === 'structures' && styles.tabBtnActive]} onPress={() => setTab('structures')}>
-            <Feather name="sitemap" size={14} color={tab === 'structures' ? '#fff' : C.textMuted} />
+            <Feather name="layers" size={14} color={tab === 'structures' ? '#fff' : C.textMuted} />
             <Text style={[styles.tabText, tab === 'structures' && styles.tabTextActive]}>Structures ({structures.length})</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.tabBtn, tab === 'assignments' && styles.tabBtnActive]} onPress={() => setTab('assignments')}>
@@ -194,17 +210,6 @@ export default function SalaryStructureScreen() {
             <Text style={[styles.tabText, tab === 'assignments' && styles.tabTextActive]}>Assignments ({assignments.length})</Text>
           </TouchableOpacity>
         </View>
-
-        {tab === 'structures' && canManageStructure && (
-          <TouchableOpacity style={styles.addBtnFull} onPress={() => { setEditingStructId(null); setStructForm(getEmptyStructureForm()); setStructModal(true); }}>
-            <Feather name="plus" size={16} color="#fff" /><Text style={styles.addBtnTextFull}>Add Structure</Text>
-          </TouchableOpacity>
-        )}
-        {tab === 'assignments' && canAssign && (
-          <TouchableOpacity style={styles.addBtnFull} onPress={() => { setAssignForm(getEmptyAssignForm()); setAssignModal(true); }}>
-            <Feather name="plus" size={16} color="#fff" /><Text style={styles.addBtnTextFull}>Assign Salary</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {loading ? (
@@ -215,7 +220,7 @@ export default function SalaryStructureScreen() {
           keyExtractor={item => item._id}
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchAll(authToken, true)} colors={[C.primary]} />}
-          ListEmptyComponent={<View style={styles.emptyState}><Feather name="sitemap" size={40} color={C.textFaint} /><Text style={styles.emptyTitle}>No Structures Found</Text></View>}
+          ListEmptyComponent={<View style={styles.emptyState}><Feather name="layers" size={40} color={C.textFaint} /><Text style={styles.emptyTitle}>No Structures Found</Text></View>}
           renderItem={({ item }) => (
             <View style={styles.card}>
               <View style={styles.cardHeader}>
@@ -278,12 +283,18 @@ export default function SalaryStructureScreen() {
       <Modal visible={structModal} animationType="fade" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.compactModalContainer}>
+            
             <View style={styles.formHeader}>
-              <Text style={styles.formTitle}>{editingStructId ? 'Edit Structure' : 'Add Structure'}</Text>
-              <TouchableOpacity onPress={() => setStructModal(false)} style={styles.closeBtnIcon}><Feather name="x" size={20} color={C.textMuted} /></TouchableOpacity>
+              <View>
+                <Text style={styles.formTitle}>{editingStructId ? 'Edit Structure' : 'Add Structure'}</Text>
+                <Text style={styles.formSubtitle}>{editingStructId ? 'Update basic pay and components' : 'Create a new salary template'}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setStructModal(false)} style={styles.closeBtnIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
             </View>
+            
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
-              
               <View style={styles.row}>
                 <View style={{ flex: 1, marginRight: 10 }}>
                   <Text style={styles.inputLabel}>Name *</Text>
@@ -327,9 +338,17 @@ export default function SalaryStructureScreen() {
                 <Text style={styles.totalCalcVal}>₹{structTotal(structForm.basic, structForm.components).toLocaleString('en-IN')}</Text>
               </View>
 
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleSaveStruct} disabled={saving}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>{editingStructId ? 'Update' : 'Create'} Structure</Text>}
-              </TouchableOpacity>
+              {/* ACTION BUTTONS (CANCEL AND CREATE IN SAME ROW) */}
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setStructModal(false)} activeOpacity={0.9}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.saveBtnFull, { flex: 1, marginTop: 0 }, saving && { opacity: 0.7 }]} onPress={handleSaveStruct} disabled={saving} activeOpacity={0.9}>
+                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>{editingStructId ? 'Update' : 'Create'}</Text>}
+                </TouchableOpacity>
+              </View>
+
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -339,12 +358,18 @@ export default function SalaryStructureScreen() {
       <Modal visible={assignModal} animationType="fade" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.compactModalContainer}>
+            
             <View style={styles.formHeader}>
-              <Text style={styles.formTitle}>Assign Salary Structure</Text>
-              <TouchableOpacity onPress={() => setAssignModal(false)} style={styles.closeBtnIcon}><Feather name="x" size={20} color={C.textMuted} /></TouchableOpacity>
+              <View>
+                <Text style={styles.formTitle}>Assign Salary Structure</Text>
+                <Text style={styles.formSubtitle}>Link structures to staff members</Text>
+              </View>
+              <TouchableOpacity onPress={() => setAssignModal(false)} style={styles.closeBtnIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
             </View>
+            
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
-              
               <View style={styles.segmentControl}>
                 <TouchableOpacity style={[styles.segmentBtn, assignForm.mode === 'single' && styles.segmentBtnActive]} onPress={() => setAssignForm({...assignForm, mode: 'single'})}>
                   <Text style={[styles.segmentText, assignForm.mode === 'single' && styles.segmentTextActive]}>Single Staff</Text>
@@ -381,9 +406,17 @@ export default function SalaryStructureScreen() {
                 {showEffDatePicker && <DateTimePicker value={assignForm.effectiveFrom} mode="date" display="default" onChange={(e, d) => { setShowEffDatePicker(Platform.OS === 'ios'); if (d) setAssignForm({ ...assignForm, effectiveFrom: d }); }} />}
               </View>
 
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleAssign} disabled={saving}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>Confirm Assignment</Text>}
-              </TouchableOpacity>
+              {/* ACTION BUTTONS (CANCEL AND CONFIRM IN SAME ROW) */}
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setAssignModal(false)} activeOpacity={0.9}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.saveBtnFull, { flex: 1, marginTop: 0 }, saving && { opacity: 0.7 }]} onPress={handleAssign} disabled={saving} activeOpacity={0.9}>
+                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>Confirm</Text>}
+                </TouchableOpacity>
+              </View>
+
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -396,19 +429,39 @@ export default function SalaryStructureScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { padding: 40, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 20, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
-  headerIconBadge: { width: 44, height: 44, borderRadius: 14, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
+  
+  header: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 20, paddingTop: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
+  headerIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FEE2E2', 
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   title: { fontSize: 20, fontWeight: '800', color: C.text },
   subtitle: { fontSize: 12, color: C.textMuted, marginTop: 2 },
+  headerAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  headerAddBtnText: { color: '#fff', fontSize: 13, fontWeight: '800', marginLeft: 6 },
   
-  filterSection: { padding: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border, zIndex: 10 },
+  filterSection: { padding: 16, paddingBottom: 12, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border, zIndex: 10 },
   tabContainer: { flexDirection: 'row', backgroundColor: C.surfaceSoft, padding: 4, borderRadius: 12, borderWidth: 1, borderColor: C.border },
   tabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, gap: 6 },
   tabBtnActive: { backgroundColor: C.primary, elevation: 2 },
   tabText: { fontSize: 13, fontWeight: '700', color: C.textMuted },
   tabTextActive: { color: '#fff' },
-  addBtnFull: { backgroundColor: '#111827', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 14, borderRadius: 12, marginTop: 12, elevation: 2 },
-  addBtnTextFull: { color: '#fff', fontSize: 14, fontWeight: '800', marginLeft: 8 },
 
   listContent: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 16 },
   emptyState: { alignItems: 'center', padding: 36, marginTop: 20, backgroundColor: C.surface, borderRadius: 18, borderWidth: 1.5, borderColor: C.border, borderStyle: 'dashed' },
@@ -438,12 +491,15 @@ const styles = StyleSheet.create({
   iconBtnEdit: { padding: 8, backgroundColor: C.greenSoft, borderRadius: 8, borderWidth: 1, borderColor: '#A7F3D0' },
   iconBtnDelete: { padding: 8, backgroundColor: C.primarySoft, borderRadius: 8, borderWidth: 1, borderColor: '#FECACA' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'center', padding: 16 },
-  compactModalContainer: { backgroundColor: C.surface, borderRadius: 20, maxHeight: '90%', elevation: 10, overflow: 'hidden' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: C.surfaceSoft, borderBottomWidth: 1, borderBottomColor: C.border },
-  formTitle: { fontSize: 16, fontWeight: '800', color: C.text },
-  closeBtnIcon: { padding: 6, backgroundColor: C.border, borderRadius: 20 },
-  formScroll: { padding: 20 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.65)', justifyContent: 'center', padding: 16 },
+  compactModalContainer: { backgroundColor: C.surface, borderRadius: 20, maxHeight: '90%', elevation: 12, overflow: 'hidden' },
+  
+  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: C.primary },
+  formTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  formSubtitle: { fontSize: 12, color: '#FCA5A5', marginTop: 3 },
+  closeBtnIcon: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center' },
+  
+  formScroll: { padding: 20, paddingBottom: 40 },
 
   segmentControl: { flexDirection: 'row', backgroundColor: C.surfaceSoft, padding: 4, borderRadius: 10, borderWidth: 1, borderColor: C.border, marginBottom: 16 },
   segmentBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
@@ -477,6 +533,9 @@ const styles = StyleSheet.create({
   dropdownItemText: { fontSize: 13, color: C.text, fontWeight: '500' },
   textBrand: { color: C.primary, fontWeight: '700' },
 
-  saveBtnFull: { backgroundColor: C.primary, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2 },
+  // Updated Button Styles for side-by-side layout
+  saveBtnFull: { backgroundColor: C.primary, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', elevation: 2 },
   saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  cancelBtn: { flex: 1, height: 50, borderRadius: 12, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  cancelBtnText: { color: C.textMuted, fontSize: 15, fontWeight: '800' },
 });

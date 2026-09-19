@@ -339,7 +339,7 @@ export default function HostelBlocksRoomsScreen() {
                 <View style={styles.formHeaderIconBadge}><Feather name="grid" size={16} color="#fff" /></View>
                 <Text style={styles.formTitle}>Add Room</Text>
               </View>
-              <TouchableOpacity onPress={() => setRoomModal(false)} style={styles.modalCloseBtn}><Feather name="x" size={18} color="#fff" /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setRoomModal(false)} style={styles.modalCloseBtn}><Text style={{ fontSize: 20, color: '#FFFFFF' }}>✖</Text></TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
               <View style={{ zIndex: 50, marginBottom: 16 }}>

@@ -311,7 +311,7 @@ export default function HolidaysAdminScreen() {
           <View style={styles.compactModalContainer}>
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>{editingId ? 'Edit Holiday' : 'Add New Holiday'}</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)} style={styles.closeBtnIcon}><Feather name="x" size={20} color={C.textMuted} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowModal(false)} style={styles.closeBtnIcon}><Text style={{ fontSize: 20, color: '#B3122A'}}>✖</Text></TouchableOpacity>
             </View>
 
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
   headerIconBadge: { width: 44, height: 44, borderRadius: 14, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
   title: { fontSize: 20, fontWeight: '800', color: C.text, letterSpacing: -0.3 },
   subtitle: { fontSize: 12, color: C.textMuted, marginTop: 2 },
-  addBtnFull: { backgroundColor: '#111827', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, height: 38, borderRadius: 10, elevation: 2 },
+  addBtnFull: { backgroundColor: '#B3122A', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, height: 38, borderRadius: 10, elevation: 2 },
   addBtnTextFull: { color: '#fff', fontSize: 12, fontWeight: '800', marginLeft: 6 },
 
   filterSection: { padding: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border, zIndex: 10 },
@@ -434,8 +434,15 @@ const styles = StyleSheet.create({
   // Modals
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.65)', justifyContent: 'center', padding: 16 },
   compactModalContainer: { backgroundColor: C.surface, borderRadius: 20, maxHeight: '90%', elevation: 10, overflow: 'hidden' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: C.surfaceSoft, borderBottomWidth: 1, borderBottomColor: C.border },
-  formTitle: { fontSize: 16, fontWeight: '800', color: C.text },
+formHeader: {
+  backgroundColor: '#B3122A',
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: 20,
+  borderBottomWidth: 1,
+  borderBottomColor: '#B3122A',
+},  formTitle: { fontSize: 16, fontWeight: '800', color: C.text },
   closeBtnIcon: { padding: 6, backgroundColor: C.border, borderRadius: 20 },
   formScroll: { padding: 20 },
 

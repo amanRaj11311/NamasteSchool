@@ -1066,9 +1066,12 @@ const DashboardScreen: React.FC = () => {
           {data.branchWiseSummary.map((b) => (
             <View key={b.schoolId} style={styles.branchCard}>
               <View style={styles.branchTop}>
-                <Text style={styles.itemTitle} numberOfLines={1}>{b.name}</Text>
-                <Text style={styles.tagText}>{b.code}</Text>
-              </View>
+  <Text style={styles.itemTitle} numberOfLines={1} ellipsizeMode="tail">
+    {b.name}
+  </Text>
+  <Text style={styles.tagText}>{b.code}</Text>
+</View>
+
               <Text style={styles.itemSubtitle}>{b.city}</Text>
               <View style={styles.branchStatsRow}>
                 <View style={styles.branchStat}>
@@ -2079,8 +2082,12 @@ const styles = StyleSheet.create({
 
   // --- Admin: branch cards ---
   branchCard: { borderWidth: 1, borderColor: '#F1F2F4', borderRadius: 18, padding: 14, marginBottom: 12 },
-  branchTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  branchStatsRow: { flexDirection: 'row', marginTop: 14 },
+branchTop: { 
+  flexDirection: 'row', 
+  alignItems: 'center', 
+  justifyContent: 'space-between', 
+  gap: 8 
+},  branchStatsRow: { flexDirection: 'row', marginTop: 14 },
   branchStat: { flex: 1, alignItems: 'center' },
   branchStatValue: { fontSize: 16, fontWeight: '800', color: '#111827' },
   branchStatLabel: { fontSize: 10, color: '#9CA3AF', fontWeight: '600', marginTop: 2 },
@@ -2089,8 +2096,13 @@ const styles = StyleSheet.create({
   listItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F5F5F6', gap: 12 },
   listAvatar: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
   listAvatarText: { fontSize: 13, fontWeight: '800', color: '#14161F' },
-  itemTitle: { fontSize: 14, fontWeight: '700', color: '#14161F' },
-  itemSubtitle: { fontSize: 12, color: '#14161F', marginTop: 2 },
+itemTitle: {
+  fontSize: 14,
+  fontWeight: '700',
+  color: '#111827',
+  flexShrink: 1,        // 👉 Prevent overflow
+  maxWidth: '70%',      // 👉 Restrict width inside row
+},  itemSubtitle: { fontSize: 12, color: '#14161F', marginTop: 2 },
   tagText: { fontSize: 11, backgroundColor: '#F3F4F6', color: '#14161F', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, fontWeight: '700', overflow: 'hidden' },
   tagGreen: { backgroundColor: '#DCFCE3', color: '#166534' },
   tagRed: { backgroundColor: '#FEE2E2', color: '#991B1B' },

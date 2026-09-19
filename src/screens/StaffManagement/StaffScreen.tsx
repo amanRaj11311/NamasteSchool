@@ -490,7 +490,7 @@ const StaffScreen: React.FC = () => {
             </View>
             <Text style={styles.selectorTitle}>{selectorConfig.title}</Text>
             <TouchableOpacity onPress={() => setSelectorVisible(false)} style={styles.closeBtn}>
-             <Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>❌</Text>
+             <Text style={{ fontSize: 20, color: COLORS.muted, fontWeight: 'bold' }}>✕</Text>
             </TouchableOpacity>
           </View>
 
@@ -688,22 +688,23 @@ const StaffScreen: React.FC = () => {
         />
       )}
 
-      {/* --- ADD / EDIT STAFF MODAL --- */}
-      <Modal visible={isModalVisible} animationType="slide" transparent statusBarTranslucent onRequestClose={() => setModalVisible(false)}>
+      {/* --- ADD / EDIT STAFF MODAL (MID-SCREEN) --- */}
+      <Modal visible={isModalVisible} animationType="fade" transparent statusBarTranslucent onRequestClose={() => setModalVisible(false)}>
         <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.modalContainer}>
-            <View style={styles.modalGrabber} />
+            
+            {/* UPDATED MODAL HEADER: Red Theme & Simple X */}
             <View style={styles.modalHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.modalTitle}>{editingStaffId ? 'Edit Staff' : 'Add New Staff'}</Text>
                 <Text style={styles.modalSubtitle}>Fill in the details to {editingStaffId ? 'update this' : 'register a new'} staff member</Text>
               </View>
-              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn}>
-              <Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>❌</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtnIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ fontSize: 24, color: '#fff', fontWeight: 'bold' }}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20, paddingBottom: 30 }}>
               <SectionLabel icon="lock" title="Login Details" subtitle="Branch, role & sign-in credentials" />
               <View style={styles.formCard}>
                 <FormField label="Branch" required error={errors.schoolBranch} icon="home">
@@ -922,16 +923,21 @@ const StaffScreen: React.FC = () => {
                 </FormField>
               </View>
 
-              <TouchableOpacity style={styles.submitButton} onPress={handleSaveStaff} activeOpacity={0.9} disabled={saving}>
-                {saving ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <>
-                    <Feather name={editingStaffId ? 'check' : 'plus'} size={18} color="#fff" />
+              {/* ACTION BUTTONS: Side by Side layout */}
+              <View style={styles.formActionRow}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)} activeOpacity={0.9}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.submitBtnHalf} onPress={handleSaveStaff} activeOpacity={0.9} disabled={saving}>
+                  {saving ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
                     <Text style={styles.submitButtonText}>{editingStaffId ? 'Save Changes' : 'Add Staff Member'}</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+              </View>
+
             </ScrollView>
 
             {datePickerField && Platform.OS === 'ios' && (
@@ -978,7 +984,7 @@ const StaffScreen: React.FC = () => {
               </View>
               <Text style={styles.selectorTitle}>Filter by Role</Text>
               <TouchableOpacity onPress={() => setFilterModalVisible(false)} style={styles.closeBtn}>
-               <Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>❌</Text>
+               <Text style={{ fontSize: 20, color: COLORS.muted, fontWeight: 'bold' }}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -1017,7 +1023,7 @@ const StaffScreen: React.FC = () => {
             <View style={styles.viewHeader}>
               <Text style={styles.modalTitle}>Staff Details</Text>
               <TouchableOpacity onPress={() => setViewVisible(false)} style={styles.closeBtn}>
-                <Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>❌</Text>
+                <Text style={{ fontSize: 20, color: COLORS.muted, fontWeight: 'bold' }}>✕</Text>
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -1118,7 +1124,7 @@ const StaffScreen: React.FC = () => {
                 </View>
               </View>
               <TouchableOpacity onPress={() => setTimetableVisible(false)} style={styles.ttCloseBtn}>
-               <Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>❌</Text>
+               <Text style={{ fontSize: 20, color: '#fff', fontWeight: 'bold' }}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -1244,18 +1250,24 @@ const styles = StyleSheet.create({
   iconActionCircle: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   iconActionLabel: { fontSize: 10.5, fontWeight: '700' },
 
-  // Modals
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.55)', justifyContent: 'flex-end' },
+  // MODALS (Mid-Screen Floating)
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.65)', justifyContent: 'center', padding: 16 },
   modalContainer: {
-    backgroundColor: COLORS.bg, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl,
-    paddingHorizontal: SPACE.lg, paddingTop: 10, paddingBottom: 40, maxHeight: '92%',
+    backgroundColor: COLORS.bg, borderRadius: 20, maxHeight: '90%', overflow: 'hidden', elevation: 12
   },
-  modalGrabber: { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.border, alignSelf: 'center', marginBottom: 14 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: SPACE.md },
-  modalTitle: { fontSize: 20, fontWeight: '800', color: COLORS.ink },
-  modalSubtitle: { color: COLORS.muted, fontSize: 12.5, marginTop: 4, fontWeight: '500' },
-  closeBtn: { backgroundColor: COLORS.surface, padding: 8, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border },
-
+  
+  // UPDATED MODAL HEADER (Red Theme)
+  modalHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    backgroundColor: COLORS.primary, 
+    padding: 20 
+  },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  modalSubtitle: { color: '#FCA5A5', fontSize: 12, marginTop: 3, fontWeight: '500' },
+  closeBtnIcon: { backgroundColor: 'rgba(255,255,255,0.2)', width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  
   sectionLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: SPACE.lg, marginBottom: SPACE.sm },
   sectionIconWrap: { width: 30, height: 30, borderRadius: RADIUS.sm, backgroundColor: COLORS.primarySoft, justifyContent: 'center', alignItems: 'center' },
   sectionLabelText: { fontSize: 14.5, fontWeight: '800', color: COLORS.ink },
@@ -1296,11 +1308,12 @@ const styles = StyleSheet.create({
   iosDatePickerTitle: { fontSize: 13.5, fontWeight: '700', color: COLORS.ink },
   iosDatePickerDone: { fontSize: 13.5, fontWeight: '800', color: COLORS.primary },
 
-  submitButton: {
-    flexDirection: 'row', backgroundColor: COLORS.primary, height: 56, borderRadius: RADIUS.md,
-    justifyContent: 'center', alignItems: 'center', marginTop: SPACE.xl, gap: 8, ...shadow(10),
-  },
-  submitButtonText: { color: '#fff', fontSize: 15.5, fontWeight: '700' },
+  // UPDATED SIDE BY SIDE ACTION BUTTONS
+  formActionRow: { flexDirection: 'row', gap: 12, marginTop: 24, marginBottom: 10 },
+  cancelBtn: { flex: 1, height: 52, borderRadius: 14, backgroundColor: COLORS.surface, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.borderStrong },
+  cancelBtnText: { color: COLORS.inkSoft, fontSize: 15, fontWeight: '800' },
+  submitBtnHalf: { flex: 1, backgroundColor: COLORS.primary, height: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center', elevation: 2, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
+  submitButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 
   selectorOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.45)' },
   selectorCard: { width: '90%', maxWidth: 420, backgroundColor: COLORS.surface, borderRadius: RADIUS.lg, padding: SPACE.md, ...shadow(20) },
@@ -1321,6 +1334,7 @@ const styles = StyleSheet.create({
   selectorBulletActive: { backgroundColor: COLORS.primary },
   selectorItemText: { fontSize: 14.5, color: COLORS.ink, fontWeight: '500' },
   selectorItemTextActive: { color: COLORS.primary, fontWeight: '700' },
+  closeBtn: { padding: 4 },
 
   ttOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.55)', justifyContent: 'center', paddingHorizontal: SPACE.md },
   viewContainer: { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: SPACE.lg, width: '100%', maxHeight: '80%', ...shadow(20) },

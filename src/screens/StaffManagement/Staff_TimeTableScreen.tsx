@@ -855,9 +855,10 @@ export default function TimetableScreen({ route }: any) {
           <View style={styles.bottomSheet}>
             <View style={styles.bsHeader}>
               <Text style={styles.bsTitle}>Select Staff Member</Text>
-<TouchableOpacity onPress={() => setStaffSelectorVisible(false)}>
-  <Feather name="x" size={22} color="#4B5563" />
-</TouchableOpacity>            </View>
+              <TouchableOpacity onPress={() => setStaffSelectorVisible(false)}>
+                <Feather name="x" size={22} color="#4B5563" />
+              </TouchableOpacity>
+            </View>
             <FlatList
               data={staffListWithAll}
               keyExtractor={(item) => item._id}
@@ -964,15 +965,14 @@ export default function TimetableScreen({ route }: any) {
         </TouchableOpacity>
       </Modal>
 
-      {/* Add / Edit Period Modal */}
-      <Modal visible={periodModalVisible} transparent animationType="slide">
-        <View style={styles.bottomSheetOverlay}>
-          <View style={[styles.bottomSheet, { maxHeight: '90%' }]}>
-            <View style={styles.bsHeader}>
-              <Text style={styles.bsTitle}>{editingPeriodId ? 'Edit Period Slot' : 'Add Period Slot'}</Text>
-              <TouchableOpacity onPress={() => setPeriodModalVisible(false)}><Feather name="x" size={20} color="#4B5563" /></TouchableOpacity>
+      {/* Add / Edit Period Modal (Centered) */}
+      <Modal visible={periodModalVisible} transparent animationType="fade">
+        <View style={styles.centerOverlay}>
+          <View style={styles.centeredModal}>
+            <View style={styles.formHeader}>
+              <Text style={styles.formHeaderTitle}>{editingPeriodId ? 'EDIT PERIOD SLOT' : 'ADD PERIOD SLOT'}</Text>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalContent}>
               <View style={styles.formGroup}>
                 <Text style={styles.inputLabel}>Day of Week *</Text>
                 <View style={styles.dayChipsRow}>
@@ -1057,9 +1057,15 @@ export default function TimetableScreen({ route }: any) {
                 />
               )}
 
-              <TouchableOpacity style={styles.saveButton} onPress={savePeriod}>
-                <Text style={styles.filledBtnText}>{editingPeriodId ? 'Update & Close' : 'Save & Close'}</Text>
-              </TouchableOpacity>
+              {/* Action Buttons Row */}
+              <View style={styles.modalActionRow}>
+                <TouchableOpacity style={styles.formCloseBtn} onPress={() => setPeriodModalVisible(false)}>
+                  <Text style={styles.formCloseBtnText}>Close</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.formSaveBtn} onPress={savePeriod}>
+                  <Text style={styles.filledBtnText}>{editingPeriodId ? 'Update' : 'Save'}</Text>
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </View>
         </View>
@@ -1175,6 +1181,7 @@ const styles = StyleSheet.create({
   menuItem: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   menuItemText: { fontSize: 14, color: '#374151', fontWeight: '500' },
 
+  // Bottom Sheet (Staff, Classes, Subjects)
   bottomSheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   bottomSheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '80%' },
   bsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingBottom: 16 },
@@ -1183,6 +1190,17 @@ const styles = StyleSheet.create({
   bsItemAll: { backgroundColor: '#FFFBEB', marginHorizontal: -20, paddingHorizontal: 20, borderRadius: 8 },
   bsItemSelected: { backgroundColor: '#FEF2F2', marginHorizontal: -20, paddingHorizontal: 20 },
   bsItemText: { flex: 1, minWidth: 0, fontSize: 14, color: '#374151', fontWeight: '500', marginLeft: 10 },
+
+  // Centered Modal (Add/Edit Period)
+  centerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+  centeredModal: { backgroundColor: '#FFFFFF', borderRadius: 16, width: '100%', maxHeight: '90%', overflow: 'hidden' },
+  formHeader: { backgroundColor: BRAND, paddingHorizontal: 20, paddingVertical: 16 },
+  formHeaderTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.5 },
+  modalContent: { padding: 20 },
+  modalActionRow: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  formCloseBtn: { flex: 1, height: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
+  formCloseBtnText: { color: '#4B5563', fontSize: 13, fontWeight: '700' },
+  formSaveBtn: { flex: 1, height: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: BRAND },
 
   formRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
   formHalf: { flex: 1, minWidth: 0, marginRight: 10 },
@@ -1203,7 +1221,6 @@ const styles = StyleSheet.create({
   timeInputInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
   timeInputText: { fontSize: 14, color: '#111827', fontWeight: '500' },
 
-  saveButton: { width: '100%', height: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: BRAND, marginTop: 4 },
   filledBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 
   busyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },

@@ -259,7 +259,7 @@ export default function ClassLevelsScreen() {
                 <Text style={styles.formTitle}>{editingId ? 'Edit Class Level' : 'Add Class Level'}</Text>
               </View>
               <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}>
-                <Feather name="x" size={18} color="#fff" />
+                <Text style={{ fontSize: 20, color: '#FFFFFF' }}>✖</Text>
               </TouchableOpacity>
             </View>
             

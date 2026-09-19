@@ -11,7 +11,7 @@ import {API_BASE} from '../../network/api';
 const C = {
   bg: '#F4F7F9', surface: '#FFFFFF', surfaceSoft: '#F9FAFB', border: '#ECEFF3',
   text: '#111827', textMuted: '#6B7280', textFaint: '#9CA3AF',
-  primary: '#ef4444', primarySoft: '#FEF2F2',
+  primary: '#B3122A', primarySoft: '#FEF2F2', // Updated to match project red
   blue: '#0EA5E9', blueSoft: '#E0F2FE',
   green: '#10B981', greenSoft: '#D1FAE5',
   amber: '#F59E0B', amberSoft: '#FEF3C7',
@@ -113,7 +113,7 @@ export default function AdvancesScreen() {
     const isOpen = activeDropdown === fieldKey;
     const selectedObj = options.find(o => o.value === value);
     return (
-      <View style={[styles.inputWrapper, { zIndex: isOpen ? 50 : 1 }]}>
+      <View style={[styles.inputWrapper, { zIndex: isOpen ? 50 : 1, marginBottom: 0 }]}>
         <Text style={styles.inputLabel}>{label}</Text>
         <TouchableOpacity style={[styles.dropdownHeader, isOpen && styles.dropdownHeaderActive]} onPress={() => setActiveDropdown(isOpen ? null : fieldKey)} activeOpacity={0.85}>
           <Text style={selectedObj ? styles.dropdownSelectedText : styles.dropdownPlaceholder} numberOfLines={1}>{selectedObj?.label || 'Select...'}</Text>
@@ -144,13 +144,15 @@ export default function AdvancesScreen() {
         </View>
       </View>
 
+      {/* FILTER ROW FIXED: Side by Side layout */}
       <View style={styles.filterSection}>
         <View style={{ flex: 1, zIndex: 10 }}>
           {renderInlineDropdown('statusFilter', 'FILTER BY STATUS', [{label: 'All Status', value: ''}, {label: 'Pending', value: 'Pending'}, {label: 'Approved', value: 'Approved'}, {label: 'Rejected', value: 'Rejected'}, {label: 'Recovered', value: 'Recovered'}], statusFilter, (v) => { setStatusFilter(v); fetchAdvances(authToken, v); })}
         </View>
         {hasPermission('create') && (
           <TouchableOpacity style={styles.addBtnFull} onPress={() => { setForm(getEmptyForm()); setShowForm(true); }}>
-            <Feather name="plus" size={14} color="#fff" /><Text style={styles.addBtnTextFull}>New Request</Text>
+            <Feather name="plus" size={14} color="#fff" />
+            <Text style={styles.addBtnTextFull}>Request</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -204,13 +206,21 @@ export default function AdvancesScreen() {
       <Modal visible={showForm} animationType="fade" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.compactModalContainer}>
+            
+            {/* UPDATED MODAL HEADER: Project Color & X Icon */}
             <View style={styles.formHeader}>
-              <Text style={styles.formTitle}>New Advance Request</Text>
-              <TouchableOpacity onPress={() => setShowForm(false)} style={styles.closeBtnIcon}><Feather name="x" size={20} color={C.textMuted} /></TouchableOpacity>
+              <View>
+                <Text style={styles.formTitle}>New Advance Request</Text>
+                <Text style={styles.formSubtitle}>Apply for staff salary advance</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowForm(false)} style={styles.closeBtnIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
             </View>
+
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
               
-              <View style={{ zIndex: 40, marginBottom: 4 }}>
+              <View style={{ zIndex: 40, marginBottom: 16 }}>
                 {renderInlineDropdown('staffId', 'Staff Member *', staffList.map(s => ({label: `${s.name} (${s.staffId || ''})`, value: s._id})), form.staff, (v) => setForm({...form, staff: v}))}
               </View>
 
@@ -230,9 +240,17 @@ export default function AdvancesScreen() {
                 <TextInput style={[styles.input, { height: 80, textAlignVertical: 'top' }]} multiline placeholder="Medical, travel, etc." value={form.reason} onChangeText={t => setForm({...form, reason: t})} />
               </View>
 
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleSubmit} disabled={saving}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>Submit Request</Text>}
-              </TouchableOpacity>
+              {/* ACTION BUTTONS (CANCEL AND SUBMIT IN SAME ROW) */}
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowForm(false)} activeOpacity={0.9}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.saveBtnFull, { flex: 1, marginTop: 0 }, saving && { opacity: 0.7 }]} onPress={handleSubmit} disabled={saving} activeOpacity={0.9}>
+                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>Submit</Text>}
+                </TouchableOpacity>
+              </View>
+
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -245,14 +263,15 @@ export default function AdvancesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { padding: 40, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 20, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 20, paddingTop: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
   headerIconBadge: { width: 44, height: 44, borderRadius: 14, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
   title: { fontSize: 20, fontWeight: '800', color: C.text },
   subtitle: { fontSize: 12, color: C.textMuted, marginTop: 2 },
   
-  filterSection: { padding: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border, zIndex: 10 },
-  addBtnFull: { backgroundColor: '#111827', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 14, borderRadius: 12, marginTop: -6, elevation: 2 },
-  addBtnTextFull: { color: '#fff', fontSize: 14, fontWeight: '800', marginLeft: 8 },
+  // UPDATED FILTER SECTION FOR SAME ROW LAYOUT
+  filterSection: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, padding: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border, zIndex: 10 },
+  addBtnFull: { flex: 0.45, backgroundColor: '#B3122A', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', height: 46, borderRadius: 10, elevation: 2 },
+  addBtnTextFull: { color: '#fff', fontSize: 13, fontWeight: '800', marginLeft: 6 },
 
   listContent: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 16 },
   emptyState: { alignItems: 'center', padding: 36, marginTop: 20, backgroundColor: C.surface, borderRadius: 18, borderWidth: 1.5, borderColor: C.border, borderStyle: 'dashed' },
@@ -279,12 +298,15 @@ const styles = StyleSheet.create({
   actionBtnApprove: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: C.green, paddingVertical: 10, borderRadius: 8 },
   actionBtnTextApprove: { color: '#fff', fontSize: 13, fontWeight: '800', marginLeft: 6 },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'center', padding: 16 },
-  compactModalContainer: { backgroundColor: C.surface, borderRadius: 20, maxHeight: '90%', elevation: 10, overflow: 'hidden' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: C.surfaceSoft, borderBottomWidth: 1, borderBottomColor: C.border },
-  formTitle: { fontSize: 16, fontWeight: '800', color: C.text },
-  closeBtnIcon: { padding: 6, backgroundColor: C.border, borderRadius: 20 },
-  formScroll: { padding: 20 },
+  // UPDATED MODAL STYLES
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.65)', justifyContent: 'center', padding: 16 },
+  compactModalContainer: { backgroundColor: C.surface, borderRadius: 20, maxHeight: '90%', elevation: 12, overflow: 'hidden' },
+  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: C.primary },
+  formTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  formSubtitle: { fontSize: 12, color: '#FCA5A5', marginTop: 3 },
+  closeBtnIcon: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center' },
+  
+  formScroll: { padding: 20, paddingBottom: 40 },
 
   inputWrapper: { marginBottom: 16 },
   inputLabel: { fontSize: 11, fontWeight: '800', color: C.textMuted, marginBottom: 6, marginLeft: 2, letterSpacing: 0.5 },
@@ -295,11 +317,14 @@ const styles = StyleSheet.create({
   dropdownHeaderActive: { borderColor: C.primary },
   dropdownSelectedText: { fontSize: 13, color: C.text, fontWeight: '600' },
   dropdownPlaceholder: { fontSize: 13, color: C.textFaint },
-  dropdownListContainer: { position: 'absolute', top: 68, left: 0, right: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, elevation: 6, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8 },
+  dropdownListContainer: { position: 'absolute', top: 68, left: 0, right: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 10, elevation: 6, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10 },
   dropdownItem: { padding: 13, borderBottomWidth: 1, borderBottomColor: C.border },
   dropdownItemText: { fontSize: 13, color: C.text, fontWeight: '500' },
   textBrand: { color: C.primary, fontWeight: '700' },
 
-  saveBtnFull: { backgroundColor: C.primary, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2 },
+  // UPDATED BUTTON STYLES FOR SIDE BY SIDE LAYOUT
+  saveBtnFull: { backgroundColor: C.primary, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', elevation: 2 },
   saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  cancelBtn: { flex: 1, height: 50, borderRadius: 12, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  cancelBtnText: { color: C.textMuted, fontSize: 15, fontWeight: '800' },
 });

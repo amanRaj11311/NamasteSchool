@@ -242,7 +242,7 @@ export default function GalleryEventsScreen() {
           <View style={styles.compactModalContainer}>
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>{editingId ? 'Edit Event' : 'Create School Event'}</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)} style={styles.closeBtnIcon}><Feather name="x" size={20} color={C.textMuted} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowModal(false)} style={styles.closeBtnIcon}><Text style={{ fontSize: 22, color: '#c97979', fontWeight: '600' }}>✕</Text></TouchableOpacity>
             </View>
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
               
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
   // Event Form Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'center', padding: 16 },
   compactModalContainer: { backgroundColor: C.surface, borderRadius: 20, maxHeight: '90%', elevation: 10, overflow: 'hidden' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: C.surfaceSoft, borderBottomWidth: 1, borderBottomColor: C.border },
+  formHeader: { flexDirection: 'row',backgroundColor: '#0F172A', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: C.surfaceSoft, borderBottomWidth: 1, borderBottomColor: C.border },
   formTitle: { fontSize: 16, fontWeight: '800', color: C.text },
   closeBtnIcon: { padding: 6, backgroundColor: C.border, borderRadius: 20 },
   formScroll: { padding: 20 },

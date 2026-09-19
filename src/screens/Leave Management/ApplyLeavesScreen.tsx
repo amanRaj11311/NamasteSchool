@@ -97,6 +97,7 @@ export default function ApplyLeaveScreen() {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false); // FIXED: Added missing saving state
 
   // Form State
   const [isFormVisible, setFormVisible] = useState(false);
@@ -178,14 +179,12 @@ export default function ApplyLeaveScreen() {
   const closeDatePicker = () => setDatePickerFor(null);
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
-    // Android fires 'dismissed' on cancel and closes itself automatically
     if (Platform.OS === 'android') {
       setDatePickerFor(null);
       if (event.type === 'dismissed' || !selectedDate) return;
       applyPickedDate(selectedDate);
       return;
     }
-    // iOS inline spinner keeps firing while scrolling — just track the value
     if (selectedDate) setTempPickerDate(selectedDate);
   };
 
@@ -193,7 +192,6 @@ export default function ApplyLeaveScreen() {
     const iso = toISODate(date);
     if (datePickerFor === 'from') {
       setFormData(prev => {
-        // keep To Date valid: if it's before the new From Date, push it forward
         const needsBump = !prev.toDate || new Date(prev.toDate) < date;
         return {
           ...prev,
@@ -220,6 +218,7 @@ export default function ApplyLeaveScreen() {
       Alert.alert('Invalid dates', 'To Date cannot be earlier than From Date.');
       return;
     }
+    setSaving(true);
     try {
       const payload = new FormData();
       payload.append('schoolId', formData.schoolId);
@@ -238,6 +237,8 @@ export default function ApplyLeaveScreen() {
       fetchData(authToken, true);
     } catch (e: any) {
       Alert.alert('Error', e.response?.data?.message || 'Failed to apply.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -286,7 +287,6 @@ export default function ApplyLeaveScreen() {
   };
 
   const filteredLeaves = leaves.filter(l => (activeTab === 'MyLeaves' ? l.staff?._id === userId : l.staff?._id !== userId));
-
   const pendingCount = filteredLeaves.filter(l => l.status === 'Pending').length;
   const approvedCount = filteredLeaves.filter(l => l.status === 'Approved').length;
 
@@ -541,15 +541,17 @@ export default function ApplyLeaveScreen() {
           <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={() => setFormVisible(false)} />
           <View style={styles.sheetContainer}>
             
+            {/* UPDATED FORM HEADER */}
             <View style={styles.formHeader}>
               <View>
                 <Text style={styles.formTitle}>Apply Leave</Text>
                 <Text style={styles.formSubtitle}>Fill in the details below</Text>
               </View>
-              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}>
-                <Feather name="x" size={18} color={COLORS.textMuted} />
+              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>✕</Text>
               </TouchableOpacity>
             </View>
+
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {renderInlineDropdown(
                 'schoolId',
@@ -621,13 +623,22 @@ export default function ApplyLeaveScreen() {
                 )}
               </TouchableOpacity>
 
-              <TouchableOpacity
-  style={styles.saveBtnFull}
-  onPress={handleApplyLeave}
-  activeOpacity={0.9}
->
-  <Text style={styles.saveBtnFullText}>Submit Application</Text>
-</TouchableOpacity>
+              {/* ACTION BUTTONS: Side by Side layout */}
+              <View style={styles.formActionRow}>
+                <TouchableOpacity style={styles.formCancelBtn} onPress={() => setFormVisible(false)} activeOpacity={0.9}>
+                  <Text style={styles.formCancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.formSubmitBtn, saving && { opacity: 0.7 }]}
+                  onPress={handleApplyLeave}
+                  activeOpacity={0.9}
+                  disabled={saving}
+                >
+                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>Submit</Text>}
+                </TouchableOpacity>
+              </View>
+
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -641,7 +652,7 @@ export default function ApplyLeaveScreen() {
               <Feather name={decision === 'approve' ? 'check' : 'x'} size={18} color={decision === 'approve' ? COLORS.success : COLORS.danger} />
             </View>
             <Text style={styles.formTitle}>{decision === 'approve' ? 'Approve Leave' : 'Reject Leave'}</Text>
-            <Text style={[styles.formSubtitle, { marginBottom: 16 }]}>Add an optional remark for this decision</Text>
+            <Text style={[styles.formSubtitle, { marginBottom: 16, color: COLORS.textMuted }]}>Add an optional remark for this decision</Text>
             <TextInput
               style={[styles.input, { height: 90, textAlignVertical: 'top', paddingTop: 12 }]}
               placeholder="Add optional remarks..."
@@ -682,9 +693,12 @@ export default function ApplyLeaveScreen() {
           <View style={styles.modalOverlay}>
             <View style={styles.compactModalContainer}>
               <View style={styles.formHeader}>
-                <Text style={styles.formTitle}>{datePickerFor === 'from' ? 'Select From Date' : 'Select To Date'}</Text>
-                <TouchableOpacity onPress={closeDatePicker} style={styles.closeBtnIcon}>
-                  <Feather name="x" size={18} color={COLORS.textMuted} />
+                <View>
+                  <Text style={styles.formTitle}>{datePickerFor === 'from' ? 'Select From Date' : 'Select To Date'}</Text>
+                  <Text style={styles.formSubtitle}>Pick a date</Text>
+                </View>
+                <TouchableOpacity onPress={closeDatePicker} style={styles.closeBtnIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>✕</Text>
                 </TouchableOpacity>
               </View>
               <DateTimePicker
@@ -696,9 +710,14 @@ export default function ApplyLeaveScreen() {
                 style={{ alignSelf: 'stretch' }}
               />
               <View style={{ padding: 20, paddingTop: 4 }}>
-                <TouchableOpacity style={styles.saveBtnFull} onPress={confirmIOSDate} activeOpacity={0.9}>
-                  <Text style={styles.saveBtnFullText}>Confirm Date</Text>
-                </TouchableOpacity>
+                <View style={styles.formActionRow}>
+                  <TouchableOpacity style={styles.formCancelBtn} onPress={closeDatePicker} activeOpacity={0.9}>
+                    <Text style={styles.formCancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.formSubmitBtn} onPress={confirmIOSDate} activeOpacity={0.9}>
+                    <Text style={styles.saveBtnFullText}>Confirm</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           </View>
@@ -808,43 +827,61 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 15, fontWeight: '800', color: COLORS.text },
   emptySub: { fontSize: 12.5, color: COLORS.textFaint, marginTop: 4, textAlign: 'center' },
 
-  // Centered modal (approve/reject + iOS date picker)
   modalOverlay: { flex: 1, backgroundColor: 'rgba(17,24,39,0.55)', justifyContent: 'center', padding: 18 },
   compactModalContainer: { backgroundColor: COLORS.surface, borderRadius: 24, maxHeight: '90%', overflow: 'hidden' },
 
-  // Bottom sheet (Apply Leave form)
-sheetOverlay: {
-  flex: 1,
-  justifyContent: 'center',
-  alignItems: 'center',
-  paddingHorizontal: 18,
-  paddingVertical: 24,
-},
+  sheetOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 24,
+  },
   sheetBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(17,24,39,0.55)' },
-sheetContainer: {
-  backgroundColor: COLORS.surface,
-  borderRadius: 24,
-  width: '100%',
-  maxHeight: '88%',
-  overflow: 'hidden',
-  elevation: 10,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 8 },
-  shadowOpacity: 0.15,
-  shadowRadius: 20,
-},  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.borderStrong, alignSelf: 'center', marginBottom: 8 },
+  sheetContainer: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 24,
+    width: '100%',
+    maxHeight: '88%',
+    overflow: 'hidden',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+  },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: COLORS.borderStrong, alignSelf: 'center', marginBottom: 8 },
 
-formHeader: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  paddingHorizontal: 22,
-  paddingTop: 16,
-  paddingBottom: 12,
-},  formTitle: { fontSize: 19, fontWeight: '800', color: COLORS.text },
-  formSubtitle: { fontSize: 12.5, color: COLORS.textMuted, marginTop: 3 },
-  closeBtnIcon: { padding: 8, backgroundColor: COLORS.neutralSoft, borderRadius: 20 },
-  formScroll: { paddingHorizontal: 22, paddingBottom: 20 },
+  // UPDATED FORM HEADER (Red Theme)
+  formHeader: {
+    backgroundColor: COLORS.accent,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 22,
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  formTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  formSubtitle: {
+    fontSize: 12.5,
+    color: '#FCA5A5',
+    marginTop: 3,
+  },
+  closeBtnIcon: {
+    padding: 8,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 20,
+  },
+
+  formScroll: {
+    paddingHorizontal: 22,
+    paddingBottom: 20,
+  },
 
   inputWrapper: { marginBottom: 16 },
   inputLabel: { fontSize: 12, fontWeight: '700', color: COLORS.neutralText, marginBottom: 7, marginLeft: 1 },
@@ -945,17 +982,10 @@ formHeader: {
   uploadIconCircle: { width: 30, height: 30, borderRadius: 9, backgroundColor: COLORS.accentSoft, justifyContent: 'center', alignItems: 'center' },
   uploadText: { fontSize: 13, color: COLORS.textMuted, flex: 1, fontWeight: '500' },
 
-  saveBtnFull: {
-    backgroundColor: COLORS.accent,
-    height: 52,
-    borderRadius: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: COLORS.accent,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    elevation: 5,
-  },
+  // UPDATED: SIDE-BY-SIDE BUTTONS
+  formActionRow: { flexDirection: 'row', gap: 12, marginTop: 10, marginBottom: 10 },
+  formCancelBtn: { flex: 1, height: 52, borderRadius: 15, backgroundColor: COLORS.surface, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.borderStrong },
+  formCancelBtnText: { color: COLORS.textMuted, fontSize: 15, fontWeight: '800' },
+  formSubmitBtn: { flex: 1, backgroundColor: COLORS.accent, height: 52, borderRadius: 15, justifyContent: 'center', alignItems: 'center', shadowColor: COLORS.accent, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
   saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

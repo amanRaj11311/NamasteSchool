@@ -364,25 +364,25 @@ export default function RolesScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header with Title, Subtitle, and Add Button */}
       <View style={styles.header}>
-        <View style={styles.headerTextContainer}>
+        <View style={{ flex: 1 }}>
           <Text style={styles.title}>Roles</Text>
           <Text style={styles.subtitle} numberOfLines={1}>{totalRoles} Roles | {totalAssignedPerms} total permissions</Text>
         </View>
         {hasPermission('create') && (
-          <TouchableOpacity style={styles.headerAddBtn} onPress={openAddForm} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.headerAddBtn} onPress={openAddForm} activeOpacity={0.9}>
             <Feather name="plus" size={16} color="#fff" />
-            <Text style={styles.headerAddBtnText}>Create Role</Text>
+            <Text style={styles.headerAddBtnText}>Create</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Scrollable KPI Grid */}
       <View style={styles.kpiWrapper}>
         <ScrollView 
           horizontal 
-          showsHorizontalScrollIndicator={false} 
+          showsHorizontalScrollIndicator={true} // ENABLES VISIBLE SLIDEBAR
+          persistentScrollbar={true} // KEEPS IT VISIBLE ON ANDROID
+          indicatorStyle="black" // ENSURES GOOD CONTRAST ON IOS
           contentContainerStyle={styles.kpiScrollContent}
         >
           <View style={styles.kpiCard}>
@@ -416,7 +416,6 @@ export default function RolesScreen() {
         </ScrollView>
       </View>
 
-      {/* Search Bar */}
       <View style={styles.actionBar}>
         <View style={styles.searchContainer}>
           <Feather name="search" size={16} color={C.textFaint} />
@@ -456,17 +455,25 @@ export default function RolesScreen() {
         />
       )}
 
-      {/* --- ADD/EDIT FORM MODAL --- */}
-      <Modal visible={isFormVisible} animationType="slide">
-        <SafeAreaView style={styles.formContainer}>
-          <View style={styles.formHeader}>
-            <Text style={styles.formTitle}>{editingId ? 'Edit Role' : 'Create Role'}</Text>
-            <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}>
-              <Feather name="x" size={22} color={C.textMuted} />
-            </TouchableOpacity>
-          </View>
+      {/* --- ADD/EDIT FORM MODAL (COMPACT / FLOATING OVERLAY) --- */}
+      <Modal visible={isFormVisible} animationType="fade" transparent={true}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <View style={styles.compactModalContainer}>
+            
+            <View style={styles.formHeader}>
+              <View>
+                <Text style={styles.formTitle}>{editingId ? 'Edit Role' : 'Create Role'}</Text>
+                <Text style={styles.formSubtitle}>{editingId ? 'Modify role and permissions' : 'Set up a new role configuration'}</Text>
+              </View>
+              <TouchableOpacity 
+                onPress={() => setFormVisible(false)} 
+                style={styles.closeBtnIcon} 
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
+            </View>
 
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex: 1}}>
             <ScrollView contentContainerStyle={styles.formScroll} keyboardShouldPersistTaps="handled">
               
               <View style={styles.formCard}>
@@ -547,11 +554,11 @@ export default function RolesScreen() {
               </View>
 
               <TouchableOpacity style={styles.saveBtnFull} onPress={handleSave}>
-                <Text style={styles.saveBtnFullText}>{editingId ? 'Update Role & Permissions' : 'Create Role'}</Text>
+                <Text style={styles.saveBtnFullText}>{editingId ? 'Update Role' : 'Create Role'}</Text>
               </TouchableOpacity>
             </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
     </SafeAreaView>
@@ -621,40 +628,37 @@ const styles = StyleSheet.create({
     backgroundColor: C.bg,
   },
 
-  // Header with Add Button
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 10,
+    padding: 20, 
+    paddingTop: 16, 
     backgroundColor: C.surface,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
   },
-  headerTextContainer: { flex: 1, paddingRight: 10 },
-  title: { fontSize: 22, fontWeight: '800', color: C.text, letterSpacing: -0.3 },
-  subtitle: { fontSize: 12, color: C.textMuted, marginTop: 2, fontWeight: '500' },
+  title: { fontSize: 24, fontWeight: '800', color: C.text, letterSpacing: -0.3 },
+  subtitle: { fontSize: 13, color: C.textMuted, marginTop: 4 },
   headerAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: C.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 10,
-    gap: 4,
     shadowColor: C.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
     elevation: 3,
   },
-  headerAddBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  headerAddBtnText: { color: '#fff', fontSize: 13, fontWeight: '800', marginLeft: 6 },
 
   // Scrollable KPI Grid
   kpiWrapper: { backgroundColor: C.bg, paddingVertical: 12 },
-  kpiScrollContent: { paddingHorizontal: 16, gap: 10 },
+  // paddingBottom increased here to give visual breathing room for the slidebar
+  kpiScrollContent: { paddingHorizontal: 16, gap: 10, paddingBottom: 16 }, 
   kpiCard: {
     width: 135,
     backgroundColor: C.surface,
@@ -893,28 +897,41 @@ const styles = StyleSheet.create({
     borderColor: C.border,
   },
 
-  // Modal
-  formContainer: { flex: 1, backgroundColor: C.bg },
+  // NEW STYLES: FLOATING MODAL OVERLAY
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,17,20,0.65)',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: Platform.OS === 'ios' ? 40 : 20,
+  },
+  compactModalContainer: {
+    backgroundColor: C.bg,
+    borderRadius: 22,
+    maxHeight: '92%',
+    overflow: 'hidden', // Keeps the inner elements (header) constrained to border radius
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  
   formHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    backgroundColor: C.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    ...SHADOW_SM,
+    padding: 20,
+    backgroundColor: C.primary,
   },
-  formTitle: { fontSize: 20, fontWeight: '800', color: C.text },
+  formTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  formSubtitle: { fontSize: 12, color: '#FCA5A5', marginTop: 3 },
   closeBtnIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: C.surfaceSunken,
+    width: 32,
+    height: 32,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  
   formScroll: { padding: 16, paddingBottom: 40 },
   formCard: {
     backgroundColor: C.surface,

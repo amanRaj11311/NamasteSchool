@@ -8,6 +8,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 import { API_BASE } from '../../network/api';
+
 const C = {
   bg: '#F3F5F9',
   surface: '#FFFFFF',
@@ -212,8 +213,6 @@ export default function FeesScreen() {
 
   // --- Render Helpers ---
 
-  // Dropdown: shows every option at once. Only becomes scrollable once the
-  // list is longer than MAX_VISIBLE_ITEMS — short lists never scroll.
   const MAX_VISIBLE_ITEMS = 6;
   const ITEM_HEIGHT = 46;
 
@@ -356,7 +355,8 @@ export default function FeesScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerIconBadge}>
-          <Feather name="credit-card" size={20} color={C.primary} />
+          {/* Fixed Icon: Replaced with grid */}
+          <Feather name="grid" size={20} color={C.primary} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Collect & Assign Fees</Text>
@@ -444,7 +444,8 @@ export default function FeesScreen() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <View style={styles.emptyIconWrap}>
-                <Feather name="file-text" size={30} color={C.textFaint} />
+                {/* Fixed Icon: Replaced with grid */}
+                <Feather name="grid" size={30} color={C.textFaint} />
               </View>
               <Text style={styles.emptyTitle}>No Records Found</Text>
               <Text style={styles.emptySubtitle}>
@@ -460,18 +461,18 @@ export default function FeesScreen() {
       <Modal visible={showAssign} animationType="fade" transparent statusBarTranslucent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.compactModalContainer}>
+            
+            {/* UPDATED MODAL HEADER: Project Color & Native X Icon */}
             <View style={styles.formHeader}>
-              <View style={styles.formHeaderIconBadge}>
-                <Feather name="file-plus" size={16} color={C.primary} />
-              </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.formTitle}>Assign Fee Structure</Text>
-                <Text style={styles.formHint}>Attach a fee structure to a student or an entire class</Text>
+                <Text style={styles.formHint}>Attach a fee structure to a student or class</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowAssign(false)} style={styles.closeBtnIcon}>
-                <Feather name="x" size={18} color={C.textMuted} />
+              <TouchableOpacity onPress={() => setShowAssign(false)} style={styles.closeBtnIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>✕</Text>
               </TouchableOpacity>
             </View>
+
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
 
               <View style={styles.segmentControl}>
@@ -513,9 +514,17 @@ export default function FeesScreen() {
                 </View>
               )}
 
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleAssign} disabled={saving} activeOpacity={0.9}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>Confirm Assignment</Text>}
-              </TouchableOpacity>
+              {/* ACTION BUTTONS (CANCEL AND CONFIRM IN SAME ROW) */}
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowAssign(false)} activeOpacity={0.9}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.saveBtnFull, { flex: 1, marginTop: 0 }, saving && { opacity: 0.7 }]} onPress={handleAssign} disabled={saving} activeOpacity={0.9}>
+                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>Confirm</Text>}
+                </TouchableOpacity>
+              </View>
+
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -525,18 +534,17 @@ export default function FeesScreen() {
       <Modal visible={!!collectTarget} animationType="fade" transparent statusBarTranslucent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.compactModalContainer}>
+            
+            {/* UPDATED MODAL HEADER: Project Color & Native X Icon */}
             <View style={styles.formHeader}>
-              <View style={[styles.formHeaderIconBadge, { backgroundColor: C.greenSoft }]}>
-                <Feather name="dollar-sign" size={16} color={C.greenDark} />
-              </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.formTitle}>Collect Payment</Text>
                 <Text style={styles.formHint} numberOfLines={1}>
                   {collectTarget?.student?.name} • Adm: {collectTarget?.student?.admissionNo || '-'}
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setCollectTarget(null)} style={styles.closeBtnIcon}>
-                <Feather name="x" size={18} color={C.textMuted} />
+              <TouchableOpacity onPress={() => setCollectTarget(null)} style={styles.closeBtnIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -585,9 +593,17 @@ export default function FeesScreen() {
                 <TextInput style={[styles.input, { height: 70, textAlignVertical: 'top' }]} multiline placeholder="Notes..." placeholderTextColor={C.textFaint} value={collectForm.remarks} onChangeText={t => setCollectForm({ ...collectForm, remarks: t })} />
               </View>
 
-              <TouchableOpacity style={styles.saveBtnFullGreen} onPress={handleCollect} disabled={saving} activeOpacity={0.9}>
-                {saving ? <ActivityIndicator color="#fff" /> : <><Feather name="check" size={18} color="#fff" style={{ marginRight: 8 }} /><Text style={styles.saveBtnFullText}>Record Payment</Text></>}
-              </TouchableOpacity>
+              {/* ACTION BUTTONS (CANCEL AND RECORD IN SAME ROW) */}
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setCollectTarget(null)} activeOpacity={0.9}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.saveBtnFullGreen, { flex: 1, marginTop: 0 }, saving && { opacity: 0.7 }]} onPress={handleCollect} disabled={saving} activeOpacity={0.9}>
+                  {saving ? <ActivityIndicator color="#fff" /> : <><Feather name="check" size={18} color="#fff" style={{ marginRight: 8 }} /><Text style={styles.saveBtnFullText}>Record</Text></>}
+                </TouchableOpacity>
+              </View>
+
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -686,11 +702,11 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface, borderRadius: 26, maxHeight: '90%', overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 24, shadowOffset: { width: 0, height: 12 }, elevation: 12,
   },
-  formHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 20, backgroundColor: C.surfaceSoft, borderBottomWidth: 1, borderBottomColor: C.border },
-  formHeaderIconBadge: { width: 38, height: 38, borderRadius: 11, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
-  formTitle: { fontSize: 16.5, fontWeight: '800', color: C.ink },
-  formHint: { fontSize: 11.5, color: C.textMuted, marginTop: 2, fontWeight: '600' },
-  closeBtnIcon: { padding: 8, backgroundColor: C.surfaceSunken, borderRadius: 20 },
+  // UPDATED MODAL HEADER
+  formHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 20, backgroundColor: C.primary, borderBottomWidth: 1, borderBottomColor: C.border },
+  formTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  formHint: { fontSize: 12, color: '#FCA5A5', marginTop: 3 },
+  closeBtnIcon: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center' },
   formScroll: { padding: 20 },
 
   segmentControl: { flexDirection: 'row', backgroundColor: C.surfaceSunken, padding: 4, borderRadius: 13, borderWidth: 1, borderColor: C.border, marginBottom: 20 },
@@ -711,7 +727,6 @@ const styles = StyleSheet.create({
   datePickerBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 13, paddingHorizontal: 14, height: 48, backgroundColor: C.surfaceSoft },
   datePickerText: { fontSize: 14, color: C.text, fontWeight: '600' },
 
-  // Dropdown — every option is visible without scrolling up to MAX_VISIBLE_ITEMS
   dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 13, paddingHorizontal: 14, paddingRight: 8, height: 48, backgroundColor: C.surfaceSoft },
   dropdownHeaderActive: { borderColor: C.primary, backgroundColor: C.surface },
   dropdownSelectedText: { fontSize: 14, color: C.text, fontWeight: '600', flex: 1 },
@@ -730,7 +745,10 @@ const styles = StyleSheet.create({
   dropdownEmptyText: { fontSize: 12.5, color: C.textFaint, fontWeight: '600' },
   textBrand: { color: C.primary, fontWeight: '800' },
 
-  saveBtnFull: { backgroundColor: C.primary, height: 52, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginTop: 10, shadowColor: C.primary, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
-  saveBtnFullGreen: { backgroundColor: C.green, flexDirection: 'row', height: 53, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginTop: 10, shadowColor: C.green, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
+  // BUTTON STYLES FOR SIDE BY SIDE LAYOUT
+  saveBtnFull: { backgroundColor: C.primary, height: 52, borderRadius: 15, justifyContent: 'center', alignItems: 'center', shadowColor: C.primary, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
+  saveBtnFullGreen: { backgroundColor: C.green, flexDirection: 'row', height: 52, borderRadius: 15, justifyContent: 'center', alignItems: 'center', shadowColor: C.green, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 },
   saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  cancelBtn: { flex: 1, height: 52, borderRadius: 15, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  cancelBtnText: { color: C.textMuted, fontSize: 15, fontWeight: '800' },
 });

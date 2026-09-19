@@ -456,11 +456,13 @@ export default function AcademicSessionsScreen() {
         )}
       </View>
 
-      {/* Horizontal Scrollable KPI Grid */}
+      {/* Horizontal Scrollable KPI Grid - WITH SLIDEBAR */}
       <View style={styles.kpiWrapper}>
         <ScrollView 
           horizontal 
-          showsHorizontalScrollIndicator={false} 
+          showsHorizontalScrollIndicator={true} 
+          persistentScrollbar={true}
+          indicatorStyle="black"
           contentContainerStyle={styles.kpiScrollContent}
         >
           <View style={styles.kpiCard}>
@@ -538,10 +540,11 @@ export default function AcademicSessionsScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.compactModalContainer}>
             
+            {/* UPDATED MODAL HEADER: Project Color & X Text */}
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>{editingId ? 'Edit Session' : 'Add Session'}</Text>
-              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}>
-                <Feather name="x" size={20} color="#4B5563" />
+              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -590,9 +593,16 @@ export default function AcademicSessionsScreen() {
                 <TextInput style={styles.input} placeholder="Leave blank if not enforced" keyboardType="numeric" value={formData.minAttendancePercent} onChangeText={t => setFormData({...formData, minAttendancePercent: t})} />
               </View>
 
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleSave} activeOpacity={0.85}>
-                <Text style={styles.saveBtnFullText}>{editingId ? 'Update Session' : 'Create Session'}</Text>
-              </TouchableOpacity>
+              {/* UPDATED ACTION BUTTONS: Side by Side layout */}
+              <View style={styles.formActionRow}>
+                <TouchableOpacity style={styles.formCancelBtn} onPress={() => setFormVisible(false)} activeOpacity={0.9}>
+                  <Text style={styles.formCancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.saveBtnFull, { flex: 1, marginTop: 0 }]} onPress={handleSave} activeOpacity={0.85}>
+                  <Text style={styles.saveBtnFullText}>{editingId ? 'Update Session' : 'Create Session'}</Text>
+                </TouchableOpacity>
+              </View>
 
             </ScrollView>
           </View>
@@ -605,7 +615,10 @@ export default function AcademicSessionsScreen() {
           <View style={styles.viewModalContainer}>
             <View style={styles.viewHeaderRed}>
               <Text style={styles.viewTitle}>Session Specification</Text>
-              <TouchableOpacity onPress={() => setViewVisible(false)}><Feather name="x" size={24} color="#fff" /></TouchableOpacity>
+              {/* UPDATED CLOSE ICON TO SIMPLE X TEXT */}
+              <TouchableOpacity onPress={() => setViewVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
             </View>
 
             <ScrollView style={{padding: 20}}>
@@ -683,9 +696,9 @@ const styles = StyleSheet.create({
   },
   headerAddBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   
-  // Scrollable KPI Grid
+  // Scrollable KPI Grid - Updated for Slidebar visibility
   kpiWrapper: { backgroundColor: '#F4F7F9', paddingVertical: 12 },
-  kpiScrollContent: { paddingHorizontal: 16, gap: 10 },
+  kpiScrollContent: { paddingHorizontal: 16, gap: 10, paddingBottom: 16 },
   kpiCard: { 
     width: 135, 
     backgroundColor: '#fff', 
@@ -762,9 +775,20 @@ const styles = StyleSheet.create({
   // Modal Form (Compact Floating)
   modalOverlay: { flex: 1, backgroundColor: 'rgba(17,24,39,0.6)', justifyContent: 'center', padding: 16 },
   compactModalContainer: { backgroundColor: '#fff', borderRadius: 20, maxHeight: '90%', elevation: 10, overflow: 'hidden' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F0F1F3' },
-  formTitle: { fontSize: 17, fontWeight: '800', color: '#111827' },
-  closeBtnIcon: { padding: 6, backgroundColor: '#F3F4F6', borderRadius: 20 },
+  
+  // UPDATED MODAL HEADER TO RED THEME
+  formHeader: { 
+    backgroundColor: '#B3122A',
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    padding: 20, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#B3122A',
+  },
+  formTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  closeBtnIcon: { padding: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20 },
+  
   formScroll: { padding: 20 },
   
   sectionDividerText: { fontSize: 11, fontWeight: '800', color: '#B3122A', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 12, marginTop: 4 },
@@ -788,7 +812,11 @@ const styles = StyleSheet.create({
   dropdownItemText: { fontSize: 13.5, color: '#374151', fontWeight: '500' },
   dropdownItemTextActive: { color: '#B3122A', fontWeight: '700' },
 
-  saveBtnFull: { backgroundColor: '#B3122A', height: 46, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2, shadowColor: '#B3122A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
+  // UPDATED: SIDE-BY-SIDE BUTTONS
+  formActionRow: { flexDirection: 'row', gap: 12, marginTop: 10, marginBottom: 10 },
+  formCancelBtn: { flex: 1, height: 50, borderRadius: 12, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
+  formCancelBtnText: { color: '#4B5563', fontSize: 15, fontWeight: '800' },
+  saveBtnFull: { flex: 1, backgroundColor: '#B3122A', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: '#B3122A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 },
   saveBtnFullText: { color: '#fff', fontSize: 14.5, fontWeight: '800' },
 
   // View Full Spec Modal

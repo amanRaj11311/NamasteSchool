@@ -135,9 +135,7 @@ export default function MarketplaceCatalogScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={{top:10, bottom:10, left:10, right:10}}>
-          <Feather name="arrow-left" size={22} color={C.text} />
-        </TouchableOpacity>
+        
         <View style={styles.headerIconBadge}><Feather name="shopping-bag" size={20} color={C.primary} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Marketplace</Text>

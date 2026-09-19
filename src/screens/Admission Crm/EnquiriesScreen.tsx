@@ -18,7 +18,7 @@ const C = {
   blue: '#0EA5E9', blueDark: '#0284C7', blueSoft: '#E0F2FE',
   green: '#10B981', greenDark: '#059669', greenSoft: '#D1FAE5',
   amber: '#F59E0B', amberDark: '#D97706', amberSoft: '#FEF3C7',
-  purple: '#A855F7', purpleDark: '#7E22CE', purpleSoft: '#F3E8FF',
+  purple: '#B3122A', purpleDark: '#B3122A', purpleSoft: '#F3E8FF',
   slate: '#64748B', slateDark: '#475569', slateSoft: '#F1F5F9',
 };
 
@@ -212,9 +212,7 @@ export default function EnquiriesScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={{top:10, bottom:10, left:10, right:10}}>
-          <Feather name="arrow-left" size={22} color={C.text} />
-        </TouchableOpacity>
+        
         <View style={styles.headerIconBadge}><Feather name="filter" size={20} color={C.purpleDark} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Admission CRM</Text>

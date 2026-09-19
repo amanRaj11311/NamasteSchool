@@ -198,12 +198,20 @@ export default function ExpensesScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      
+      {/* UPDATED HEADER: Record Expense button moved here. Replaced 'receipt' with 'file-text' for universal compatibility */}
       <View style={styles.header}>
-        <View style={styles.headerIconBadge}><Feather name="receipt" size={20} color={C.primary} /></View>
+        <View style={styles.headerIconBadge}><Feather name="file-text" size={20} color={C.primary} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Expense Management</Text>
           <Text style={styles.subtitle}>Track operating expenses and vendor payments.</Text>
         </View>
+        {hasPermission('create') && (
+          <TouchableOpacity style={styles.headerAddBtn} onPress={() => { setEditingId(null); setForm(emptyForm); setShowModal(true); }}>
+            <Feather name="plus" size={16} color="#fff" />
+            <Text style={styles.headerAddBtnText}>Record</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.filterSection}>
@@ -228,12 +236,6 @@ export default function ExpensesScreen() {
           <Text style={styles.summaryLbl}>Approved Expenses</Text>
           <Text style={styles.summaryVal}>₹{totalExpenseSum.toLocaleString('en-IN')}</Text>
         </View>
-
-        {hasPermission('create') && (
-          <TouchableOpacity style={styles.addBtnFull} onPress={() => { setEditingId(null); setForm(emptyForm); setShowModal(true); }}>
-            <Feather name="plus" size={16} color="#fff" /><Text style={styles.addBtnTextFull}>Record Expense</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {loading ? (
@@ -244,7 +246,7 @@ export default function ExpensesScreen() {
           keyExtractor={item => item._id}
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchExpenses(authToken, filterCategory, filterStatus, getMonthStr(filterMonthDate), true)} colors={[C.primary]} />}
-          ListEmptyComponent={<View style={styles.emptyState}><Feather name="receipt" size={40} color={C.textFaint} /><Text style={styles.emptyTitle}>No Expenses Found</Text></View>}
+          ListEmptyComponent={<View style={styles.emptyState}><Feather name="file-text" size={40} color={C.textFaint} /><Text style={styles.emptyTitle}>No Expenses Found</Text></View>}
           renderItem={({ item }) => {
             const statusStyle = STATUS_STYLE[item.status] || STATUS_STYLE.Pending;
             return (
@@ -291,10 +293,18 @@ export default function ExpensesScreen() {
       <Modal visible={showModal} animationType="fade" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.compactModalContainer}>
+            
+            {/* UPDATED MODAL HEADER: Project Color & X Icon */}
             <View style={styles.formHeader}>
-              <Text style={styles.formTitle}>{editingId ? 'Edit Expense' : 'Record Expense'}</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)} style={styles.closeBtnIcon}><Feather name="x" size={20} color={C.textMuted} /></TouchableOpacity>
+              <View>
+                <Text style={styles.formTitle}>{editingId ? 'Edit Expense' : 'Record Expense'}</Text>
+                <Text style={styles.formSubtitle}>{editingId ? 'Update expense details' : 'Log a new expense'}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowModal(false)} style={styles.closeBtnIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
             </View>
+
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
               
               <View style={{ zIndex: 50, marginBottom: 16 }}>
@@ -346,9 +356,17 @@ export default function ExpensesScreen() {
                 <TextInput style={[styles.input, { height: 70, textAlignVertical: 'top' }]} multiline value={form.notes} onChangeText={t => setForm({...form, notes: t})} />
               </View>
 
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleSave} disabled={saving}>
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>{editingId ? 'Update' : 'Save'} Expense</Text>}
-              </TouchableOpacity>
+              {/* ACTION BUTTONS (CANCEL AND SAVE IN SAME ROW) */}
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowModal(false)} activeOpacity={0.9}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.saveBtnFull, { flex: 1, marginTop: 0 }, saving && { opacity: 0.7 }]} onPress={handleSave} disabled={saving} activeOpacity={0.9}>
+                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>{editingId ? 'Update' : 'Save'} Expense</Text>}
+                </TouchableOpacity>
+              </View>
+
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -361,19 +379,32 @@ export default function ExpensesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   center: { padding: 40, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 20, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
+  
+  // Header styles updated for the Button
+  header: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 20, paddingTop: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border },
   headerIconBadge: { width: 44, height: 44, borderRadius: 14, backgroundColor: C.primarySoft, justifyContent: 'center', alignItems: 'center' },
   title: { fontSize: 20, fontWeight: '800', color: C.text },
   subtitle: { fontSize: 12, color: C.textMuted, marginTop: 2 },
+  headerAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    shadowColor: C.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  headerAddBtnText: { color: '#fff', fontSize: 13, fontWeight: '800', marginLeft: 6 },
   
   filterSection: { padding: 16, backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border, zIndex: 10 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: C.primarySoft, padding: 14, borderRadius: 10, borderWidth: 1, borderColor: '#FECACA', marginTop: 10 },
   summaryLbl: { fontSize: 12, fontWeight: '800', color: C.primaryDark, textTransform: 'uppercase' },
   summaryVal: { fontSize: 18, fontWeight: '800', color: C.primary },
   
-  addBtnFull: { backgroundColor: '#111827', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 14, borderRadius: 12, marginTop: 12, elevation: 2 },
-  addBtnTextFull: { color: '#fff', fontSize: 14, fontWeight: '800', marginLeft: 8 },
-
   listContent: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 16 },
   emptyState: { alignItems: 'center', padding: 36, marginTop: 20, backgroundColor: C.surface, borderRadius: 18, borderWidth: 1.5, borderColor: C.border, borderStyle: 'dashed' },
   emptyTitle: { fontSize: 16, fontWeight: '800', color: C.text, marginTop: 12 },
@@ -398,16 +429,20 @@ const styles = StyleSheet.create({
   iconBtnEdit: { padding: 8, backgroundColor: C.surfaceSoft, borderRadius: 8, borderWidth: 1, borderColor: C.border },
   iconBtnDelete: { padding: 8, backgroundColor: '#FEF2F2', borderRadius: 8, borderWidth: 1, borderColor: '#FECACA' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'center', padding: 16 },
-  compactModalContainer: { backgroundColor: C.surface, borderRadius: 20, maxHeight: '90%', elevation: 10, overflow: 'hidden' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: C.surfaceSoft, borderBottomWidth: 1, borderBottomColor: C.border },
-  formTitle: { fontSize: 16, fontWeight: '800', color: C.text },
-  closeBtnIcon: { padding: 6, backgroundColor: C.border, borderRadius: 20 },
-  formScroll: { padding: 20 },
+  // Updated Modal Styles
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.65)', justifyContent: 'center', padding: 16 },
+  compactModalContainer: { backgroundColor: C.surface, borderRadius: 20, maxHeight: '90%', elevation: 12, overflow: 'hidden' },
+  
+  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: C.primary },
+  formTitle: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  formSubtitle: { fontSize: 12, color: '#FCA5A5', marginTop: 3 },
+  closeBtnIcon: { width: 32, height: 32, justifyContent: 'center', alignItems: 'center' },
+  
+  formScroll: { padding: 20, paddingBottom: 40 },
 
   inputWrapper: { marginBottom: 16 },
   inputLabel: { fontSize: 11, fontWeight: '800', color: C.textMuted, marginBottom: 6, marginLeft: 2, letterSpacing: 0.5 },
-  input: { borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingHorizontal: 12, height: 46, backgroundColor: C.surfaceSoft, fontSize: 14, color: C.text },
+  input: { borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingHorizontal: 14, height: 46, backgroundColor: C.surfaceSoft, fontSize: 14, color: C.text },
   row: { flexDirection: 'row' },
   
   dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingHorizontal: 12, height: 46, backgroundColor: C.surfaceSoft },
@@ -423,6 +458,9 @@ const styles = StyleSheet.create({
   datePickerBtnForm: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 10, paddingHorizontal: 12, height: 46, backgroundColor: C.surface },
   datePickerText: { fontSize: 13, color: C.text, fontWeight: '600' },
 
-  saveBtnFull: { backgroundColor: C.primary, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2 },
+  // Updated Button Styles for side-by-side layout
+  saveBtnFull: { backgroundColor: C.primary, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', elevation: 2 },
   saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  cancelBtn: { flex: 1, height: 50, borderRadius: 12, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border },
+  cancelBtnText: { color: C.textMuted, fontSize: 15, fontWeight: '800' },
 });

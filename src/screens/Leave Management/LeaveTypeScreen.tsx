@@ -59,6 +59,7 @@ export default function LeaveTypesScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState(initialForm);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     initialize();
@@ -145,6 +146,7 @@ export default function LeaveTypesScreen() {
       Alert.alert('Error', 'Fill required fields including School.');
       return;
     }
+    setSaving(true);
     try {
       const payload = { ...formData, maxDays: Number(formData.maxDays) };
       if (editingId) {
@@ -156,6 +158,8 @@ export default function LeaveTypesScreen() {
       fetchData(authToken, true);
     } catch (e: any) {
       Alert.alert('Error', e.response?.data?.message || 'Failed to save.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -180,6 +184,11 @@ export default function LeaveTypesScreen() {
         {isOpen && (
           <View style={styles.dropdownListContainer}>
             <ScrollView nestedScrollEnabled style={{ maxHeight: 150 }} showsVerticalScrollIndicator={false}>
+              {options.length === 0 && (
+                <View style={{ padding: 16 }}>
+                  <Text style={{ color: '#9CA3AF', fontSize: 13 }}>No options available</Text>
+                </View>
+              )}
               {options.map((opt, i) => (
                 <TouchableOpacity
                   key={opt.value}
@@ -325,12 +334,18 @@ export default function LeaveTypesScreen() {
       <Modal visible={isFormVisible} animationType="fade" transparent={true}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.compactModalContainer}>
+            
+            {/* UPDATED MODAL HEADER: Project Color & X Icon */}
             <View style={styles.formHeader}>
-              <Text style={styles.formTitle}>{editingId ? 'Edit Leave Type' : 'Add Leave Type'}</Text>
-              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon}>
-                <Feather name="x" size={20} color="#4B5563" />
+              <View>
+                <Text style={styles.formTitle}>{editingId ? 'Edit Leave Type' : 'Add Leave Type'}</Text>
+                <Text style={styles.formSubtitle}>{editingId ? 'Update leave category settings' : 'Define a new leave category'}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setFormVisible(false)} style={styles.closeBtnIcon} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>✕</Text>
               </TouchableOpacity>
             </View>
+
             <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
               {renderInlineDropdown(
                 'schoolId',
@@ -344,6 +359,8 @@ export default function LeaveTypesScreen() {
                   <TextInput
                     style={styles.input}
                     value={formData.name}
+                    placeholder="e.g. Sick Leave"
+                    placeholderTextColor="#9CA3AF"
                     onChangeText={(t) => setFormData({ ...formData, name: t })}
                   />
                 </View>
@@ -352,6 +369,8 @@ export default function LeaveTypesScreen() {
                   <TextInput
                     style={styles.input}
                     value={formData.code}
+                    placeholder="e.g. SL"
+                    placeholderTextColor="#9CA3AF"
                     onChangeText={(t) => setFormData({ ...formData, code: t })}
                   />
                 </View>
@@ -413,13 +432,22 @@ export default function LeaveTypesScreen() {
               <TextInput
                 style={[styles.input, { height: 70, textAlignVertical: 'top' }]}
                 multiline
+                placeholder="Optional notes about this leave type"
+                placeholderTextColor="#9CA3AF"
                 value={formData.description}
                 onChangeText={(t) => setFormData({ ...formData, description: t })}
               />
 
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleSave}>
-                <Text style={styles.saveBtnFullText}>{editingId ? 'Update Type' : 'Create Type'}</Text>
-              </TouchableOpacity>
+              {/* ACTION BUTTONS (CANCEL AND SAVE IN SAME ROW) */}
+              <View style={styles.formActionRow}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setFormVisible(false)} activeOpacity={0.9}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.saveBtnFull, { flex: 1, marginTop: 0 }, saving && { opacity: 0.7 }]} onPress={handleSave} disabled={saving} activeOpacity={0.9}>
+                  {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnFullText}>{editingId ? 'Update' : 'Create'}</Text>}
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -491,9 +519,21 @@ const styles = StyleSheet.create({
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(17,24,39,0.6)', justifyContent: 'center', padding: 16 },
   compactModalContainer: { backgroundColor: '#fff', borderRadius: 20, maxHeight: '90%', elevation: 10, overflow: 'hidden' },
-  formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  formTitle: { fontSize: 18, fontWeight: '800', color: '#111827' },
-  closeBtnIcon: { padding: 6, backgroundColor: '#E5E7EB', borderRadius: 20 },
+  
+  // UPDATED MODAL HEADER
+  formHeader: {
+    backgroundColor: '#B3122A',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#B3122A',
+  },
+  formTitle: { fontSize: 19, fontWeight: '800', color: '#FFFFFF' },
+  formSubtitle: { fontSize: 12.5, color: '#FCA5A5', marginTop: 3 },
+  closeBtnIcon: { padding: 8, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 20 },
+  
   formScroll: { padding: 20 },
 
   inputWrapper: { marginBottom: 16 },
@@ -514,6 +554,10 @@ const styles = StyleSheet.create({
   toggleBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   toggleLbl: { fontSize: 13, fontWeight: '600', color: '#374151' },
 
-  saveBtnFull: { backgroundColor: '#B3122A', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 10, elevation: 2 },
+  // UPDATED ACTION BUTTONS FOR SIDE BY SIDE
+  formActionRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
+  cancelBtn: { flex: 1, height: 50, borderRadius: 12, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
+  cancelBtnText: { color: '#4B5563', fontSize: 15, fontWeight: '800' },
+  saveBtnFull: { backgroundColor: '#B3122A', height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', elevation: 2 },
   saveBtnFullText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });
