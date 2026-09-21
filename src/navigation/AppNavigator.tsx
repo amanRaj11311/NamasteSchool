@@ -26,16 +26,13 @@ import axios from "axios";
 import { API_BASE } from "../network/api";
 
 const HEADER_DISPLAY_MODE: 'TITLE' | 'PILLS' = 'TITLE';
-
-// How much of the available height (below the header) the drawer is allowed
-// to occupy at most. The drawer never grows taller than the modules it has
-// to show — this is only a safety ceiling for accounts with many modules.
 const DRAWER_MAX_HEIGHT_RATIO = 0.82;
-const DRAWER_CHROME_HEIGHT = 150; // approx height of the brand row + footer
+const DRAWER_CHROME_HEIGHT = 150; 
 
-// --- Screen Imports ---
+
 import LoginScreen from "../authentication/LoginScreen";
-import DashboardScreen from "../screens/DashboardScreen";
+import HomeScreen from "../screens/HomeScreen"; 
+import  DashboardScreen from "../screens/DashboardScreen"
 import SchoolsScreen from "../screens/SchoolScreen";
 import SubjectsScreen from "../screens/SubjectsScreen";
 import StaffScreen from "../screens/StaffManagement/StaffScreen";
@@ -90,7 +87,7 @@ import StudentHomeworkScreen from '../screens/student Screen/StudentHomeworkScre
 import StudentLeaveScreen from '../screens/student Screen/StudentLeaveScreen';
 import StudentFeesScreen from '../screens/student Screen/StudentFeesScreen';
 
-// Library Imports (file names corrected: Returns -> LibraryReturnScreen, Reports -> LibraryReportScreen)
+// Library Imports 
 import LibraryCatalogScreen from '../screens/Libarary Management/LibraryCatalogScreen';
 import LibraryIssueScreen from '../screens/Libarary Management/LibraryIssuesScreen';
 import LibraryReturnsScreen from '../screens/Libarary Management/LibraryReturnScreen';
@@ -105,8 +102,7 @@ import SchoolLogo from '../assets/logo.png';
 
 // Outer stack: Login -> the app shell. Inner ("content") stack: the actual
 // module screens. Keeping these separate is what lets the drawer live
-// outside react-navigation's own Drawer.Navigator (which always renders a
-// full-height side panel) so it can instead be a small floating card.
+// outside react-navigation's own Drawer.Navigator.
 const Stack = createNativeStackNavigator();
 const ContentStack = createNativeStackNavigator();
 
@@ -128,11 +124,12 @@ type UserMode = 'admin' | 'student' | 'parent';
 
 const ADMIN_MENU: MenuSection[] = [
   {
-    section: "Overview",
-    items: [
-      { routeName: "Dashboard", label: "Dashboard", icon: "grid", component: DashboardScreen, module: "dashboard", alwaysShow: true },
-    ],
-  },
+  section: "Overview",
+  items: [
+    { routeName: "Home", label: "Home", icon: "home", component: HomeScreen, module: "dashboard", alwaysShow: true },
+    { routeName: "Dashboard", label: "Dashboard", icon: "grid", component: DashboardScreen, module: "dashboard", alwaysShow: true },
+  ],
+},
   {
     section: "Management",
     items: [
@@ -268,22 +265,17 @@ const C = {
   surfaceSunken: '#F1F2F6',
   border: '#E8E9EF',
   borderStrong: '#DBDDE6',
-
   text: '#14161F',
   textMuted: '#6B7280',
   textFaint: '#9AA0AC',
-
   primary: '#B3122A',
   primaryBright: '#D2263F',
   primaryDeep: '#7A0C1D',
   primarySoft: '#FBEEEF',
   primaryTint: '#F3D6D9',
-
   ink: '#0D0F16',
   inkSoft: '#181B24',
-
   gold: '#C7A466',
-
   overlay: 'rgba(13,15,22,0.55)',
 };
 
@@ -291,12 +283,13 @@ const BRAND_GRADIENT = [C.primary, C.primaryDeep];
 
 // Web: STUDENT_NAV_SECTIONS
 const STUDENT_MENU: MenuSection[] = [
-  {
-    section: "Overview",
-    items: [
-      { routeName: "Dashboard", label: "Dashboard", icon: "grid", component: DashboardScreen, alwaysShow: true },
-    ],
-  },
+{
+  section: "Overview",
+  items: [
+    { routeName: "Home", label: "Home", icon: "home", component: HomeScreen, alwaysShow: true },
+    { routeName: "Dashboard", label: "Dashboard", icon: "grid", component: DashboardScreen, alwaysShow: true },
+  ],
+},
   {
     section: "Academic Portal",
     items: [
@@ -314,12 +307,13 @@ const STUDENT_MENU: MenuSection[] = [
 
 // Web: PARENT_NAV_SECTIONS
 const PARENT_MENU: MenuSection[] = [
-  {
-    section: "Overview",
-    items: [
-      { routeName: "Dashboard", label: "Dashboard", icon: "grid", component: DashboardScreen, alwaysShow: true },
-    ],
-  },
+ {
+  section: "Overview",
+  items: [
+    { routeName: "Home", label: "Home", icon: "home", component: HomeScreen, alwaysShow: true },
+    { routeName: "Dashboard", label: "Dashboard", icon: "grid", component: DashboardScreen, alwaysShow: true },
+  ],
+},
   {
     section: "Parent Portal",
     items: [
@@ -334,11 +328,6 @@ const PARENT_MENU: MenuSection[] = [
     ],
   },
 ];
-
-/* ------------------------------------------------------------------ */
-/*  PERMISSION HELPERS (mirror of utils/permissions.js on web)         */
-/* ------------------------------------------------------------------ */
-
 const norm = (v?: string) => (v || '').toString().trim().toLowerCase();
 
 const hasPermission = (perms: Permission[], isSuperAdmin: boolean, module?: string, action: string = 'read'): boolean => {
@@ -401,13 +390,6 @@ const getMenuForMode = (mode: UserMode): MenuSection[] => {
   return ADMIN_MENU;
 };
 
-/* ------------------------------------------------------------------ */
-/*  SCHOOL BRANDING HELPERS                                            */
-/* ------------------------------------------------------------------ */
-
-// API_BASE typically points at ".../api" — branding/logo URLs returned by the
-// backend (e.g. "/uploads/file-xxx.png") are relative to the server root, not
-// the /api path, so strip a trailing /api before joining.
 const ASSET_BASE = API_BASE.replace(/\/api\/?$/, '');
 
 export const resolveAssetUrl = (path?: string | null): string | null => {
@@ -429,8 +411,7 @@ type SchoolContextType = {
   closePicker: () => void;
   selectSchool: (school: SchoolLite) => void;
   refreshSession: () => void;
-  // Global school identity / branding (name, tagline, logo) — set from
-  // Settings > School Branding and reflected instantly across the app.
+  // Global school identity / branding (name, tagline, logo)
   brandName: string;
   brandTagline: string;
   brandLogoUrl: string | null;
@@ -517,7 +498,6 @@ function AppMenuProvider({ children }: { children: React.ReactNode }) {
 
         const isSuperAdmin = superAdminRaw === "true" || parsedUser?.isSuperAdmin === true;
 
-        // Web parity: user.userType === 'student' | 'parent', plus role fallbacks
         const typeVal = norm(userTypeRaw || parsedUser?.userType);
         const roleVal = norm(userRoleRaw || parsedUser?.role || parsedUser?.roleId?.name);
 
@@ -526,7 +506,6 @@ function AppMenuProvider({ children }: { children: React.ReactNode }) {
         else if (typeVal === 'parent' || roleVal === 'parent' || roleVal === 'guardian') currentMode = 'parent';
         setMode(currentMode);
 
-        // Brand block text, same info the web sidebar shows
         if (currentMode === 'student') {
           const student = parsedUser?.student;
           const name = student?.firstName
@@ -547,8 +526,6 @@ function AppMenuProvider({ children }: { children: React.ReactNode }) {
 
         const baseMenu = getMenuForMode(currentMode);
 
-        // Student / parent menus are role-scoped already (all alwaysShow),
-        // admin & staff menus go through the permission filter.
         const finalMenu: MenuSection[] = baseMenu
           .map((section) => ({
             section: section.section,
@@ -565,7 +542,6 @@ function AppMenuProvider({ children }: { children: React.ReactNode }) {
           return routes;
         };
 
-        // De-dupe by routeName (a screen can appear once in the navigator)
         const seen = new Set<string>();
         const routes = finalMenu
           .flatMap((section) => collectRoutes(section.items))
@@ -615,10 +591,6 @@ function DrawerVisibilityProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// The drawer panel is a sibling of ContentStack.Navigator, not a descendant,
-// so it can't reach ContentStack's screens through useNavigation(). AppHeader
-// (which IS rendered by ContentStack) hands its live `navigation` object and
-// the current route name up through this context on every render instead.
 type AppNavContextType = {
   activeRoute: string;
   setActiveRoute: (r: string) => void;
@@ -640,8 +612,6 @@ function AppNavProvider({ outerNavigation, children }: { outerNavigation: any; c
   );
 }
 
-// Walks up through nested navigators so logout works no matter how deep the
-// current screen is nested, then resets to the Login screen on the root.
 const navigateToLogin = (navigation: any) => {
   if (!navigation) return;
   let root = navigation;
@@ -668,7 +638,6 @@ function SchoolProvider({ children }: { children: React.ReactNode }) {
   const [loadingSession, setLoadingSession] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
 
-  // Global school identity / branding
   const [brandName, setBrandName] = useState('');
   const [brandTagline, setBrandTagline] = useState('');
   const [brandLogoUrl, setBrandLogoUrl] = useState<string | null>(null);
@@ -688,9 +657,6 @@ function SchoolProvider({ children }: { children: React.ReactNode }) {
     finally { setLoadingSession(false); }
   }, []);
 
-  // Global school identity (name / tagline / logo), set in Settings > School
-  // Branding by a Super Admin. Loaded once for every signed-in user so the
-  // drawer header, app title, etc. always reflect the current branding.
   const fetchBranding = useCallback(async (token: string | null) => {
     try {
       setLoadingBranding(true);
@@ -700,16 +666,12 @@ function SchoolProvider({ children }: { children: React.ReactNode }) {
         setBrandName(data.schoolName || '');
         setBrandTagline(data.tagline || '');
         setBrandLogoUrl(data.logoUrl || null);
-        // Prefetch immediately so the network logo is already cached by the
-        // time the drawer is first opened — otherwise the first open shows
-        // a blank frame while the image is still being fetched.
         const resolvedUri = resolveAssetUrl(data.logoUrl);
         if (resolvedUri) {
           Image.prefetch(resolvedUri).catch(() => {});
         }
       }
     } catch (error) {
-      // Keep previous / fallback branding silently — this must never block app usage.
     } finally {
       setLoadingBranding(false);
     }
@@ -802,7 +764,7 @@ function SchoolSwitcherModal() {
           <TouchableWithoutFeedback>
             <View style={[styles.pickerContainer, { marginTop: headerBottom, marginHorizontal: horizontalMargin, width: containerWidth }]}>
               <View style={styles.pickerHeader}>
-                <Feather name="briefcase" size={15}color={C.primary}/>
+                <Feather name="briefcase" size={15} color={C.primary}/>
                 <Text style={styles.pickerHeaderText}>Select School Branch</Text>
                 <TouchableOpacity onPress={closePicker} hitSlop={8} style={{ marginLeft: 'auto' }}><Feather name="x" size={18} color="#9CA3AF" /></TouchableOpacity>
               </View>
@@ -866,10 +828,8 @@ function AppHeader({ navigation, route, options }: { navigation: any, route: any
   const containerRef = useRef<View>(null);
   const [middleWidth, setMiddleWidth] = useState(0);
 
-  const title = options?.title || route?.name || 'Dashboard';
+  const title = options?.title || route?.name || 'Home';
 
-  // Hand this screen's live navigation object + name up to the shared
-  // context so the (sibling) drawer panel can navigate and highlight it.
   useEffect(() => {
     contentNavigationRef.current = navigation;
     if (route?.name) setActiveRoute(route.name);
@@ -1101,7 +1061,6 @@ function CustomDrawerPanel() {
         Animated.timing(translateX, { toValue: offscreenX, duration: 200, useNativeDriver: true }),
       ]).start(() => setRendered(false));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, rendered]);
 
   // Auto-expand whichever group holds the active route, each time the drawer opens.
@@ -1291,6 +1250,11 @@ const styles = StyleSheet.create({
   noAccessLogoutBtn: { flexDirection: "row", alignItems: "center", backgroundColor: C.primary, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 24 },
   noAccessLogoutText: { color: "#ffffff", fontWeight: "700", fontSize: 14 },
 
+  placeholderContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F4F7F9", paddingHorizontal: 32 },
+  placeholderIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 18 },
+  placeholderTitle: { fontSize: 18, fontWeight: "800", color: "#111827", marginBottom: 8, textAlign: "center" },
+  placeholderMessage: { fontSize: 13, color: "#6B7280", textAlign: "center", lineHeight: 20 },
+  
   appHeader: {
     backgroundColor: C.surface,
     borderBottomWidth: 1,

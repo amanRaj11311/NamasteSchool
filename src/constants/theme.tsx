@@ -10,7 +10,7 @@ import {
 
 
 export const COLORS = {
-  
+
   background: '#F6F6F9',
   surface: '#FFFFFF',
   surfaceSoft: '#FBFBFD',
@@ -70,6 +70,19 @@ export const COLORS = {
   transparent: 'transparent',
 } as const;
 
+/**
+ * Tokens for text/surfaces sitting on top of a dark or gradient background
+ * (headers, hero cards, banners). Any screen that renders content over a
+ * gradient should pull these from here instead of redefining its own
+ * "ON_DARK"-style object locally.
+ */
+export const ON_DARK = {
+  high: 'rgba(255,255,255,0.94)',
+  mid: 'rgba(255,255,255,0.78)',
+  low: 'rgba(255,255,255,0.62)',
+  glass: 'rgba(255,255,255,0.14)',
+  glassBorder: 'rgba(255,255,255,0.26)',
+} as const;
 
 
 export const SPACING = {
@@ -179,6 +192,7 @@ export const SHADOW = {
 
 export const THEME = {
   colors: COLORS,
+  onDark: ON_DARK,
   spacing: SPACING,
   radius: RADIUS,
   font: FONT,
@@ -215,7 +229,6 @@ export const ThemeProvider = ({
 export const useTheme = () => {
   return useContext(ThemeContext);
 };
-
 
 
 export default THEME;
