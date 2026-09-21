@@ -27,12 +27,12 @@ import { API_BASE } from "../network/api";
 
 const HEADER_DISPLAY_MODE: 'TITLE' | 'PILLS' = 'TITLE';
 const DRAWER_MAX_HEIGHT_RATIO = 0.82;
-const DRAWER_CHROME_HEIGHT = 150; 
+const DRAWER_CHROME_HEIGHT = 150;
 
 
 import LoginScreen from "../authentication/LoginScreen";
-import HomeScreen from "../screens/HomeScreen"; 
-import  DashboardScreen from "../screens/DashboardScreen"
+import HomeScreen from "../screens/HomeScreen";
+import DashboardScreen from "../screens/DashboardScreen"
 import SchoolsScreen from "../screens/SchoolScreen";
 import SubjectsScreen from "../screens/SubjectsScreen";
 import StaffScreen from "../screens/StaffManagement/StaffScreen";
@@ -124,12 +124,12 @@ type UserMode = 'admin' | 'student' | 'parent';
 
 const ADMIN_MENU: MenuSection[] = [
   {
-  section: "Overview",
-  items: [
-    { routeName: "Home", label: "Home", icon: "home", component: HomeScreen, module: "dashboard", alwaysShow: true },
-    { routeName: "Dashboard", label: "Dashboard", icon: "grid", component: DashboardScreen, module: "dashboard", alwaysShow: true },
-  ],
-},
+    section: "Overview",
+    items: [
+      { routeName: "Home", label: "Home", icon: "home", component: HomeScreen, module: "dashboard", alwaysShow: true },
+      { routeName: "Dashboard", label: "Dashboard", icon: "grid", component: DashboardScreen, module: "dashboard", alwaysShow: true },
+    ],
+  },
   {
     section: "Management",
     items: [
@@ -283,13 +283,13 @@ const BRAND_GRADIENT = [C.primary, C.primaryDeep];
 
 // Web: STUDENT_NAV_SECTIONS
 const STUDENT_MENU: MenuSection[] = [
-{
-  section: "Overview",
-  items: [
-    { routeName: "Home", label: "Home", icon: "home", component: HomeScreen, alwaysShow: true },
-    { routeName: "Dashboard", label: "Dashboard", icon: "grid", component: DashboardScreen, alwaysShow: true },
-  ],
-},
+  {
+    section: "Overview",
+    items: [
+      { routeName: "Home", label: "Home", icon: "home", component: HomeScreen, alwaysShow: true },
+      { routeName: "Dashboard", label: "Dashboard", icon: "grid", component: DashboardScreen, alwaysShow: true },
+    ],
+  },
   {
     section: "Academic Portal",
     items: [
@@ -307,13 +307,13 @@ const STUDENT_MENU: MenuSection[] = [
 
 // Web: PARENT_NAV_SECTIONS
 const PARENT_MENU: MenuSection[] = [
- {
-  section: "Overview",
-  items: [
-    { routeName: "Home", label: "Home", icon: "home", component: HomeScreen, alwaysShow: true },
-    { routeName: "Dashboard", label: "Dashboard", icon: "grid", component: DashboardScreen, alwaysShow: true },
-  ],
-},
+  {
+    section: "Overview",
+    items: [
+      { routeName: "Home", label: "Home", icon: "home", component: HomeScreen, alwaysShow: true },
+      { routeName: "Dashboard", label: "Dashboard", icon: "grid", component: DashboardScreen, alwaysShow: true },
+    ],
+  },
   {
     section: "Parent Portal",
     items: [
@@ -422,14 +422,14 @@ type SchoolContextType = {
 export const SchoolContext = createContext<SchoolContextType>({
   isSuperAdmin: false, schoolName: '', sessionName: '', schools: [], selectedSchoolId: '',
   loadingSchools: false, loadingSession: false, pickerVisible: false,
-  openPicker: () => {}, closePicker: () => {}, selectSchool: () => {}, refreshSession: () => {},
-  brandName: '', brandTagline: '', brandLogoUrl: null, loadingBranding: false, refreshBranding: () => {},
+  openPicker: () => { }, closePicker: () => { }, selectSchool: () => { }, refreshSession: () => { },
+  brandName: '', brandTagline: '', brandLogoUrl: null, loadingBranding: false, refreshBranding: () => { },
 });
 
 export const useSchoolContext = () => useContext(SchoolContext);
 
 const HeaderLayoutContext = createContext<{ headerBottom: number; reportHeaderBottom: (y: number) => void }>({
-  headerBottom: 0, reportHeaderBottom: () => {},
+  headerBottom: 0, reportHeaderBottom: () => { },
 });
 const useHeaderLayout = () => useContext(HeaderLayoutContext);
 
@@ -494,7 +494,7 @@ function AppMenuProvider({ children }: { children: React.ReactNode }) {
         if (!Array.isArray(permissions)) permissions = [];
 
         let parsedUser: any = null;
-        try { parsedUser = userRaw ? JSON.parse(userRaw) : null; } catch {}
+        try { parsedUser = userRaw ? JSON.parse(userRaw) : null; } catch { }
 
         const isSuperAdmin = superAdminRaw === "true" || parsedUser?.isSuperAdmin === true;
 
@@ -520,7 +520,7 @@ function AppMenuProvider({ children }: { children: React.ReactNode }) {
           setProfileSubtitle(
             childCount > 1 ? `${childCount} Children`
               : primaryChild?.name ? primaryChild.name
-              : 'Parent Portal'
+                : 'Parent Portal'
           );
         }
 
@@ -576,7 +576,7 @@ function AppMenuProvider({ children }: { children: React.ReactNode }) {
 /* ------------------------------------------------------------------ */
 
 const DrawerVisibilityContext = createContext<{ visible: boolean; open: () => void; close: () => void }>({
-  visible: false, open: () => {}, close: () => {},
+  visible: false, open: () => { }, close: () => { },
 });
 const useDrawerVisibility = () => useContext(DrawerVisibilityContext);
 
@@ -598,7 +598,7 @@ type AppNavContextType = {
   outerNavigation: any;
 };
 const AppNavContext = createContext<AppNavContextType>({
-  activeRoute: '', setActiveRoute: () => {}, contentNavigationRef: { current: null }, outerNavigation: null,
+  activeRoute: '', setActiveRoute: () => { }, contentNavigationRef: { current: null }, outerNavigation: null,
 });
 const useAppNav = () => useContext(AppNavContext);
 
@@ -611,21 +611,95 @@ function AppNavProvider({ outerNavigation, children }: { outerNavigation: any; c
     </AppNavContext.Provider>
   );
 }
+// Must match the keys used in LoginScreen.tsx
+const SAVED_LOGIN_ENABLED = "savedLoginEnabled";
+const SAVED_LOGIN_EMAIL = "savedLoginEmail";
+const SAVED_LOGIN_PASSWORD = "savedLoginPassword";
+const LOGIN_SAVE_ASKED_EMAIL = "loginSaveAskedEmail";
 
+const SESSION_KEYS = [
+  "userToken", "userId", "employeeId", "userName", "userEmail", "userRole",
+  "isSuperAdmin", "userSchoolId", "userSchoolName", "userPermissions",
+  "keepLoggedIn", "userDesignation", "userDepartment", "userDoj",
+  "userBankAcc", "userBankName", "userBankIfsc", "userAvatar",
+  "school", "selectedSchoolId", "userType",
+];
+
+const removeSavedLoginDetails = async () => {
+  await Promise.all(
+    [SAVED_LOGIN_ENABLED, SAVED_LOGIN_EMAIL, SAVED_LOGIN_PASSWORD].map((key) =>
+      AsyncStorage.removeItem(key)
+    )
+  );
+  await AsyncStorage.removeItem(LOGIN_SAVE_ASKED_EMAIL);
+};
 const navigateToLogin = (navigation: any) => {
-  if (!navigation) return;
-  let root = navigation;
-  while (typeof root.getParent === 'function' && root.getParent()) {
-    root = root.getParent();
+  if (!navigation) {
+    console.log("[navigateToLogin] navigation prop is undefined/null");
+    return;
   }
-  root.reset({ index: 0, routes: [{ name: 'Login' }] });
+
+  let root = navigation;
+  let depth = 0;
+  while (typeof root.getParent === "function" && root.getParent()) {
+    root = root.getParent();
+    depth++;
+    if (depth > 10) break; // safety guard against an infinite loop
+  }
+
+  console.log("[navigateToLogin] root navigator keys:", Object.keys(root));
+  console.log("[navigateToLogin] typeof root.reset:", typeof root.reset);
+
+  if (typeof root.reset !== "function") {
+    console.log("[navigateToLogin] root has no reset() — aborting");
+    return;
+  }
+
+  root.reset({ index: 0, routes: [{ name: "Login" }] });
 };
 
-const handleGlobalLogout = (navigation: any) => {
-  Alert.alert("Logout", "Are you sure you want to logout?", [
-    { text: "Cancel", style: "cancel" },
-    { text: "Logout", style: "destructive", onPress: async () => { await AsyncStorage.clear(); navigateToLogin(navigation); } }
-  ]);
+const performLogout = async (navigation: any) => {
+  try {
+    await Promise.all(SESSION_KEYS.map((key) => AsyncStorage.removeItem(key)));
+    navigateToLogin(navigation);
+  } catch (err: any) {
+    Alert.alert("Logout failed", String(err?.message || err));
+  }
+};
+
+const handleGlobalLogout = async (navigation: any) => {
+  const savedEnabled = await AsyncStorage.getItem(SAVED_LOGIN_ENABLED);
+  const savedExists = savedEnabled === "true";
+
+  if (!savedExists) {
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Logout", style: "destructive", onPress: () => performLogout(navigation) },
+    ]);
+    return;
+  }
+
+  Alert.alert(
+    "Logout",
+    "You have saved login details on this device. Keep them for next time, or remove them now?",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove Details",
+        style: "destructive",
+        onPress: async () => {
+          await removeSavedLoginDetails();
+          await performLogout(navigation);
+        },
+      },
+      {
+        text: "Keep Details",
+        onPress: async () => {
+          await performLogout(navigation);
+        },
+      },
+    ]
+  );
 };
 
 function SchoolProvider({ children }: { children: React.ReactNode }) {
@@ -668,7 +742,7 @@ function SchoolProvider({ children }: { children: React.ReactNode }) {
         setBrandLogoUrl(data.logoUrl || null);
         const resolvedUri = resolveAssetUrl(data.logoUrl);
         if (resolvedUri) {
-          Image.prefetch(resolvedUri).catch(() => {});
+          Image.prefetch(resolvedUri).catch(() => { });
         }
       }
     } catch (error) {
@@ -692,7 +766,7 @@ function SchoolProvider({ children }: { children: React.ReactNode }) {
 
         if (!superAdmin) {
           let parsedSchool: any = null;
-          try { parsedSchool = schoolRaw ? JSON.parse(schoolRaw) : null; } catch {}
+          try { parsedSchool = schoolRaw ? JSON.parse(schoolRaw) : null; } catch { }
           if (parsedSchool?.name) {
             setSchoolName(parsedSchool.name);
             setSelectedSchoolId(parsedSchool._id || '');
@@ -723,7 +797,7 @@ function SchoolProvider({ children }: { children: React.ReactNode }) {
       await AsyncStorage.setItem('selectedSchoolId', school._id);
       const token = await AsyncStorage.getItem('userToken');
       fetchActiveSession(token, school._id);
-    } catch (error) {}
+    } catch (error) { }
   }, [fetchActiveSession]);
 
   const refreshSession = useCallback(async () => {
@@ -764,7 +838,7 @@ function SchoolSwitcherModal() {
           <TouchableWithoutFeedback>
             <View style={[styles.pickerContainer, { marginTop: headerBottom, marginHorizontal: horizontalMargin, width: containerWidth }]}>
               <View style={styles.pickerHeader}>
-                <Feather name="briefcase" size={15} color={C.primary}/>
+                <Feather name="briefcase" size={15} color={C.primary} />
                 <Text style={styles.pickerHeaderText}>Select School Branch</Text>
                 <TouchableOpacity onPress={closePicker} hitSlop={8} style={{ marginLeft: 'auto' }}><Feather name="x" size={18} color="#9CA3AF" /></TouchableOpacity>
               </View>
@@ -872,7 +946,7 @@ const DrawerMenuIcon = ({ active, icon }: { active: boolean; icon: string }) =>
       <Feather name={icon as any} size={16} color="#ffffff" />
     </LinearGradient>
   ) : (
-    <View style={styles.drawerIconBox}><Feather name={icon as any} size={16}color={C.primary} /></View>
+    <View style={styles.drawerIconBox}><Feather name={icon as any} size={16} color={C.primary} /></View>
   );
 
 const containsRoute = (item: MenuItem, routeName: string): boolean => {
@@ -891,10 +965,14 @@ const getInitials = (name: string) => {
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 };
 
+
 const HeaderRightAvatar = () => {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [userName, setUserName] = useState("User");
   const [userEmail, setUserEmail] = useState("");
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
+
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { headerBottom } = useHeaderLayout();
@@ -902,42 +980,180 @@ const HeaderRightAvatar = () => {
 
   useEffect(() => {
     (async () => {
-      const name = await AsyncStorage.getItem("userName");
-      const email = await AsyncStorage.getItem("userEmail");
-      if (name) setUserName(name);
-      if (email) setUserEmail(email);
+      try {
+        const [name, email, userRaw, avatarRaw] = await Promise.all([
+          AsyncStorage.getItem("userName"),
+          AsyncStorage.getItem("userEmail"),
+          AsyncStorage.getItem("user"),
+          AsyncStorage.getItem("userAvatar"),
+        ]);
+
+        let parsedUser: any = null;
+
+        try {
+          parsedUser = userRaw ? JSON.parse(userRaw) : null;
+        } catch {
+          parsedUser = null;
+        }
+
+        const nameValue =
+          name ||
+          parsedUser?.name ||
+          "User";
+
+        const emailValue =
+          email ||
+          parsedUser?.email ||
+          "";
+
+        // Priority:
+        // 1. userAvatar from AsyncStorage
+        // 2. avatar from user object
+        // 3. photo from user object
+        const avatarValue =
+          avatarRaw ||
+          parsedUser?.avatar ||
+          parsedUser?.photo ||
+          null;
+
+        setUserName(nameValue);
+        setUserEmail(emailValue);
+        setUserAvatar(avatarValue);
+        setAvatarFailed(false);
+      } catch (error) {
+        console.log("Failed to load profile avatar:", error);
+      }
     })();
   }, []);
 
-  const dropdownWidth = Math.min(windowWidth * 0.72, 320);
+  const resolvedAvatarUri = resolveAssetUrl(userAvatar);
+
+  const dropdownWidth = Math.min(windowWidth * 0.68, 240);
   const edgeMargin = Math.max(insets.right, 16);
+
+  const avatarContent = resolvedAvatarUri && !avatarFailed ? (
+    <Image
+      source={{ uri: resolvedAvatarUri }}
+      style={styles.headerAvatarImage}
+      resizeMode="cover"
+      onError={() => {
+        setAvatarFailed(true);
+      }}
+    />
+  ) : (
+    <Text style={styles.headerAvatarText}>
+      {getInitials(userName)}
+    </Text>
+  );
 
   return (
     <View style={{ zIndex: 9999 }}>
-      <TouchableOpacity onPress={() => setShowProfileMenu(true)} style={{ marginRight: 16 }}>
+      <TouchableOpacity
+        onPress={() => setShowProfileMenu(true)}
+        style={{ marginRight: 16 }}
+        activeOpacity={0.8}
+      >
         <View style={styles.headerAvatar}>
-          <Text style={styles.headerAvatarText}>{getInitials(userName)}</Text>
+          {avatarContent}
         </View>
       </TouchableOpacity>
 
-      <Modal visible={showProfileMenu} transparent={true} animationType="fade">
-        <TouchableWithoutFeedback onPress={() => setShowProfileMenu(false)}>
+      <Modal
+        visible={showProfileMenu}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowProfileMenu(false)}
+      >
+        <TouchableWithoutFeedback
+          onPress={() => setShowProfileMenu(false)}
+        >
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback>
-              <View style={[styles.profileDropdown, { top: headerBottom, right: edgeMargin, width: dropdownWidth }]}>
+              <View
+                style={[
+                  styles.profileDropdown,
+                  {
+                    top: headerBottom,
+                    right: edgeMargin,
+                    width: dropdownWidth,
+                  },
+                ]}
+              >
                 <View style={styles.profileDropdownHeader}>
-                  <View style={[styles.headerAvatar, { width: 46, height: 46, borderRadius: 23, marginRight: 14 }]}>
-                    <Text style={[styles.headerAvatarText, { fontSize: 18 }]}>{getInitials(userName)}</Text>
+                  <View
+                    style={[
+                      styles.headerAvatar,
+                      {
+                        width: 46,
+                        height: 46,
+                        borderRadius: 23,
+                        marginRight: 14,
+                      },
+                    ]}
+                  >
+                    {avatarContent}
                   </View>
+
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.dropdownName} numberOfLines={1}>{userName}</Text>
-                    <Text style={styles.dropdownEmail} numberOfLines={1}>{userEmail || 'user@namaste.com'}</Text>
+                    <Text
+                      style={styles.dropdownName}
+                      numberOfLines={1}
+                    >
+                      {userName}
+                    </Text>
+
+                    <Text
+                      style={styles.dropdownEmail}
+                      numberOfLines={1}
+                    >
+                      {userEmail || "user@namaste.com"}
+                    </Text>
                   </View>
                 </View>
+
                 <View style={styles.dropdownDivider} />
-                <TouchableOpacity style={styles.dropdownLogoutBtn} onPress={() => { setShowProfileMenu(false); handleGlobalLogout(navigation); }}>
-                  <Feather name="log-out" size={16} color={C.primary} />
-                  <Text style={styles.dropdownLogoutText}>Secure Logout</Text>
+
+                <TouchableOpacity
+                  style={styles.dropdownLogoutBtn}
+                  onPress={() => {
+                    setShowProfileMenu(false);
+                    navigation.navigate("Settings");
+                  }}
+                >
+                  <Feather
+                    name="settings"
+                    size={18}
+                    color="#374151"
+                  />
+
+                  <Text
+                    style={[
+                      styles.dropdownLogoutText,
+                      {
+                        color: "#374151",
+                      },
+                    ]}
+                  >
+                    Settings
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.dropdownLogoutBtn}
+                  onPress={() => {
+                    setShowProfileMenu(false);
+                    handleGlobalLogout(navigation);
+                  }}
+                >
+                  <Feather
+                    name="log-out"
+                    size={16}
+                    color={C.primary}
+                  />
+
+                  <Text style={styles.dropdownLogoutText}>
+                    Secure Logout
+                  </Text>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -947,6 +1163,8 @@ const HeaderRightAvatar = () => {
     </View>
   );
 };
+
+
 
 function DrawerMenuNode({ item, depth, path, currentRouteName, expandedGroups, toggleGroup, onNavigate }: { item: MenuItem; depth: number; path: string; currentRouteName: string; expandedGroups: Record<string, boolean>; toggleGroup: (key: string) => void; onNavigate: (routeName: string) => void; }) {
   const nodeKey = `${path}/${item.label}`;
@@ -1020,7 +1238,7 @@ function CustomDrawerPanel() {
   const [userRole, setUserRole] = useState("");
   const [logoFailed, setLogoFailed] = useState(false);
 
-  const drawerWidth = Math.min(windowWidth * 0.82, 320);
+  const drawerWidth = Math.min(windowWidth * 0.72, 320);
   const offscreenX = -(drawerWidth + insets.left + 24);
   const translateX = useRef(new Animated.Value(offscreenX)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -1099,10 +1317,10 @@ function CustomDrawerPanel() {
 
   const brandTitle = mode === 'student' ? (profileName || 'Student')
     : mode === 'parent' ? (profileName || 'Parent / Guardian')
-    : (brandName || 'Namaste School');
+      : (brandName || 'Namaste School');
   const brandSubtitle = mode === 'student' ? (profileSubtitle || 'Student Portal')
     : mode === 'parent' ? (profileSubtitle || 'Parent Portal')
-    : (brandTagline || 'MANAGEMENT SYSTEM');
+      : (brandTagline || 'MANAGEMENT SYSTEM');
 
   return (
     <Modal transparent visible={rendered} animationType="none" onRequestClose={close} statusBarTranslucent>
@@ -1254,7 +1472,7 @@ const styles = StyleSheet.create({
   placeholderIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 18 },
   placeholderTitle: { fontSize: 18, fontWeight: "800", color: "#111827", marginBottom: 8, textAlign: "center" },
   placeholderMessage: { fontSize: 13, color: "#6B7280", textAlign: "center", lineHeight: 20 },
-  
+
   appHeader: {
     backgroundColor: C.surface,
     borderBottomWidth: 1,
@@ -1282,6 +1500,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: C.primarySoft,
   },
+
+  headerAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
+  },
+
   headerAvatar: {
     width: 36,
     height: 36,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView,
   ActivityIndicator, RefreshControl, Platform
@@ -7,7 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
 import LinearGradient from 'react-native-linear-gradient';
 import axios from 'axios';
-import {API_BASE} from '../../network/api';
+import { API_BASE } from '../../network/api';
 
 
 const C = {
@@ -35,12 +35,12 @@ export default function StudentAttendanceScreen() {
   const currentYearNum = new Date().getFullYear();
   const [yearMode, setYearMode] = useState<'current' | 'last' | 'all'>('current');
   const [selectedMonth, setSelectedMonth] = useState<string>('');
-  
+
   // Data States
   const [attendanceData, setAttendanceData] = useState<any>(null);
   const [childrenList, setChildrenList] = useState<any[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
-  
+
   // UI States
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -65,7 +65,7 @@ export default function StudentAttendanceScreen() {
         }
       } catch (e) { console.warn("Could not fetch children"); }
     }
-    
+
     // Otherwise, standard student fetch
     fetchAttendance(token, null, yearMode, selectedMonth);
   };
@@ -83,7 +83,7 @@ export default function StudentAttendanceScreen() {
 
       const res = await axios.get(`${API_BASE}/attendance/my-student-attendance`, { params, ...authHeaders(token) });
       if (res.data?.success) setAttendanceData(res.data);
-    } catch (err) { console.error('Failed to load attendance'); } 
+    } catch (err) { console.error('Failed to load attendance'); }
     finally { setLoading(false); setRefreshing(false); }
   };
 
@@ -113,10 +113,10 @@ export default function StudentAttendanceScreen() {
   const stats = attendanceData?.stats || { totalDays: 0, workingDays: 0, presentDays: 0, absentDays: 0, leaveDays: 0, halfDays: 0, holidays: 0, percentage: 0 };
   const student = attendanceData?.student || {};
 
-  const gradientColors = stats.percentage >= 75 
-    ? ['#059669', '#10b981'] 
-    : stats.percentage >= 60 
-      ? ['#d97706', '#f59e0b'] 
+  const gradientColors = stats.percentage >= 75
+    ? ['#059669', '#10b981']
+    : stats.percentage >= 60
+      ? ['#d97706', '#f59e0b']
       : ['#dc2626', '#ef4444'];
 
   return (
@@ -129,8 +129,8 @@ export default function StudentAttendanceScreen() {
         </View>
       </View>
 
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent} 
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchAttendance(authToken, selectedChildId, yearMode, selectedMonth, true)} colors={[C.primary]} />}
       >
@@ -156,7 +156,7 @@ export default function StudentAttendanceScreen() {
 
         {/* Student Info Bar */}
         <View style={styles.infoBar}>
-          <View style={styles.infoBadge}><Feather name="user" size={12} color={C.blue}/><Text style={styles.infoBadgeText}>Student Panel</Text></View>
+          <View style={styles.infoBadge}><Feather name="user" size={12} color={C.blue} /><Text style={styles.infoBadgeText}>Student Panel</Text></View>
           {!!student.rollNo && <Text style={styles.rollText}>Roll No: {student.rollNo}</Text>}
         </View>
 
@@ -232,7 +232,7 @@ export default function StudentAttendanceScreen() {
                     : yearMode === 'last' ? currentYearNum - 1 : currentYearNum;
                   const monthKey = `${targetYear}-${m.val}`;
                   const isSelected = selectedMonth === monthKey;
-                  
+
                   return (
                     <TouchableOpacity key={monthKey} style={[styles.monthBtn, isSelected ? styles.monthBtnActive : styles.monthBtnInactive]} onPress={() => handleMonthChange(monthKey)}>
                       <Text style={[styles.monthText, isSelected ? styles.monthTextActive : styles.monthTextInactive]}>{m.name} {targetYear}</Text>
@@ -252,7 +252,7 @@ export default function StudentAttendanceScreen() {
                   const d = new Date(`${m.month}-01`);
                   const mName = d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
                   const isSel = selectedMonth === m.month;
-                  
+
                   return (
                     <TouchableOpacity key={idx} style={[styles.monthRow, isSel && styles.monthRowActive]} onPress={() => handleMonthChange(m.month)}>
                       <Text style={styles.monthRowName}>{mName}</Text>
@@ -273,7 +273,7 @@ export default function StudentAttendanceScreen() {
             {/* DAILY LOGS */}
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeader}>
-                <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Feather name="list" size={16} color={C.blue} />
                   <Text style={styles.sectionTitle}>Daily Attendance Log</Text>
                 </View>
@@ -299,7 +299,7 @@ export default function StudentAttendanceScreen() {
                         <Text style={styles.logDateNum}>{dayNum}</Text>
                         <Text style={styles.logDateDay}>{dayName}</Text>
                       </View>
-                      
+
                       <View style={styles.logDetailsCol}>
                         <Text style={styles.logDateFull}>{r.date}</Text>
                         {(r.remarks || r.timeIn || r.timeOut) && (
@@ -312,7 +312,7 @@ export default function StudentAttendanceScreen() {
                       </View>
 
                       <View style={[styles.statusPill, { backgroundColor: sc.bg }]}>
-                        <Feather name={sc.icon} size={12} color={sc.text} style={{marginRight: 4}}/>
+                        <Feather name={sc.icon} size={12} color={sc.text} style={{ marginRight: 4 }} />
                         <Text style={[styles.statusPillText, { color: sc.text }]}>{r.status}</Text>
                       </View>
                     </View>

@@ -27,11 +27,13 @@ const isSmallScreen = screenHeight < 700;
 const AnimatedTouchableOpacity =
   Animated.createAnimatedComponent(TouchableOpacity);
 
-// Saved login keys
+// Saved login keys (for the "save password" autofill feature)
 const SAVED_LOGIN_ENABLED = "savedLoginEnabled";
 const SAVED_LOGIN_EMAIL = "savedLoginEmail";
 const SAVED_LOGIN_PASSWORD = "savedLoginPassword";
-const LOGIN_SAVE_ASKED = "loginSaveAsked";
+// Tracks which email we've already shown the save-password prompt for,
+// so we don't nag on every single login.
+const LOGIN_SAVE_ASKED_EMAIL = "loginSaveAskedEmail";
 
 // Brand colors — matches the Namaste School reference UI
 const BRAND = {
@@ -51,6 +53,9 @@ export default function LoginScreen({ navigation }: any) {
   const [loginStatus, setLoginStatus] = useState<"idle" | "loading" | "success">(
     "idle"
   );
+  // While true, we're checking whether a "keep me logged in" session already
+  // exists — form is not rendered yet, to avoid a flash before auto-redirect.
+  const [checkingSession, setCheckingSession] = useState(true);
 
   const buttonWidth = useRef(new Animated.Value(screenWidth - 60)).current;
   const formTranslateX = useRef(new Animated.Value(0)).current;
@@ -58,7 +63,25 @@ export default function LoginScreen({ navigation }: any) {
     .current;
 
   useEffect(() => {
-    loadSavedLoginDetails();
+    initScreen();
+  }, []);
+
+  const initScreen = async () => {
+    try {
+      const keepLoggedIn = await AsyncStorage.getItem("keepLoggedIn");
+      const token = await AsyncStorage.getItem("userToken");
+
+      if (keepLoggedIn === "true" && token) {
+        // Valid remembered session — skip the login form entirely.
+        navigation.replace("DrawerRoot");
+        return;
+      }
+    } catch (error) {
+      console.log("Session check error:", error);
+    }
+
+    await loadSavedLoginDetails();
+    setCheckingSession(false);
 
     const animations = entranceAnims.map((anim) =>
       Animated.timing(anim, {
@@ -68,9 +91,8 @@ export default function LoginScreen({ navigation }: any) {
         easing: Easing.out(Easing.exp),
       })
     );
-
     Animated.stagger(120, animations).start();
-  }, []);
+  };
 
   const loadSavedLoginDetails = async () => {
     try {
@@ -80,11 +102,19 @@ export default function LoginScreen({ navigation }: any) {
         const savedEmail = await AsyncStorage.getItem(SAVED_LOGIN_EMAIL);
         const savedPassword = await AsyncStorage.getItem(SAVED_LOGIN_PASSWORD);
 
-        if (savedEmail) setEmail(savedEmail);
-        if (savedPassword) setPassword(savedPassword);
+        if (savedEmail) {
+          setEmail(savedEmail);
+        }
 
-        setRemember(true);
+        if (savedPassword) {
+          setPassword(savedPassword);
+        }
       }
+
+      // "Keep me logged in" checkbox reflects the session-persistence flag,
+      // independent of whether a password happens to be saved for autofill.
+      const keepLoggedIn = await AsyncStorage.getItem("keepLoggedIn");
+      setRemember(keepLoggedIn === "true");
     } catch (error) {
       console.log("Load saved login error:", error);
     }
@@ -97,17 +127,14 @@ export default function LoginScreen({ navigation }: any) {
     await AsyncStorage.setItem(SAVED_LOGIN_ENABLED, "true");
     await AsyncStorage.setItem(SAVED_LOGIN_EMAIL, loginEmail);
     await AsyncStorage.setItem(SAVED_LOGIN_PASSWORD, loginPassword);
-    await AsyncStorage.setItem(LOGIN_SAVE_ASKED, "true");
   };
 
   const removeSavedLoginDetails = async () => {
-    await AsyncStorage.multiRemove([
-      SAVED_LOGIN_ENABLED,
-      SAVED_LOGIN_EMAIL,
-      SAVED_LOGIN_PASSWORD,
-    ]);
-
-    await AsyncStorage.setItem(LOGIN_SAVE_ASKED, "true");
+    await Promise.all(
+      [SAVED_LOGIN_ENABLED, SAVED_LOGIN_EMAIL, SAVED_LOGIN_PASSWORD].map((key) =>
+        AsyncStorage.removeItem(key)
+      )
+    );
   };
 
   const goToDashboard = () => {
@@ -116,34 +143,46 @@ export default function LoginScreen({ navigation }: any) {
     }, 500);
   };
 
-  const askSaveLoginDetailsFirstTime = async (
+  const askSaveLoginDetails = (
     loginEmail: string,
     loginPassword: string
-  ) => {
-    Alert.alert(
-      "Save Login Details?",
-      "Do you want to save your email and password on this device for next login?",
-      [
-        {
-          text: "No",
-          style: "cancel",
-          onPress: async () => {
-            await removeSavedLoginDetails();
-            setRemember(false);
-            goToDashboard();
+  ): Promise<boolean> => {
+    return new Promise((resolve) => {
+      Alert.alert(
+        "Save Login Details?",
+        "Do you want to save your email and password on this device for next login?",
+        [
+          {
+            text: "No",
+            style: "cancel",
+            onPress: async () => {
+              try {
+                await removeSavedLoginDetails();
+              } catch (error) {
+                console.log("Remove saved login error:", error);
+              }
+
+              resolve(false);
+            },
           },
-        },
-        {
-          text: "Yes, Save",
-          onPress: async () => {
-            await saveLoginDetails(loginEmail, loginPassword);
-            setRemember(true);
-            goToDashboard();
+          {
+            text: "Yes, Save",
+            onPress: async () => {
+              try {
+                await saveLoginDetails(loginEmail, loginPassword);
+                resolve(true);
+              } catch (error) {
+                console.log("Save login details error:", error);
+                resolve(false);
+              }
+            },
           },
-        },
-      ],
-      { cancelable: false }
-    );
+        ],
+        {
+          cancelable: false,
+        }
+      );
+    });
   };
 
   const handleLogin = async () => {
@@ -252,7 +291,8 @@ export default function LoginScreen({ navigation }: any) {
 
       await AsyncStorage.setItem("userPermissions", JSON.stringify(permissions));
 
-      // This is only for token/session preference
+      // "Keep me logged in" — purely a session-persistence flag.
+      // Checked -> app reopen skips the login screen (see initScreen above).
       await AsyncStorage.setItem("keepLoggedIn", remember ? "true" : "false");
 
       await AsyncStorage.setItem(
@@ -279,22 +319,23 @@ export default function LoginScreen({ navigation }: any) {
       setLoginStatus("success");
       console.log("LOGIN SUCCESS — navigating to dashboard");
 
-      const alreadyAsked = await AsyncStorage.getItem(LOGIN_SAVE_ASKED);
+      // Save-password prompt — independent of "keep me logged in".
+      // Ask once per email unless the stored credentials no longer match.
+      const savedEmailStored = await AsyncStorage.getItem(SAVED_LOGIN_EMAIL);
+      const savedPasswordStored = await AsyncStorage.getItem(SAVED_LOGIN_PASSWORD);
+      const askedForEmail = await AsyncStorage.getItem(LOGIN_SAVE_ASKED_EMAIL);
 
-      // Navigation no longer waits on the Alert — if the Alert fails to show
-      // for any reason (web platform, OS quirk, etc.) the user still lands
-      // on the dashboard instead of getting stuck on the success screen.
-      goToDashboard();
+      const alreadySavedSame =
+        savedEmailStored === loginEmail && savedPasswordStored === loginPassword;
+      const alreadyAskedThisEmail = askedForEmail === loginEmail;
 
-      // First time successful login ke baad user se (in the background) ask karega
-      if (alreadyAsked !== "true") {
-        askSaveLoginDetailsFirstTime(loginEmail, loginPassword);
-      } else if (remember) {
-        // Agar user ne checkbox ON rakha hai to details save/update hongi
-        await saveLoginDetails(loginEmail, loginPassword);
-      } else {
-        await removeSavedLoginDetails();
+      if (!alreadySavedSame && !alreadyAskedThisEmail) {
+        await askSaveLoginDetails(loginEmail, loginPassword);
+        await AsyncStorage.setItem(LOGIN_SAVE_ASKED_EMAIL, loginEmail);
       }
+
+      // Only navigate after the save-password decision is resolved
+      goToDashboard();
     } catch (error: any) {
       setLoginStatus("idle");
 
@@ -307,8 +348,8 @@ export default function LoginScreen({ navigation }: any) {
       Alert.alert(
         "Login Failed",
         error?.response?.data?.message ||
-          error?.message ||
-          "Something went wrong during login"
+        error?.message ||
+        "Something went wrong during login"
       );
     }
   };
@@ -324,6 +365,15 @@ export default function LoginScreen({ navigation }: any) {
       },
     ],
   });
+
+  if (checkingSession) {
+    return (
+      <View style={styles.sessionLoader}>
+        <StatusBar barStyle="dark-content" backgroundColor={BRAND.bg} translucent={false} />
+        <ActivityIndicator size="large" color={BRAND.primary} />
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -460,6 +510,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: BRAND.bg,
+  },
+
+  sessionLoader: {
+    flex: 1,
+    backgroundColor: BRAND.bg,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   blobTopLeft: {

@@ -7,6 +7,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function GlobalAppBar({ navigation, title = "Dashboard" }: any) {
   const [showMenu, setShowMenu] = useState(false);
+  const SESSION_KEYS = [
+  "userToken", "userId", "employeeId", "userName", "userEmail", "userRole",
+  "isSuperAdmin", "userSchoolId", "userSchoolName", "userPermissions",
+  "keepLoggedIn", "userDesignation", "userDepartment", "userDoj",
+  "userBankAcc", "userBankName", "userBankIfsc", "userAvatar",
+  "school", "selectedSchoolId", "userType",
+];
   
   // 🚀 DYNAMIC DATA STATE
   const [user, setUser] = useState({
