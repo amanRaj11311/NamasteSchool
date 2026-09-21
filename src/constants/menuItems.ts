@@ -3,10 +3,10 @@ import { ImageSourcePropType } from 'react-native';
 export interface MenuItem {
   id: string;
   title: string;
-  icon: string; // Feather fallback
+  icon: string; 
   route: string;
-  bg: string; // tile background
-  fg: string; // icon colour (fallback)
+  bg: string; 
+  fg: string; 
   image?: ImageSourcePropType;
 }
 

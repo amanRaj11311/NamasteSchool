@@ -13,6 +13,7 @@ import {
   Animated,
   AppState,
   useWindowDimensions,
+  ImageSourcePropType,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -28,7 +29,6 @@ import {
   SHADOW,
   TOUCH_TARGET,
 } from '../constants/theme';
-import { MENU_ITEMS } from '../constants/menuItems';
 import {
   EventData,
   Upcoming,
@@ -42,11 +42,57 @@ const HEADER_RADIUS = 28;
 const BANNER_OVERLAP = 52;
 const GRID_GAP = SPACING.md;
 
+export interface MenuItem {
+  id: string;
+  title: string;
+  icon: string; 
+  route: string;
+  bg: string; 
+  fg: string; 
+  module: string; // Used for permission checks
+  image?: ImageSourcePropType;
+}
+
+export const MENU_ITEMS: MenuItem[] = [
+  { id: '1', title: 'Employee', icon: 'users', route: 'Staff', bg: '#D3EDF6', fg: '#1B8DB5', module: 'staff' },
+  { id: '2', title: 'Classes', icon: 'monitor', route: 'Classes', bg: '#FADFD6', fg: '#E0684A', module: 'classes' },
+  { id: '3', title: 'Transport', icon: 'truck', route: 'TransportFleet', bg: '#FCEBC2', fg: '#D9930D', module: 'transport' },
+  { id: '4', title: 'Fees', icon: 'credit-card', route: 'CollectAssignFees', bg: '#DADFF3', fg: '#4B5BC0', module: 'fees' },
+  { id: '5', title: 'TimeTable', icon: 'clock', route: 'Class TimeTable', bg: '#CDEBF1', fg: '#0F8FA8', module: 'timetable' },
+  { id: '6', title: 'Attendance', icon: 'check-square', route: 'Class Attendance', bg: '#F8DCD3', fg: '#D9573F', module: 'attendance' },
+  { id: '7', title: 'Notice Board', icon: 'clipboard', route: 'Notice Board', bg: '#F9E6B4', fg: '#C98A0A', module: 'communication' },
+  { id: '8', title: 'Diaries', icon: 'book-open', route: 'Diary', bg: '#D8DCF0', fg: '#5A57B5', module: 'diary' },
+  { id: '9', title: 'Leaves', icon: 'file-minus', route: 'Leaves', bg: '#D0E9F5', fg: '#2A86C2', module: 'leave' },
+];
+
+// Helper functions for evaluating permissions
+const norm = (v?: string) => (v || '').toString().trim().toLowerCase();
+
+const hasPermission = (perms: any[], isSuperAdmin: boolean, module?: string, action: string = 'read'): boolean => {
+  if (isSuperAdmin) return true;
+  if (!module) return false;
+  const m = norm(module);
+  return perms.some((p) => {
+    if (norm(p.module) !== m) return false;
+    const a = norm(p.action);
+    if (a === norm(action)) return true;
+    if (a === 'manage' || a === '*' || a === 'all') return true;
+    if (norm(action) === 'read' && (a === 'readown' || a === 'readall' || a === 'view')) return true;
+    return false;
+  });
+};
+
+const hasModuleAccess = (perms: any[], isSuperAdmin: boolean, module?: string): boolean => {
+  if (isSuperAdmin) return true;
+  if (!module) return false;
+  return perms.some((p) => norm(p.module) === norm(module));
+};
+
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
   const { width } = useWindowDimensions();
+  const scrollRef = useRef<ScrollView>(null);
 
-  // Responsive grid: 3 columns on phones, 4 on tablets / landscape
   const columns = width >= 600 ? 4 : 3;
   const isCompact = width < 360;
 
@@ -57,7 +103,11 @@ export default function HomeScreen() {
   const [hero, setHero] = useState<EventData>(() => getHeroForDate(new Date()));
   const [upcoming, setUpcoming] = useState<Upcoming | null>(() => getUpcoming(new Date()));
 
-  // One orchestrated moment: the hero card eases in when the day's content changes
+  // Permissions state
+  const [permissions, setPermissions] = useState<any[]>([]);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [filteredMenuItems, setFilteredMenuItems] = useState<MenuItem[]>([]);
+
   const heroAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     heroAnim.setValue(0);
@@ -68,10 +118,25 @@ export default function HomeScreen() {
     try {
       const name = await AsyncStorage.getItem('userName');
       const role = await AsyncStorage.getItem('userRole');
-      const superAdmin = await AsyncStorage.getItem('isSuperAdmin');
+      const superAdminRaw = await AsyncStorage.getItem('isSuperAdmin');
+      const permsRaw = await AsyncStorage.getItem('userPermissions');
+      
+      const isSuper = superAdminRaw === 'true';
+      let parsedPerms: any[] = [];
+      try { parsedPerms = permsRaw ? JSON.parse(permsRaw) : []; } catch (e) {}
+      if (!Array.isArray(parsedPerms)) parsedPerms = [];
 
       setUserName(name || 'User');
-      setUserRole(superAdmin === 'true' ? 'Principal / Admin' : role || 'Staff');
+      setUserRole(isSuper ? 'Principal / Admin' : role || 'Staff');
+      setIsSuperAdmin(isSuper);
+      setPermissions(parsedPerms);
+
+      // Filter grid based on retrieved permissions
+      const visibleModules = MENU_ITEMS.filter((item) => {
+        if (isSuper) return true;
+        return hasModuleAccess(parsedPerms, isSuper, item.module) || hasPermission(parsedPerms, isSuper, item.module, 'read');
+      });
+      setFilteredMenuItems(visibleModules);
     } catch (e) {}
   }, []);
 
@@ -97,7 +162,6 @@ export default function HomeScreen() {
     }, [loadUserData, updateDateTime])
   );
 
-  // Refresh when the app comes back to the foreground (e.g. opened after midnight)
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') updateDateTime();
@@ -116,6 +180,7 @@ export default function HomeScreen() {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         bounces={false}
@@ -155,15 +220,7 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              <TouchableOpacity
-                style={styles.menuIconBtn}
-                onPress={() => navigation.openDrawer()}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel="Open menu"
-              >
-                <Feather name="more-vertical" size={22} color={COLORS.white} />
-              </TouchableOpacity>
+             
             </View>
           </SafeAreaView>
         </LinearGradient>
@@ -235,48 +292,66 @@ export default function HomeScreen() {
         <View style={[styles.body, styles.contentWidth]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Quick access</Text>
-            <Text style={styles.sectionMeta}>{MENU_ITEMS.length} modules</Text>
+            <Text style={styles.sectionMeta}>{filteredMenuItems.length} modules</Text>
           </View>
 
-          <View style={styles.grid}>
-            {MENU_ITEMS.map((item) => (
-              <View key={item.id} style={{ width: `${100 / columns}%`, padding: GRID_GAP / 2 }}>
-                {/* Shadow lives on this wrapper: iOS drops shadows on overflow:hidden views */}
-                <View style={[styles.tileShadow, { backgroundColor: item.bg }]}>
-                  <Pressable
-                    onPress={() => navigation.navigate(item.route)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open ${item.title}`}
-                    style={({ pressed }) => [
-                      styles.tile,
-                      { backgroundColor: item.bg },
-                      pressed && styles.tilePressed,
-                    ]}
-                  >
-                    <View pointerEvents="none" style={styles.tileGlow} />
+          {filteredMenuItems.length === 0 ? (
+            <View style={styles.emptyGridContainer}>
+              <Feather name="shield-off" size={32} color={COLORS.primarySoftBorder} style={{ marginBottom: 10 }} />
+              <Text style={styles.emptyGridText}>No quick access modules assigned.</Text>
+            </View>
+          ) : (
+            <View style={styles.grid}>
+              {filteredMenuItems.map((item) => (
+                <View key={item.id} style={{ width: `${100 / columns}%`, padding: GRID_GAP / 2 }}>
+                  <View style={[styles.tileShadow, { backgroundColor: item.bg }]}>
+                    <Pressable
+                      onPress={() => navigation.navigate(item.route)}
+                      style={({ pressed }) => [
+                        styles.tile,
+                        { backgroundColor: item.bg },
+                        pressed && styles.tilePressed,
+                      ]}
+                    >
+                      <View pointerEvents="none" style={styles.tileGlow} />
 
-                    {item.image ? (
-                      <Image
-                        source={item.image}
-                        style={[styles.iconImage, isCompact && styles.iconImageCompact]}
-                        resizeMode="contain"
-                      />
-                    ) : (
-                      <View style={[styles.iconPlate, isCompact && styles.iconPlateCompact]}>
-                        <Feather name={item.icon as any} size={isCompact ? 22 : 26} color={item.fg} />
-                      </View>
-                    )}
+                      {item.image ? (
+                        <Image
+                          source={item.image}
+                          style={[styles.iconImage, isCompact && styles.iconImageCompact]}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <View style={[styles.iconPlate, isCompact && styles.iconPlateCompact]}>
+                          <Feather name={item.icon as any} size={isCompact ? 22 : 26} color={item.fg} />
+                        </View>
+                      )}
 
-                    <Text style={styles.tileText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-                      {item.title}
-                    </Text>
-                  </Pressable>
+                      <Text style={styles.tileText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                        {item.title}
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
-              </View>
-            ))}
-          </View>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
+
+      {/* ------------------------- FLOATING HOME BUTTON ------------------------- */}
+     <View style={styles.bottomNavigation}>
+  <TouchableOpacity
+    style={styles.bottomNavItem}
+    activeOpacity={0.8}
+    onPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
+  >
+    <View style={styles.bottomNavIconActive}>
+      <Feather name="home" size={22} color={COLORS.primary} />
+    </View>
+    <Text style={styles.bottomNavLabelActive}>Home</Text>
+  </TouchableOpacity>
+</View>
     </View>
   );
 }
@@ -285,19 +360,88 @@ export default function HomeScreen() {
 // STYLES
 // ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
+  bottomNavigation: {
+  position: 'absolute',
+  left: 0,
+  right: 0,
+  bottom: 0,
+  height: 72,
+  backgroundColor: COLORS.white,
+  borderTopWidth: 1,
+  borderTopColor: COLORS.borderFaint,
+  flexDirection: 'row',
+  justifyContent: 'center',
+  alignItems: 'center',
+  paddingBottom: Platform.OS === 'ios' ? 8 : 0,
+  elevation: 12,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: -2 },
+  shadowOpacity: 0.08,
+  shadowRadius: 8,
+},
+
+bottomNavItem: {
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: 70,
+},
+
+bottomNavIconActive: {
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginBottom: 3,
+},
+
+bottomNavLabelActive: {
+  fontSize: FONT.tiny,
+  fontWeight: '700',
+  color: COLORS.primary,
+},
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
   scrollContent: {
-    alignItems: 'center',
-    paddingBottom: SPACING.xxl + SPACING.lg,
-  },
+  alignItems: 'center',
+  paddingBottom: 100,
+},
   contentWidth: {
     width: '100%',
     maxWidth: MAX_CONTENT_WIDTH,
   },
-
+  emptyGridContainer: {
+    paddingVertical: SPACING.xl * 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyGridText: {
+    fontSize: FONT.small,
+    color: ON_DARK.low,
+    fontWeight: '600',
+  },
+  // Floating Home Button
+  bottomHomeWrap: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 34 : 24,
+    alignSelf: 'center',
+    zIndex: 100,
+  },
+  bottomHomeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.sm + 4,
+    borderRadius: RADIUS.pill,
+    ...SHADOW.raised,
+    shadowColor: COLORS.primaryDeep, 
+  },
+  bottomHomeBtnText: {
+    color: COLORS.white,
+    fontSize: FONT.small + 1,
+    fontWeight: '800',
+    marginLeft: SPACING.sm,
+  },
   // Header
   headerGradient: {
     width: '100%',
@@ -426,7 +570,7 @@ const styles = StyleSheet.create({
   },
   heroShadow: {
     borderRadius: RADIUS.xl,
-    backgroundColor: COLORS.primaryDeep, // needed for the iOS shadow to render
+    backgroundColor: COLORS.primaryDeep,
     ...SHADOW.raised,
   },
   heroCard: {

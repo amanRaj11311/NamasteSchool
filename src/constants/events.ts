@@ -61,8 +61,8 @@ export const FIXED_EVENTS: Record<string, EventData> = {
   '9-8': { title: 'International Literacy Day', subtitle: 'Reading opens every door', tag: 'Awareness', emoji: '📖', gradient: G.indigo },
   '9-14': { title: 'Hindi Diwas', subtitle: 'Celebrating the language of the heart', tag: 'Celebration', emoji: '🖋️', gradient: G.saffron },
   '9-15': { title: "Engineers' Day", subtitle: 'Remembering Sir M. Visvesvaraya', tag: 'Celebration', emoji: '⚙️', gradient: G.navy },
-  '9-21': { title: 'Intl. Day of Peace', subtitle: 'Special Assembly @ 10:00 AM', tag: 'Awareness', emoji: '☮️', gradient: G.teal, meta: '10:00 AM, Assembly Hall' },
-  '10-2': { title: 'Mahatma Gandhi Jayanti', subtitle: 'National Holiday', tag: 'Celebration', emoji: '🕊️', gradient: G.purple, meta: '10:30 AM, Morning Hall' },
+  '9-21': { title: 'Intl. Day of Peace', subtitle: 'peace ', tag: 'Awareness', emoji: '☮️', gradient: G.teal, meta: '' },
+  '10-2': { title: 'Mahatma Gandhi Jayanti', subtitle: 'National Holiday', tag: 'Celebration', emoji: '🕊️', gradient: G.purple, meta: '' },
   '10-5': { title: "World Teachers' Day", subtitle: 'A thank-you note goes a long way', tag: 'Celebration', emoji: '🍎', gradient: G.rose },
   '10-15': { title: "World Students' Day", subtitle: "Dr. A.P.J. Abdul Kalam's birthday", tag: 'Inspiration', emoji: '🚀', gradient: G.indigo },
   '10-31': { title: 'National Unity Day', subtitle: "Sardar Vallabhbhai Patel's birthday", tag: 'Celebration', emoji: '🤝', gradient: G.saffron },
@@ -73,12 +73,6 @@ export const FIXED_EVENTS: Record<string, EventData> = {
   '12-25': { title: 'Christmas', subtitle: 'Winter Vacation Begins', tag: 'Festival', emoji: '🎄', gradient: G.crimson },
 };
 
-/**
- * Festivals whose date shifts every year (lunar calendar etc.).
- * Key = 'YYYY-M-D'. Update this per-year — there's no reliable free
- * API for Indian festival dates either, so this is the one place to
- * maintain them season to season.
- */
 export const MOVABLE_EVENTS: Record<string, EventData> = {
   '2026-3-4': { title: 'Happy Holi', subtitle: 'Festival of colours', tag: 'Festival', emoji: '🎨', gradient: G.rose },
   '2026-8-28': { title: 'Raksha Bandhan', subtitle: 'Celebrating the bond of siblings', tag: 'Festival', emoji: '🪢', gradient: G.saffron },
