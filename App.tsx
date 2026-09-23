@@ -58,10 +58,8 @@ export default function App() {
   }
 
   return (
-    // 👇 2. Poore App ko SafeAreaProvider ke andar wrap kar diya
     <SafeAreaProvider>
       <ThemeProvider>
-        {/* 🚀 FIXED: navigationRef ko yahan attach kar diya */}
         <NavigationContainer ref={navigationRef}>
           <AppNavigator initialRoute={initialRoute} />
         </NavigationContainer>

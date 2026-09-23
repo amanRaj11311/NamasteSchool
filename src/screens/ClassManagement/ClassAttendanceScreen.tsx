@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList, TextInput, Modal,
   KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, RefreshControl,
-  useWindowDimensions, LayoutAnimation, UIManager,
+  useWindowDimensions, LayoutAnimation, UIManager, Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
@@ -62,7 +62,13 @@ const STATUS_ORDER = ['Present', 'Absent', 'Leave', 'Half-Day', 'Holiday'];
 
 // Fixed row height — required for FlatList.getItemLayout, which lets the list
 // skip measuring every row and jump-scroll instantly even with 500+ students.
+// Also used to keep the frozen name column's rows pixel-aligned with the
+// day-cells FlatList's rows, since both are now built from the same row height.
 const ROW_HEIGHT = 64;
+// Fixed header height so the sticky name-column header and the scrolling
+// date header line up pixel-for-pixel even though they now live in two
+// separate view trees.
+const HEADER_HEIGHT = 52;
 const EMPTY_ATTENDANCE: Record<string, string> = {};
 
 // Valid attendance statuses — used to validate payloads before they're sent.
@@ -145,45 +151,72 @@ const validateAttendancePayload = (
   return errors;
 };
 
-type StudentRowProps = {
+// ---------------------------------------------------------------------
+// StudentNameCell — the LEFT, fixed sticky column. It's no longer rendered
+// by its own FlatList (see the architecture note near the matrix render
+// block below) — it's mapped directly inside an Animated.View that is
+// translated in lockstep with the day-cells FlatList's native scroll
+// offset, so it stays visually joined to each row without ever scrolling
+// sideways or needing a second scrollable list.
+// ---------------------------------------------------------------------
+type StudentNameCellProps = {
+  student: any;
+  pct: number | null;
+  stickyColWidth: number;
+};
+const StudentNameCell = memo(({ student, pct, stickyColWidth }: StudentNameCellProps) => {
+  const pctColor = pct === null ? C.textFaint : pct >= 85 ? C.green : pct >= 60 ? C.amber : C.primary;
+  return (
+    <View
+      style={[
+        styles.matrixDataCell,
+        styles.matrixStickyCol,
+        { width: stickyColWidth, height: ROW_HEIGHT, borderLeftWidth: 3, borderLeftColor: pctColor },
+      ]}
+    >
+      <View style={styles.studentInfo}>
+        <View style={[styles.avatar, { backgroundColor: pctColor + '22' }]}>
+          <Text style={[styles.avatarText, { color: pctColor }]}>{getInitials(student.name)}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.studentName} numberOfLines={1}>{student.name}</Text>
+          <View style={styles.studentMetaRow}>
+            <Text style={styles.studentRoll}>Roll {student.rollNo || 'N/A'}</Text>
+            {pct !== null && (
+              <View style={[styles.pctBadge, { backgroundColor: pctColor + '18' }]}>
+                <Text style={[styles.studentPct, { color: pctColor }]}>{pct}%</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+});
+
+// ---------------------------------------------------------------------
+// StudentDayCells — the RIGHT, horizontally-scrolling row of day checkboxes
+// for one student. Rendered by its own FlatList inside the horizontal
+// ScrollView. Contains no student-identifying info by design — that's the
+// whole point of splitting it from StudentNameCell.
+// ---------------------------------------------------------------------
+type StudentDayCellsProps = {
   student: any;
   year: number;
   month: number;
   daysArray: number[];
   attendanceForStudent: Record<string, string>;
   canEdit: boolean;
-  pct: number | null;
   todayStr: string;
   dayCellWidth: number;
-  stickyColWidth: number;
   onCellPress: (student: any, dateStr: string) => void;
   onCellLongPress: (student: any, dateStr: string) => void;
 };
 
-const StudentRow = memo(
-  ({ student, year, month, daysArray, attendanceForStudent, canEdit, pct, todayStr, dayCellWidth, stickyColWidth, onCellPress, onCellLongPress }: StudentRowProps) => {
-    const pctColor = pct === null ? C.textFaint : pct >= 85 ? C.green : pct >= 60 ? C.amber : C.primary;
+const StudentDayCells = memo(
+  ({ student, year, month, daysArray, attendanceForStudent, canEdit, todayStr, dayCellWidth, onCellPress, onCellLongPress }: StudentDayCellsProps) => {
     return (
       <View style={styles.matrixDataRow}>
-        <View style={[styles.matrixDataCell, styles.matrixStickyCol, { width: stickyColWidth, borderLeftWidth: 3, borderLeftColor: pctColor }]}>
-          <View style={styles.studentInfo}>
-            <View style={[styles.avatar, { backgroundColor: pctColor + '22' }]}>
-              <Text style={[styles.avatarText, { color: pctColor }]}>{getInitials(student.name)}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.studentName} numberOfLines={1}>{student.name}</Text>
-              <View style={styles.studentMetaRow}>
-                <Text style={styles.studentRoll}>Roll {student.rollNo || 'N/A'}</Text>
-                {pct !== null && (
-                  <View style={[styles.pctBadge, { backgroundColor: pctColor + '18' }]}>
-                    <Text style={[styles.studentPct, { color: pctColor }]}>{pct}%</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          </View>
-        </View>
-
         {daysArray.map(day => {
           const dateStr = formatToYMD(new Date(year, month, day, 12, 0, 0));
           const status = attendanceForStudent[dateStr] || null;
@@ -270,6 +303,16 @@ export default function ClassAttendanceScreen() {
 
   const [attendanceMap, setAttendanceMap] = useState<Record<string, Record<string, string>>>({});
 
+  // Kept in sync with attendanceMap/studentPctMap on every render, but read
+  // from inside stable callbacks (onCellPress, onCellLongPress, the row
+  // renderers) instead of the state itself. This is what lets those
+  // callbacks keep the SAME function identity across taps — previously they
+  // listed attendanceMap as a dependency, so every single tap produced a
+  // brand new onCellPress/renderItem, which forced the whole visible window
+  // to re-render on every checkbox tap.
+  const attendanceMapRef = useRef<Record<string, Record<string, string>>>({});
+  useEffect(() => { attendanceMapRef.current = attendanceMap; }, [attendanceMap]);
+
   // Selection States
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [selectedMonth, setSelectedMonth] = useState<Date>(new Date());
@@ -334,9 +377,13 @@ export default function ClassAttendanceScreen() {
   useEffect(() => { initialize(); }, []);
 
   const initialize = async () => {
-    const token = await AsyncStorage.getItem('userToken');
-    const permsRaw = await AsyncStorage.getItem('userPermissions');
-    const superAdminRaw = await AsyncStorage.getItem('isSuperAdmin');
+    // Read all three AsyncStorage keys in parallel instead of one at a time
+    // — shaves a little off the time before the first fetch can start.
+    const [token, permsRaw, superAdminRaw] = await Promise.all([
+      AsyncStorage.getItem('userToken'),
+      AsyncStorage.getItem('userPermissions'),
+      AsyncStorage.getItem('isSuperAdmin'),
+    ]);
 
     if (permsRaw) setPermissions(JSON.parse(permsRaw));
     setIsSuperAdmin(superAdminRaw === 'true');
@@ -375,6 +422,10 @@ export default function ClassAttendanceScreen() {
     // Cache-first: paint the last known matrix immediately (if any) so
     // students never sit on a blank/spinner screen while we go fetch the
     // latest data in the background. Pull-to-refresh always skips this.
+    // Because single-cell taps now patch this same cache entry immediately
+    // (see patchAttendanceCache below), whatever gets painted here already
+    // reflects the last checkbox the teacher tapped, even if the network
+    // hadn't confirmed it yet when they left the screen.
     let paintedFromCache = false;
     if (!isRefresh) {
       try {
@@ -409,6 +460,43 @@ export default function ClassAttendanceScreen() {
     } catch (e) { console.error(e); }
     finally { setLoading(false); setRefreshing(false); setSyncing(false); }
   };
+
+  // ---------------------------------------------------------------------
+  // patchAttendanceCache — updates just ONE record inside the existing
+  // class+month cache entry, without waiting for (or requiring) a full
+  // network refetch. Called right after a single checkbox tap is confirmed
+  // saved on the server (see onCellPress below).
+  //
+  // Why this matters: before this, only a full fetchGridData() call wrote
+  // to AsyncStorage — so a burst of quick checkbox taps updated the on-screen
+  // state instantly but left the CACHE stale. If the teacher then left the
+  // screen and came back (or the app cold-started) before a full refetch
+  // happened, fetchGridData's cache-first paint would briefly show the OLD
+  // (pre-tap) checkbox state, then "snap" to correct once the network
+  // request finished — exactly the empty-then-correct flicker being
+  // reported. Patching the cache on every successful tap closes that gap.
+  // ---------------------------------------------------------------------
+  const patchAttendanceCache = useCallback(async (classId: string, monthDate: Date, studentKey: string, dateStr: string, status: string) => {
+    try {
+      const year = monthDate.getFullYear();
+      const month = String(monthDate.getMonth() + 1).padStart(2, '0');
+      const cacheKey = gridCacheKey(classId, year, month);
+      const cachedRaw = await AsyncStorage.getItem(cacheKey);
+      if (!cachedRaw) return; // nothing cached yet for this class/month — the next full fetch will seed it
+      const cached = JSON.parse(cachedRaw);
+      const records: any[] = Array.isArray(cached.attendanceRecords) ? cached.attendanceRecords : [];
+      const idx = records.findIndex((r: any) => (r.rollNo?.toString() || r.studentName) === studentKey && r.date?.split('T')[0] === dateStr);
+      if (idx >= 0) {
+        records[idx] = { ...records[idx], status };
+      } else {
+        records.push({ rollNo: studentKey, studentName: studentKey, date: dateStr, status });
+      }
+      await AsyncStorage.setItem(cacheKey, JSON.stringify({ ...cached, attendanceRecords: records }));
+    } catch (e) {
+      // Best-effort — a failed cache patch just means the next full fetch
+      // will resync it. Never let this block or fail the actual save.
+    }
+  }, []);
 
   const hasPermission = useCallback((action: string) => {
     if (isSuperAdmin) return true;
@@ -694,6 +782,30 @@ export default function ClassAttendanceScreen() {
     setSelectedStatDate(prev => (prev === dateStr ? null : dateStr));
   }, []);
 
+  // ---------------------------------------------------------------------
+  // Serialized save queue.
+  //
+  // The old code fired one axios.post per tapped cell, in parallel, with no
+  // coordination between them. Tapping several checkboxes quickly sent
+  // several concurrent writes for the same class/date — a classic
+  // read-modify-write race on the backend — and whenever one of those
+  // concurrent requests failed, the old error handler called a FULL grid
+  // refetch, which overwrote every other optimistic tap still in flight
+  // with stale server data. That's what made checkboxes appear to
+  // "un-check themselves" when tapped in a burst.
+  //
+  // Routing every write through this queue guarantees the backend only
+  // ever receives one attendance write at a time, in the order the user
+  // tapped them, which removes the race that was causing the failures in
+  // the first place.
+  // ---------------------------------------------------------------------
+  const saveQueueRef = useRef<Promise<any>>(Promise.resolve());
+  const enqueueSave = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
+    const run = saveQueueRef.current.then(task, task);
+    // Keep the chain alive after a failure so the next queued save still runs.
+    saveQueueRef.current = run.then(() => undefined, () => undefined);
+    return run;
+  }, []);
 
   const handleSaveDaily = async () => {
     if (!selectedClassId || !selectedSchoolId) {
@@ -728,14 +840,13 @@ export default function ClassAttendanceScreen() {
         attendanceList,
       };
 
-      console.log('FINAL ATTENDANCE PAYLOAD:', JSON.stringify(payload, null, 2));
-
-      await axios.post(CLASS_ATTENDANCE_URL, payload, authHeaders(authToken));
+      // Goes through the same serialized queue as single-cell taps so a
+      // bulk daily save never races an in-flight cell edit.
+      await enqueueSave(() => axios.post(CLASS_ATTENDANCE_URL, payload, authHeaders(authToken)));
       Alert.alert('Success', 'Attendance marked successfully.');
       setDailyModalVisible(false);
       fetchGridData(authToken, selectedClassId, selectedMonth, true);
     } catch (error: any) {
-      console.log('ATTENDANCE SAVE ERROR:', JSON.stringify(error.response?.data || error.message, null, 2));
       Alert.alert(
         'Error',
         error.response?.data?.message ||
@@ -782,13 +893,10 @@ export default function ClassAttendanceScreen() {
         attendanceList,
       };
 
-      console.log('FINAL ATTENDANCE PAYLOAD:', JSON.stringify(payload, null, 2));
-
-      await axios.post(CLASS_ATTENDANCE_URL, payload, authHeaders(authToken));
+      await enqueueSave(() => axios.post(CLASS_ATTENDANCE_URL, payload, authHeaders(authToken)));
       setSingleEditModalVisible(false);
       fetchGridData(authToken, selectedClassId, selectedMonth, true);
     } catch (error: any) {
-      console.log('ATTENDANCE SAVE ERROR:', JSON.stringify(error.response?.data || error.message, null, 2));
       Alert.alert(
         'Error',
         error.response?.data?.message ||
@@ -800,12 +908,9 @@ export default function ClassAttendanceScreen() {
     }
   };
 
-  // Tapping a day cell now behaves like a plain checkbox: Present <-> Absent,
-  // saved immediately — no picker, no modal. Long-press still opens the full
-  // status editor for the rarer Leave / Half-Day / Holiday cases.
-  const [pendingCellKeys, setPendingCellKeys] = useState<Set<string>>(new Set());
+  const pendingCellKeysRef = useRef<Set<string>>(new Set());
 
-  const onCellPress = useCallback(async (student: any, dateStr: string) => {
+  const onCellPress = useCallback((student: any, dateStr: string) => {
     if (isFutureDateStr(dateStr)) return; // defensive — cell is already disabled for future dates
     if (!selectedClassId || !selectedSchoolId) {
       Alert.alert('Missing info', 'Could not determine the school for this class. Try reselecting the class.');
@@ -814,10 +919,10 @@ export default function ClassAttendanceScreen() {
 
     const key = student.rollNo?.toString() || student.name;
     const cellKey = `${key}__${dateStr}`;
-    if (pendingCellKeys.has(cellKey)) return; // ignore double taps while saving
+    if (pendingCellKeysRef.current.has(cellKey)) return; // ignore double taps while saving
 
-    const existing = attendanceMap[key]?.[dateStr];
-    const nextStatus = existing === 'Present' ? 'Absent' : 'Present';
+    const previousStatus = attendanceMapRef.current[key]?.[dateStr] ?? null;
+    const nextStatus = previousStatus === 'Present' ? 'Absent' : 'Present';
     const attendanceList = [buildAttendanceItem(student, nextStatus)];
 
     const errors = validateAttendancePayload(selectedClassId, selectedSchoolId, dateStr, attendanceList);
@@ -834,26 +939,43 @@ export default function ClassAttendanceScreen() {
       [key]: { ...(prev[key] || {}), [dateStr]: nextStatus },
     }));
 
-    setPendingCellKeys(prev => new Set(prev).add(cellKey));
-    try {
-      const payload = { classId: selectedClassId, schoolId: selectedSchoolId, date: dateStr, attendanceList };
-      await axios.post(CLASS_ATTENDANCE_URL, payload, authHeaders(authToken));
-    } catch (error: any) {
-      // Revert by re-pulling from the server if the save failed.
-      Alert.alert('Error', error.response?.data?.message || error.response?.data?.error || 'Failed to update status.');
-      fetchGridData(authToken, selectedClassId, selectedMonth, true);
-    } finally {
-      setPendingCellKeys(prev => { const next = new Set(prev); next.delete(cellKey); return next; });
-    }
-  }, [attendanceMap, isFutureDateStr, selectedClassId, selectedSchoolId, authToken, selectedMonth, pendingCellKeys]);
+    pendingCellKeysRef.current.add(cellKey);
+
+    const classIdAtTap = selectedClassId;
+    const monthAtTap = selectedMonth;
+
+    // The network write is serialized behind every other pending write, and
+    // a failure here reverts ONLY this cell — never the whole grid — so a
+    // burst of taps on other cells is left completely untouched.
+    enqueueSave(async () => {
+      try {
+        const payload = { classId: selectedClassId, schoolId: selectedSchoolId, date: dateStr, attendanceList };
+        await axios.post(CLASS_ATTENDANCE_URL, payload, authHeaders(authToken));
+        // Save confirmed — patch the on-disk cache too, right away, so a
+        // reload/cold-start before the next full refetch still shows this
+        // tap instead of the older cached value.
+        patchAttendanceCache(classIdAtTap, monthAtTap, key, dateStr, nextStatus);
+      } catch (error: any) {
+        setAttendanceMap(prev => {
+          const nextForKey = { ...(prev[key] || {}) };
+          if (previousStatus === null) delete nextForKey[dateStr];
+          else nextForKey[dateStr] = previousStatus;
+          return { ...prev, [key]: nextForKey };
+        });
+        Alert.alert('Error', error.response?.data?.message || error.response?.data?.error || 'Failed to update status.');
+      } finally {
+        pendingCellKeysRef.current.delete(cellKey);
+      }
+    });
+  }, [isFutureDateStr, selectedClassId, selectedSchoolId, selectedMonth, authToken, enqueueSave, patchAttendanceCache]);
 
   const onCellLongPress = useCallback((student: any, dateStr: string) => {
     if (isFutureDateStr(dateStr)) return;
     const key = student.rollNo?.toString() || student.name;
-    const existing = attendanceMap[key]?.[dateStr] || 'Present';
+    const existing = attendanceMapRef.current[key]?.[dateStr] || 'Present';
     setSingleEditData({ student, dateStr, status: existing });
     setSingleEditModalVisible(true);
-  }, [attendanceMap, isFutureDateStr]);
+  }, [isFutureDateStr]);
 
   const keyExtractor = useCallback((item: any) => item._id, []);
 
@@ -861,25 +983,62 @@ export default function ClassAttendanceScreen() {
     { length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index }
   ), []);
 
-  const renderStudentRow = useCallback(({ item: student }: { item: any }) => {
+  // ---------------------------------------------------------------------
+  // ONE vertical scroller, native-driven frozen column.
+  //
+  // Previously the sticky name column and the day cells were rendered by
+  // TWO independent FlatLists, kept "in sync" by listening to each list's
+  // onScroll and imperatively calling scrollToOffset() on the other one:
+  //
+  //   nameListRef.current?.scrollToOffset({ offset, animated: false })
+  //   dataListRef.current?.scrollToOffset({ offset, animated: false })
+  //
+  // scrollToOffset is a JS-thread → native bridge call, not a continuous
+  // native animation. With the horizontal ScrollView gesture also running,
+  // the JS thread got congested handling both the pan responder and this
+  // round-trip sync, which is what produced the jittery "fast, then
+  // stop/restart" horizontal scrolling. On Android specifically it also
+  // caused the frozen column to visually disappear: removeClippedSubviews
+  // recomputes each FlatList's own clip rect from its own last scroll
+  // offset, and when the imperative sync calls lagged or arrived out of
+  // order, the name list's clip rect went stale and clipped rows that
+  // should have been visible.
+  //
+  // Fix: there is now only ONE real vertically-scrolling list — the
+  // day-cells FlatList below. Its scroll position is captured into a
+  // native-driver Animated.Value (`scrollY`), and the frozen name column
+  // (rendered further down, outside the horizontal ScrollView) mirrors that
+  // value via a `translateY` transform on an Animated.View. Because the
+  // transform runs entirely on the UI thread, there's no bridge traffic, no
+  // JS-thread contention, and no feedback loop between two lists.
+  // ---------------------------------------------------------------------
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const handleGridScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+    { useNativeDriver: true }
+  );
+
+  // Reads attendanceMap from a ref rather than listing it as a dependency,
+  // so this function's identity stays stable across taps. The FlatList is
+  // told about data changes via its own `extraData` (see below), which is
+  // the correct way to keep a virtualized list both fast and correct.
+  const renderDayCells = useCallback(({ item: student }: { item: any }) => {
     const key = student.rollNo?.toString() || student.name;
     return (
-      <StudentRow
+      <StudentDayCells
         student={student}
         year={selectedMonth.getFullYear()}
         month={selectedMonth.getMonth()}
         daysArray={daysArray}
-        attendanceForStudent={attendanceMap[key] || EMPTY_ATTENDANCE}
+        attendanceForStudent={attendanceMapRef.current[key] || EMPTY_ATTENDANCE}
         canEdit={canEditCells}
-        pct={studentPctMap[key] ?? null}
         todayStr={todayStr}
         dayCellWidth={dayCellWidth}
-        stickyColWidth={stickyColWidth}
         onCellPress={onCellPress}
         onCellLongPress={onCellLongPress}
       />
     );
-  }, [selectedMonth, daysArray, attendanceMap, canEditCells, studentPctMap, todayStr, dayCellWidth, stickyColWidth, onCellPress, onCellLongPress]);
+  }, [selectedMonth, daysArray, canEditCells, todayStr, dayCellWidth, onCellPress, onCellLongPress]);
 
   const renderInlineDropdown = (fieldKey: string, label: string, options: Option[], value: string, onSelect: (v: string) => void) => {
     const isOpen = activeDropdown === fieldKey;
@@ -891,17 +1050,35 @@ export default function ClassAttendanceScreen() {
           <Text style={selectedObj ? styles.dropdownSelectedText : styles.dropdownPlaceholder} numberOfLines={1}>{selectedObj?.label || 'Select...'}</Text>
           <Feather name={isOpen ? 'chevron-up' : 'chevron-down'} size={16} color={C.textMuted} />
         </TouchableOpacity>
-        {isOpen && (
-          <View style={styles.dropdownListContainer}>
-            <ScrollView nestedScrollEnabled style={{ maxHeight: 190 }}>
-              {options.map(opt => (
-                <TouchableOpacity key={opt.value} style={styles.dropdownItem} onPress={() => { onSelect(opt.value); setActiveDropdown(null); }}>
-                  <Text style={[styles.dropdownItemText, value === opt.value && styles.textBrand]}>{opt.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
+     {isOpen && (
+  <View style={styles.dropdownListContainer}>
+    {options.map(opt => (
+      <TouchableOpacity
+        key={opt.value}
+        style={styles.dropdownItem}
+        onPress={() => {
+          onSelect(opt.value);
+          setActiveDropdown(null);
+        }}
+        activeOpacity={0.7}
+      >
+        <Text
+          style={[
+            styles.dropdownItemText,
+            value === opt.value && styles.textBrand,
+          ]}
+          numberOfLines={1}
+        >
+          {opt.label}
+        </Text>
+
+        {value === opt.value && (
+          <Feather name="check" size={15} color={C.primary} />
         )}
+      </TouchableOpacity>
+    ))}
+  </View>
+)}
       </View>
     );
   };
@@ -938,8 +1115,8 @@ export default function ClassAttendanceScreen() {
       </View>
 
       <View style={styles.filterSection}>
-        <View style={{ flexDirection: 'row', gap: 10, zIndex: 10 }}>
-          <View style={{ flex: 1.3 }}>
+        <View style={{ flexDirection: 'row', gap: 10, zIndex: 100 }}>
+          <View style={{ flex: 1.3, zIndex: 200 }}>
             {renderInlineDropdown('classFilter', 'CLASS', classes.map(c => ({ label: c.className, value: c._id })), selectedClassId, (v) => { setSelectedClassId(v); fetchGridData(authToken, v, selectedMonth); })}
           </View>
           <View style={{ flex: 1 }}>
@@ -997,62 +1174,118 @@ export default function ClassAttendanceScreen() {
         </View>
       ) : (
         <View style={styles.matrixContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={true} bounces={false} style={{ flex: 1 }}>
-            {/* flex:1 here is what keeps the FlatList's height bounded so it
-                can virtualize properly instead of rendering every student row
-                at once — this is the main fix for lag with large classes. */}
-            <View style={{ flex: 1 }}>
-              {/* Matrix Header Row — each day cell doubles as a KPI filter:
-                  tap a day to open the stats sheet scoped to just that day. */}
-              <View style={styles.matrixHeaderRow}>
-                <View style={[styles.matrixHeaderCell, styles.matrixStickyCol, { width: stickyColWidth }]}>
-                  <Text style={styles.matrixHeaderTitle}>STUDENT PROFILE</Text>
-                </View>
-                {daysArray.map(day => {
-                  const dateStr = formatToYMD(new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), day, 12, 0, 0));
-                  const isToday = dateStr === todayStr;
-                  const isFuture = dateStr > todayStr;
-                  const isSelected = selectedStatDate === dateStr;
-                  return (
-                    <TouchableOpacity
-                      key={day}
-                      style={[
-                        styles.matrixHeaderDayCell,
-                        { width: dayCellWidth },
-                        isToday && styles.matrixHeaderTodayCell,
-                        isSelected && styles.matrixHeaderSelectedCell,
-                      ]}
-                      activeOpacity={0.7}
-                      onPress={() => toggleStatDate(dateStr)}
-                    >
-                      <Text style={[styles.matrixDayText, isSelected && styles.matrixDayTextSelected]}>{day}</Text>
-                      {isSunday(selectedMonth.getFullYear(), selectedMonth.getMonth(), day) && (
-                        <Text style={styles.matrixSunText}>SUN</Text>
-                      )}
-                      {isToday && <View style={styles.todayDot} />}
-                      {isFuture && <Feather name="lock" size={8} color={C.textFaint} style={{ marginTop: 2 }} />}
-                    </TouchableOpacity>
-                  );
-                })}
+          <View style={{ flex: 1, flexDirection: 'row' }}>
+
+            {/* FIXED left column — a plain (non-scrolling) container. It never
+                receives touch/scroll gestures of its own; it's visually
+                translated in lockstep with the day-cells FlatList below via
+                `scrollY`, a native-driver Animated.Value, so it stays pinned
+                to each row without any JS-thread synchronization. */}
+            <View style={{ width: stickyColWidth, borderRightWidth: 1, borderColor: C.border, backgroundColor: C.surface }}>
+              <View style={[styles.matrixHeaderCell, { width: stickyColWidth, height: HEADER_HEIGHT }]}>
+                <Text style={styles.matrixHeaderTitle}>STUDENT PROFILE</Text>
               </View>
 
-              {/* Matrix Body Rows — virtualized */}
-              <FlatList
-                data={filteredStudents}
-                keyExtractor={keyExtractor}
-                renderItem={renderStudentRow}
-                getItemLayout={getItemLayout}
-                showsVerticalScrollIndicator={true}
-                contentContainerStyle={{ paddingBottom: 110 + insets.bottom }}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchGridData(authToken, selectedClassId, selectedMonth, true)} colors={[C.primary]} />}
-                initialNumToRender={16}
-                maxToRenderPerBatch={16}
-                windowSize={9}
-                removeClippedSubviews={false}
-                updateCellsBatchingPeriod={50}
-              />
+              <View style={{ flex: 1, overflow: 'hidden' }}>
+                <Animated.View style={{ transform: [{ translateY: Animated.multiply(scrollY, -1) }] }}>
+                  {filteredStudents.map(student => {
+                    const key = student.rollNo?.toString() || student.name;
+                    return (
+                      <StudentNameCell
+                        key={student._id}
+                        student={student}
+                        pct={studentPctMap[key] ?? null}
+                        stickyColWidth={stickyColWidth}
+                      />
+                    );
+                  })}
+                  {/* Mirrors the day-cells FlatList's bottom content padding so
+                      the frozen column keeps translating correctly all the way
+                      to the end of the list (including past the last row, up
+                      to the same rubber-band/overscroll extent). */}
+                  <View style={{ height: 110 + insets.bottom }} />
+                </Animated.View>
+              </View>
             </View>
-          </ScrollView>
+
+            {/* SCROLLABLE right region — only the dates move sideways here.
+                flex:1 keeps the inner FlatList's height bounded so it can
+                virtualize properly instead of rendering every student row
+                at once — this is what keeps things fast with large classes. */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={true}
+              bounces={false}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ flexGrow: 1 }}
+            >
+              <View style={{ width: daysArray.length * dayCellWidth }}>
+                {/* Matrix Header Row — each day cell doubles as a KPI filter:
+                    tap a day to open the stats sheet scoped to just that day. */}
+                <View style={[styles.matrixHeaderRow, { height: HEADER_HEIGHT }]}>
+                  {daysArray.map(day => {
+                    const dateStr = formatToYMD(new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), day, 12, 0, 0));
+                    const isToday = dateStr === todayStr;
+                    const isFuture = dateStr > todayStr;
+                    const isSelected = selectedStatDate === dateStr;
+                    return (
+                      <TouchableOpacity
+                        key={day}
+                        style={[
+                          styles.matrixHeaderDayCell,
+                          { width: dayCellWidth },
+                          isToday && styles.matrixHeaderTodayCell,
+                          isSelected && styles.matrixHeaderSelectedCell,
+                        ]}
+                        activeOpacity={0.7}
+                        onPress={() => toggleStatDate(dateStr)}
+                      >
+                        <Text style={[styles.matrixDayText, isSelected && styles.matrixDayTextSelected]}>{day}</Text>
+                        {isSunday(selectedMonth.getFullYear(), selectedMonth.getMonth(), day) && (
+                          <Text style={styles.matrixSunText}>SUN</Text>
+                        )}
+                        {isToday && <View style={styles.todayDot} />}
+                        {isFuture && <Feather name="lock" size={8} color={C.textFaint} style={{ marginTop: 2 }} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Matrix Body Rows — the ONE real vertically-scrolling,
+                    virtualized list in the matrix. The frozen name column
+                    (above) mirrors its scroll position via `scrollY`. */}
+                <Animated.FlatList
+                  data={filteredStudents}
+                  keyExtractor={keyExtractor}
+                  renderItem={renderDayCells}
+                  extraData={attendanceMap}
+                  getItemLayout={getItemLayout}
+                  showsVerticalScrollIndicator={true}
+                  onScroll={handleGridScroll}
+                  scrollEventThrottle={16}
+                  contentContainerStyle={{ paddingBottom: 110 + insets.bottom }}
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={refreshing}
+                      onRefresh={() => {
+                        // Don't let an accidental pull-to-refresh mid-tap wipe
+                        // out cell saves that are still in flight.
+                        if (pendingCellKeysRef.current.size > 0) return;
+                        fetchGridData(authToken, selectedClassId, selectedMonth, true);
+                      }}
+                      colors={[C.primary]}
+                    />
+                  }
+                  initialNumToRender={16}
+                  maxToRenderPerBatch={16}
+                  windowSize={9}
+                  removeClippedSubviews={Platform.OS === 'android'}
+                  updateCellsBatchingPeriod={50}
+                  style={{ width: daysArray.length * dayCellWidth }}
+                />
+              </View>
+            </ScrollView>
+          </View>
         </View>
       )}
 
@@ -1467,7 +1700,7 @@ const styles = StyleSheet.create({
   // Matrix Styles
   matrixContainer: { flex: 1, backgroundColor: C.surface },
   matrixHeaderRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: C.border, backgroundColor: C.surfaceSoft },
-  matrixHeaderCell: { padding: 12, justifyContent: 'center', borderRightWidth: 1, borderColor: C.border },
+  matrixHeaderCell: { padding: 12, justifyContent: 'center', borderRightWidth: 1, borderColor: C.border, borderBottomWidth: 1, backgroundColor: C.surfaceSoft },
   matrixStickyCol: {},
   matrixHeaderTitle: { fontSize: 10, fontWeight: '800', color: C.textMuted, letterSpacing: 0.5 },
   matrixHeaderDayCell: { padding: 8, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderColor: C.border },
@@ -1554,8 +1787,23 @@ const styles = StyleSheet.create({
   dropdownHeaderActive: { borderColor: C.primary },
   dropdownSelectedText: { fontSize: 13, color: C.text, fontWeight: '600' },
   dropdownPlaceholder: { fontSize: 13, color: C.textFaint },
-  dropdownListContainer: { position: 'absolute', top: 70, left: 0, right: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, elevation: 6, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8 },
-  dropdownItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 13, borderBottomWidth: 1, borderBottomColor: C.border },
+dropdownListContainer: {
+  position: 'absolute',
+  top: 70,
+  left: 0,
+  right: 0,
+  backgroundColor: C.surface,
+  borderWidth: 1,
+  borderColor: C.border,
+  borderRadius: 12,
+  elevation: 10,
+  shadowColor: '#000',
+  shadowOpacity: 0.15,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 5 },
+  zIndex: 999,
+  overflow: 'hidden',
+},  dropdownItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 13, borderBottomWidth: 1, borderBottomColor: C.border },
   dropdownItemText: { fontSize: 13, color: '#374151', fontWeight: '500' },
   textBrand: { color: C.primary, fontWeight: '700' },
 

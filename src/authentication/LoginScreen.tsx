@@ -31,11 +31,7 @@ const AnimatedTouchableOpacity =
 const SAVED_LOGIN_ENABLED = "savedLoginEnabled";
 const SAVED_LOGIN_EMAIL = "savedLoginEmail";
 const SAVED_LOGIN_PASSWORD = "savedLoginPassword";
-// Tracks which email we've already shown the save-password prompt for,
-// so we don't nag on every single login.
 const LOGIN_SAVE_ASKED_EMAIL = "loginSaveAskedEmail";
-
-// Brand colors — matches the Namaste School reference UI
 const BRAND = {
   primary: "#DC2626", // main red
   primaryDark: "#B91C1C",
@@ -53,8 +49,6 @@ export default function LoginScreen({ navigation }: any) {
   const [loginStatus, setLoginStatus] = useState<"idle" | "loading" | "success">(
     "idle"
   );
-  // While true, we're checking whether a "keep me logged in" session already
-  // exists — form is not rendered yet, to avoid a flash before auto-redirect.
   const [checkingSession, setCheckingSession] = useState(true);
 
   const buttonWidth = useRef(new Animated.Value(screenWidth - 60)).current;
@@ -111,8 +105,6 @@ export default function LoginScreen({ navigation }: any) {
         }
       }
 
-      // "Keep me logged in" checkbox reflects the session-persistence flag,
-      // independent of whether a password happens to be saved for autofill.
       const keepLoggedIn = await AsyncStorage.getItem("keepLoggedIn");
       setRemember(keepLoggedIn === "true");
     } catch (error) {
@@ -291,8 +283,6 @@ export default function LoginScreen({ navigation }: any) {
 
       await AsyncStorage.setItem("userPermissions", JSON.stringify(permissions));
 
-      // "Keep me logged in" — purely a session-persistence flag.
-      // Checked -> app reopen skips the login screen (see initScreen above).
       await AsyncStorage.setItem("keepLoggedIn", remember ? "true" : "false");
 
       await AsyncStorage.setItem(
@@ -319,8 +309,6 @@ export default function LoginScreen({ navigation }: any) {
       setLoginStatus("success");
       console.log("LOGIN SUCCESS — navigating to dashboard");
 
-      // Save-password prompt — independent of "keep me logged in".
-      // Ask once per email unless the stored credentials no longer match.
       const savedEmailStored = await AsyncStorage.getItem(SAVED_LOGIN_EMAIL);
       const savedPasswordStored = await AsyncStorage.getItem(SAVED_LOGIN_PASSWORD);
       const askedForEmail = await AsyncStorage.getItem(LOGIN_SAVE_ASKED_EMAIL);
@@ -334,7 +322,6 @@ export default function LoginScreen({ navigation }: any) {
         await AsyncStorage.setItem(LOGIN_SAVE_ASKED_EMAIL, loginEmail);
       }
 
-      // Only navigate after the save-password decision is resolved
       goToDashboard();
     } catch (error: any) {
       setLoginStatus("idle");
@@ -386,7 +373,6 @@ export default function LoginScreen({ navigation }: any) {
         translucent={false}
       />
 
-      {/* Decorative glow blobs — matches the soft red radial background in the reference UI */}
       <View pointerEvents="none" style={styles.blobTopLeft} />
       <View pointerEvents="none" style={styles.blobBottomRight} />
 
@@ -676,7 +662,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     flexDirection: "row",
-    backgroundColor: BRAND.primaryDark, // fallback color if gradient style isn't supported
+    backgroundColor: BRAND.primaryDark, 
     shadowColor: BRAND.primary,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,

@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
@@ -29,6 +30,7 @@ import {
   SHADOW,
   TOUCH_TARGET,
 } from '../constants/theme';
+
 import {
   EventData,
   Upcoming,
@@ -37,112 +39,395 @@ import {
   getGreeting,
 } from '../constants/events';
 
+import { API_BASE } from '../network/api';
+
 const MAX_CONTENT_WIDTH = 720;
 const HEADER_RADIUS = 28;
 const BANNER_OVERLAP = 52;
 const GRID_GAP = SPACING.md;
 
+// ---------------------------------------------------------------------------
+// MENU ITEMS
+// ---------------------------------------------------------------------------
+
 export interface MenuItem {
   id: string;
   title: string;
-  icon: string; 
+  icon: string;
   route: string;
-  bg: string; 
-  fg: string; 
-  module: string; // Used for permission checks
+  bg: string;
+  fg: string;
+  module: string;
   image?: ImageSourcePropType;
 }
 
 export const MENU_ITEMS: MenuItem[] = [
-  { id: '1', title: 'Employee', icon: 'users', route: 'Staff', bg: '#D3EDF6', fg: '#1B8DB5', module: 'staff' },
-  { id: '2', title: 'Classes', icon: 'monitor', route: 'Classes', bg: '#FADFD6', fg: '#E0684A', module: 'classes' },
-  { id: '3', title: 'Transport', icon: 'truck', route: 'TransportFleet', bg: '#FCEBC2', fg: '#D9930D', module: 'transport' },
-  { id: '4', title: 'Fees', icon: 'credit-card', route: 'CollectAssignFees', bg: '#DADFF3', fg: '#4B5BC0', module: 'fees' },
-  { id: '5', title: 'TimeTable', icon: 'clock', route: 'Class TimeTable', bg: '#CDEBF1', fg: '#0F8FA8', module: 'timetable' },
-  { id: '6', title: 'Attendance', icon: 'check-square', route: 'Class Attendance', bg: '#F8DCD3', fg: '#D9573F', module: 'attendance' },
-  { id: '7', title: 'Notice Board', icon: 'clipboard', route: 'Notice Board', bg: '#F9E6B4', fg: '#C98A0A', module: 'communication' },
-  { id: '8', title: 'Diaries', icon: 'book-open', route: 'Diary', bg: '#D8DCF0', fg: '#5A57B5', module: 'diary' },
-  { id: '9', title: 'Leaves', icon: 'file-minus', route: 'Leaves', bg: '#D0E9F5', fg: '#2A86C2', module: 'leave' },
+  {
+    id: '1',
+    title: 'Employee',
+    icon: 'users',
+    route: 'Staff',
+    bg: '#D3EDF6',
+    fg: '#1B8DB5',
+    module: 'staff',
+  },
+  {
+    id: '2',
+    title: 'Classes',
+    icon: 'monitor',
+    route: 'Classes',
+    bg: '#FADFD6',
+    fg: '#E0684A',
+    module: 'classes',
+  },
+  {
+    id: '3',
+    title: 'Transport',
+    icon: 'truck',
+    route: 'TransportFleet',
+    bg: '#FCEBC2',
+    fg: '#D9930D',
+    module: 'transport',
+  },
+  {
+    id: '4',
+    title: 'Fees',
+    icon: 'credit-card',
+    route: 'CollectAssignFees',
+    bg: '#DADFF3',
+    fg: '#4B5BC0',
+    module: 'fees',
+  },
+  {
+    id: '5',
+    title: 'TimeTable',
+    icon: 'clock',
+    route: 'Class Timetable',
+    bg: '#CDEBF1',
+    fg: '#0F8FA8',
+    module: 'timetable',
+  },
+  {
+    id: '6',
+    title: 'Attendance',
+    icon: 'check-square',
+    route: 'Class Attendance',
+    bg: '#F8DCD3',
+    fg: '#D9573F',
+    module: 'attendance',
+  },
+  {
+    id: '7',
+    title: 'Notice Board',
+    icon: 'clipboard',
+    route: 'Notice Board',
+    bg: '#F9E6B4',
+    fg: '#C98A0A',
+    module: 'communication',
+  },
+  {
+    id: '8',
+    title: 'Diaries',
+    icon: 'book-open',
+    route: 'Class Diary',
+    bg: '#D8DCF0',
+    fg: '#5A57B5',
+    module: 'diary',
+  },
+  {
+    id: '9',
+    title: 'Leaves',
+    icon: 'file-minus',
+    route: 'Leaves',
+    bg: '#D0E9F5',
+    fg: '#2A86C2',
+    module: 'leave',
+  },
 ];
 
-// Helper functions for evaluating permissions
-const norm = (v?: string) => (v || '').toString().trim().toLowerCase();
+// ---------------------------------------------------------------------------
+// HELPERS
+// ---------------------------------------------------------------------------
 
-const hasPermission = (perms: any[], isSuperAdmin: boolean, module?: string, action: string = 'read'): boolean => {
+const norm = (v?: string) =>
+  (v || '').toString().trim().toLowerCase();
+
+const hasPermission = (
+  perms: any[],
+  isSuperAdmin: boolean,
+  module?: string,
+  action: string = 'read',
+): boolean => {
   if (isSuperAdmin) return true;
+
   if (!module) return false;
+
   const m = norm(module);
+
   return perms.some((p) => {
     if (norm(p.module) !== m) return false;
+
     const a = norm(p.action);
+
     if (a === norm(action)) return true;
-    if (a === 'manage' || a === '*' || a === 'all') return true;
-    if (norm(action) === 'read' && (a === 'readown' || a === 'readall' || a === 'view')) return true;
+
+    if (a === 'manage' || a === '*' || a === 'all') {
+      return true;
+    }
+
+    if (
+      norm(action) === 'read' &&
+      (a === 'readown' ||
+        a === 'readall' ||
+        a === 'view')
+    ) {
+      return true;
+    }
+
     return false;
   });
 };
 
-const hasModuleAccess = (perms: any[], isSuperAdmin: boolean, module?: string): boolean => {
+const hasModuleAccess = (
+  perms: any[],
+  isSuperAdmin: boolean,
+  module?: string,
+): boolean => {
   if (isSuperAdmin) return true;
+
   if (!module) return false;
-  return perms.some((p) => norm(p.module) === norm(module));
+
+  return perms.some(
+    (p) => norm(p.module) === norm(module),
+  );
 };
+
+// ---------------------------------------------------------------------------
+// AVATAR HELPERS
+// ---------------------------------------------------------------------------
+
+const getInitials = (name: string) => {
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return 'U';
+  }
+
+  if (parts.length === 1) {
+    return parts[0].charAt(0).toUpperCase();
+  }
+
+  return (
+    parts[0].charAt(0) +
+    parts[parts.length - 1].charAt(0)
+  ).toUpperCase();
+};
+
+const resolveAvatarUrl = (
+  path?: string | null,
+): string | null => {
+  if (!path) return null;
+
+  // Already a complete URL
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+
+  // Convert:
+  // /uploads/photo.jpg
+  //
+  // into:
+  // https://your-server.com/uploads/photo.jpg
+  const base = API_BASE.replace(/\/api\/?$/, '');
+
+  return `${base}${path.startsWith('/') ? path : `/${path}`}`;
+};
+
+// ---------------------------------------------------------------------------
+// HOME SCREEN
+// ---------------------------------------------------------------------------
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
+
   const { width } = useWindowDimensions();
+
   const scrollRef = useRef<ScrollView>(null);
 
   const columns = width >= 600 ? 4 : 3;
+
   const isCompact = width < 360;
 
+  // -------------------------------------------------------------------------
+  // USER STATE
+  // -------------------------------------------------------------------------
+
   const [userName, setUserName] = useState('User');
+
   const [userRole, setUserRole] = useState('Staff');
-  const [greeting, setGreeting] = useState(getGreeting(new Date().getHours()));
+
+  const [userAvatar, setUserAvatar] = useState<string | null>(
+    null,
+  );
+
+  const [avatarFailed, setAvatarFailed] = useState(false);
+
+  // -------------------------------------------------------------------------
+  // HOME STATE
+  // -------------------------------------------------------------------------
+
+  const [greeting, setGreeting] = useState(
+    getGreeting(new Date().getHours()),
+  );
+
   const [currentDate, setCurrentDate] = useState('');
-  const [hero, setHero] = useState<EventData>(() => getHeroForDate(new Date()));
-  const [upcoming, setUpcoming] = useState<Upcoming | null>(() => getUpcoming(new Date()));
 
-  // Permissions state
+  const [hero, setHero] = useState<EventData>(() =>
+    getHeroForDate(new Date()),
+  );
+
+  const [upcoming, setUpcoming] =
+    useState<Upcoming | null>(() =>
+      getUpcoming(new Date()),
+    );
+
+  // -------------------------------------------------------------------------
+  // PERMISSIONS
+  // -------------------------------------------------------------------------
+
   const [permissions, setPermissions] = useState<any[]>([]);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [filteredMenuItems, setFilteredMenuItems] = useState<MenuItem[]>([]);
 
-  const heroAnim = useRef(new Animated.Value(0)).current;
+  const [isSuperAdmin, setIsSuperAdmin] =
+    useState(false);
+
+  const [filteredMenuItems, setFilteredMenuItems] =
+    useState<MenuItem[]>([]);
+
+  // -------------------------------------------------------------------------
+  // HERO ANIMATION
+  // -------------------------------------------------------------------------
+
+  const heroAnim = useRef(
+    new Animated.Value(0),
+  ).current;
+
   useEffect(() => {
     heroAnim.setValue(0);
-    Animated.timing(heroAnim, { toValue: 1, duration: 520, useNativeDriver: true }).start();
+
+    Animated.timing(heroAnim, {
+      toValue: 1,
+      duration: 520,
+      useNativeDriver: true,
+    }).start();
   }, [hero.title, heroAnim]);
+
+  // -------------------------------------------------------------------------
+  // LOAD USER DATA
+  // -------------------------------------------------------------------------
 
   const loadUserData = useCallback(async () => {
     try {
-      const name = await AsyncStorage.getItem('userName');
-      const role = await AsyncStorage.getItem('userRole');
-      const superAdminRaw = await AsyncStorage.getItem('isSuperAdmin');
-      const permsRaw = await AsyncStorage.getItem('userPermissions');
-      
-      const isSuper = superAdminRaw === 'true';
-      let parsedPerms: any[] = [];
-      try { parsedPerms = permsRaw ? JSON.parse(permsRaw) : []; } catch (e) {}
-      if (!Array.isArray(parsedPerms)) parsedPerms = [];
+      const [
+        name,
+        role,
+        superAdminRaw,
+        permsRaw,
+        avatar,
+      ] = await Promise.all([
+        AsyncStorage.getItem('userName'),
+        AsyncStorage.getItem('userRole'),
+        AsyncStorage.getItem('isSuperAdmin'),
+        AsyncStorage.getItem('userPermissions'),
+        AsyncStorage.getItem('userAvatar'),
+      ]);
 
-      setUserName(name || 'User');
-      setUserRole(isSuper ? 'Principal / Admin' : role || 'Staff');
+      const isSuper = superAdminRaw === 'true';
+
+      let parsedPerms: any[] = [];
+
+      try {
+        parsedPerms = permsRaw
+          ? JSON.parse(permsRaw)
+          : [];
+      } catch (e) {
+        parsedPerms = [];
+      }
+
+      if (!Array.isArray(parsedPerms)) {
+        parsedPerms = [];
+      }
+
+      const finalName = name || 'User';
+
+      setUserName(finalName);
+
+      setUserRole(
+        isSuper
+          ? 'Principal / Admin'
+          : role || 'Staff',
+      );
+
       setIsSuperAdmin(isSuper);
+
       setPermissions(parsedPerms);
 
-      // Filter grid based on retrieved permissions
-      const visibleModules = MENU_ITEMS.filter((item) => {
-        if (isSuper) return true;
-        return hasModuleAccess(parsedPerms, isSuper, item.module) || hasPermission(parsedPerms, isSuper, item.module, 'read');
-      });
+      // ---------------------------------------------------------------
+      // AVATAR
+      // ---------------------------------------------------------------
+
+      setAvatarFailed(false);
+
+      if (avatar) {
+        setUserAvatar(avatar);
+      } else {
+        setUserAvatar(null);
+      }
+
+      // ---------------------------------------------------------------
+      // FILTER MENU
+      // ---------------------------------------------------------------
+
+      const visibleModules =
+        MENU_ITEMS.filter((item) => {
+          if (isSuper) return true;
+
+          return (
+            hasModuleAccess(
+              parsedPerms,
+              isSuper,
+              item.module,
+            ) ||
+            hasPermission(
+              parsedPerms,
+              isSuper,
+              item.module,
+              'read',
+            )
+          );
+        });
+
       setFilteredMenuItems(visibleModules);
-    } catch (e) {}
+    } catch (e) {
+      console.log(
+        'HomeScreen loadUserData error:',
+        e,
+      );
+    }
   }, []);
+
+  // -------------------------------------------------------------------------
+  // DATE / TIME
+  // -------------------------------------------------------------------------
 
   const updateDateTime = useCallback(() => {
     const now = new Date();
-    setGreeting(getGreeting(now.getHours()));
+
+    setGreeting(
+      getGreeting(now.getHours()),
+    );
 
     const options: Intl.DateTimeFormatOptions = {
       month: 'long',
@@ -150,24 +435,58 @@ export default function HomeScreen() {
       year: 'numeric',
       weekday: 'long',
     };
-    setCurrentDate(now.toLocaleDateString('en-US', options));
+
+    setCurrentDate(
+      now.toLocaleDateString(
+        'en-US',
+        options,
+      ),
+    );
+
     setHero(getHeroForDate(now));
+
     setUpcoming(getUpcoming(now));
   }, []);
+
+  // -------------------------------------------------------------------------
+  // SCREEN FOCUS
+  // -------------------------------------------------------------------------
 
   useFocusEffect(
     useCallback(() => {
       loadUserData();
       updateDateTime();
-    }, [loadUserData, updateDateTime])
+    }, [
+      loadUserData,
+      updateDateTime,
+    ]),
   );
 
+  // -------------------------------------------------------------------------
+  // APP STATE
+  // -------------------------------------------------------------------------
+
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') updateDateTime();
-    });
+    const sub =
+      AppState.addEventListener(
+        'change',
+        (state) => {
+          if (state === 'active') {
+            updateDateTime();
+            loadUserData();
+          }
+        },
+      );
+
     return () => sub.remove();
-  }, [updateDateTime]);
+  }, [
+    updateDateTime,
+    loadUserData,
+  ]);
+
+  // -------------------------------------------------------------------------
+  // UPCOMING
+  // -------------------------------------------------------------------------
 
   const upcomingWhen = upcoming
     ? upcoming.days === 1
@@ -175,65 +494,181 @@ export default function HomeScreen() {
       : `in ${upcoming.days} days`
     : '';
 
+  // -------------------------------------------------------------------------
+  // AVATAR URL
+  // -------------------------------------------------------------------------
+
+  const avatarUrl = resolveAvatarUrl(
+    userAvatar,
+  );
+
+  // -------------------------------------------------------------------------
+  // RENDER
+  // -------------------------------------------------------------------------
+
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <StatusBar
+        barStyle="light-content"
+        backgroundColor="transparent"
+        translucent
+      />
 
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={
+          styles.scrollContent
+        }
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
         {/* ------------------------------ HEADER ------------------------------ */}
+
         <LinearGradient
-          colors={[COLORS.primaryDeep, COLORS.primary]}
+          colors={[
+            COLORS.primaryDeep,
+            COLORS.primary,
+          ]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.headerGradient}
         >
-          <View pointerEvents="none" style={styles.headerCircleA} />
-          <View pointerEvents="none" style={styles.headerCircleB} />
+          <View
+            pointerEvents="none"
+            style={styles.headerCircleA}
+          />
+
+          <View
+            pointerEvents="none"
+            style={styles.headerCircleB}
+          />
 
           <SafeAreaView>
-            <View style={[styles.headerContent, styles.contentWidth]}>
+            <View
+              style={[
+                styles.headerContent,
+                styles.contentWidth,
+              ]}
+            >
               <View style={styles.profileSection}>
-                <View style={[styles.avatarWrap, isCompact && styles.avatarWrapCompact]}>
-                  <Text style={styles.avatarInitial}>{userName.charAt(0).toUpperCase()}</Text>
+                {/* -------------------------------------------------------------
+                    AVATAR
+                ------------------------------------------------------------- */}
+
+                <View
+                  style={[
+                    styles.avatarWrap,
+                    isCompact &&
+                      styles.avatarWrapCompact,
+                  ]}
+                >
+                  {avatarUrl &&
+                  !avatarFailed ? (
+                    <Image
+                      source={{
+                        uri: avatarUrl,
+                      }}
+                      style={[
+                        styles.avatarImage,
+                        isCompact &&
+                          styles.avatarImageCompact,
+                      ]}
+                      resizeMode="cover"
+                      onError={() => {
+                        setAvatarFailed(true);
+                      }}
+                    />
+                  ) : (
+                    <Text
+                      style={styles.avatarInitial}
+                    >
+                      {getInitials(userName)}
+                    </Text>
+                  )}
                 </View>
 
-                <View style={styles.profileText}>
-                  <Text style={styles.greetingText}>
-                    {greeting.emoji}  {greeting.text}
-                  </Text>
-                  <Text style={styles.nameText} numberOfLines={1}>{userName}</Text>
+                {/* -------------------------------------------------------------
+                    PROFILE TEXT
+                ------------------------------------------------------------- */}
 
-                  <View style={styles.roleBadge}>
-                    <Feather name="shield" size={11} color={COLORS.white} />
-                    <Text style={styles.roleText} numberOfLines={1}>{userRole}</Text>
+                <View style={styles.profileText}>
+                  <Text
+                    style={styles.greetingText}
+                  >
+                    {greeting.emoji}{' '}
+                    {greeting.text}
+                  </Text>
+
+                  <Text
+                    style={styles.nameText}
+                    numberOfLines={1}
+                  >
+                    {userName}
+                  </Text>
+
+                  <View
+                    style={styles.roleBadge}
+                  >
+                    <Feather
+                      name="shield"
+                      size={11}
+                      color={COLORS.white}
+                    />
+
+                    <Text
+                      style={styles.roleText}
+                      numberOfLines={1}
+                    >
+                      {userRole}
+                    </Text>
                   </View>
 
-                  <View style={styles.dateRow}>
-                    <Feather name="calendar" size={12} color={ON_DARK.low} />
-                    <Text style={styles.dateText} numberOfLines={1}>{currentDate}</Text>
+                  <View
+                    style={styles.dateRow}
+                  >
+                    <Feather
+                      name="calendar"
+                      size={12}
+                      color={ON_DARK.low}
+                    />
+
+                    <Text
+                      style={styles.dateText}
+                      numberOfLines={1}
+                    >
+                      {currentDate}
+                    </Text>
                   </View>
                 </View>
               </View>
-
-             
             </View>
           </SafeAreaView>
         </LinearGradient>
 
         {/* --------------------------- DAILY HERO CARD --------------------------- */}
-        <View style={[styles.heroWrap, styles.contentWidth]}>
+
+        <View
+          style={[
+            styles.heroWrap,
+            styles.contentWidth,
+          ]}
+        >
           <Animated.View
             style={[
               styles.heroShadow,
               {
                 opacity: heroAnim,
                 transform: [
-                  { scale: heroAnim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) },
+                  {
+                    scale:
+                      heroAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [
+                          0.96,
+                          1,
+                        ],
+                      }),
+                  },
                 ],
               },
             ]}
@@ -244,114 +679,341 @@ export default function HomeScreen() {
               end={{ x: 1, y: 1 }}
               style={styles.heroCard}
             >
-              <View pointerEvents="none" style={styles.heroCircleA} />
-              <View pointerEvents="none" style={styles.heroCircleB} />
+              <View
+                pointerEvents="none"
+                style={styles.heroCircleA}
+              />
 
-              <View style={styles.heroContent}>
-                <View style={styles.heroBadge}>
-                  <Feather name={(hero.tagIcon || 'bell') as any} size={11} color={COLORS.white} />
-                  <Text style={styles.heroBadgeText}>{hero.tag}</Text>
+              <View
+                pointerEvents="none"
+                style={styles.heroCircleB}
+              />
+
+              <View
+                style={styles.heroContent}
+              >
+                <View
+                  style={styles.heroBadge}
+                >
+                  <Feather
+                    name={
+                      (hero.tagIcon ||
+                        'bell') as any
+                    }
+                    size={11}
+                    color={COLORS.white}
+                  />
+
+                  <Text
+                    style={
+                      styles.heroBadgeText
+                    }
+                  >
+                    {hero.tag}
+                  </Text>
                 </View>
 
-                <Text style={styles.heroTitle} numberOfLines={2}>{hero.title}</Text>
-                <Text style={styles.heroSubtitle} numberOfLines={3}>{hero.subtitle}</Text>
+                <Text
+                  style={styles.heroTitle}
+                  numberOfLines={2}
+                >
+                  {hero.title}
+                </Text>
+
+                <Text
+                  style={styles.heroSubtitle}
+                  numberOfLines={3}
+                >
+                  {hero.subtitle}
+                </Text>
 
                 {!!hero.meta && (
-                  <View style={styles.heroMetaRow}>
-                    <Feather name={(hero.metaIcon || 'clock') as any} size={12} color={ON_DARK.mid} />
-                    <Text style={styles.heroMetaText} numberOfLines={1}>{hero.meta}</Text>
+                  <View
+                    style={
+                      styles.heroMetaRow
+                    }
+                  >
+                    <Feather
+                      name={
+                        (hero.metaIcon ||
+                          'clock') as any
+                      }
+                      size={12}
+                      color={ON_DARK.mid}
+                    />
+
+                    <Text
+                      style={
+                        styles.heroMetaText
+                      }
+                      numberOfLines={1}
+                    >
+                      {hero.meta}
+                    </Text>
                   </View>
                 )}
               </View>
 
-              <View style={styles.heroMedallion}>
+              <View
+                style={styles.heroMedallion}
+              >
                 {hero.image ? (
-                  <Image source={hero.image} style={styles.heroImage} resizeMode="cover" />
+                  <Image
+                    source={hero.image}
+                    style={styles.heroImage}
+                    resizeMode="cover"
+                  />
                 ) : (
-                  <Text style={styles.heroEmoji}>{hero.emoji}</Text>
+                  <Text
+                    style={styles.heroEmoji}
+                  >
+                    {hero.emoji}
+                  </Text>
                 )}
               </View>
             </LinearGradient>
           </Animated.View>
 
           {upcoming && (
-            <View style={styles.upcomingRow}>
-              <Text style={styles.upcomingEmoji}>{upcoming.emoji}</Text>
-              <View style={styles.upcomingTextWrap}>
-                <Text style={styles.upcomingLabel}>Coming up</Text>
-                <Text style={styles.upcomingTitle} numberOfLines={1}>{upcoming.title}</Text>
+            <View
+              style={styles.upcomingRow}
+            >
+              <Text
+                style={styles.upcomingEmoji}
+              >
+                {upcoming.emoji}
+              </Text>
+
+              <View
+                style={
+                  styles.upcomingTextWrap
+                }
+              >
+                <Text
+                  style={
+                    styles.upcomingLabel
+                  }
+                >
+                  Coming up
+                </Text>
+
+                <Text
+                  style={
+                    styles.upcomingTitle
+                  }
+                  numberOfLines={1}
+                >
+                  {upcoming.title}
+                </Text>
               </View>
-              <View style={styles.upcomingChip}>
-                <Text style={styles.upcomingChipText}>{upcomingWhen}</Text>
+
+              <View
+                style={styles.upcomingChip}
+              >
+                <Text
+                  style={
+                    styles.upcomingChipText
+                  }
+                >
+                  {upcomingWhen}
+                </Text>
               </View>
             </View>
           )}
         </View>
 
         {/* ---------------------------- QUICK ACCESS ---------------------------- */}
-        <View style={[styles.body, styles.contentWidth]}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Quick access</Text>
-            <Text style={styles.sectionMeta}>{filteredMenuItems.length} modules</Text>
+
+        <View
+          style={[
+            styles.body,
+            styles.contentWidth,
+          ]}
+        >
+          <View
+            style={styles.sectionHeader}
+          >
+            <Text
+              style={styles.sectionTitle}
+            >
+              Quick access
+            </Text>
+
+            <Text
+              style={styles.sectionMeta}
+            >
+              {filteredMenuItems.length}{' '}
+              modules
+            </Text>
           </View>
 
-          {filteredMenuItems.length === 0 ? (
-            <View style={styles.emptyGridContainer}>
-              <Feather name="shield-off" size={32} color={COLORS.primarySoftBorder} style={{ marginBottom: 10 }} />
-              <Text style={styles.emptyGridText}>No quick access modules assigned.</Text>
+          {filteredMenuItems.length ===
+          0 ? (
+            <View
+              style={
+                styles.emptyGridContainer
+              }
+            >
+              <Feather
+                name="shield-off"
+                size={32}
+                color={
+                  COLORS.primarySoftBorder
+                }
+                style={{
+                  marginBottom: 10,
+                }}
+              />
+
+              <Text
+                style={
+                  styles.emptyGridText
+                }
+              >
+                No quick access modules
+                assigned.
+              </Text>
             </View>
           ) : (
             <View style={styles.grid}>
-              {filteredMenuItems.map((item) => (
-                <View key={item.id} style={{ width: `${100 / columns}%`, padding: GRID_GAP / 2 }}>
-                  <View style={[styles.tileShadow, { backgroundColor: item.bg }]}>
-                    <Pressable
-                      onPress={() => navigation.navigate(item.route)}
-                      style={({ pressed }) => [
-                        styles.tile,
-                        { backgroundColor: item.bg },
-                        pressed && styles.tilePressed,
+              {filteredMenuItems.map(
+                (item) => (
+                  <View
+                    key={item.id}
+                    style={{
+                      width: `${100 / columns}%`,
+                      padding:
+                        GRID_GAP / 2,
+                    }}
+                  >
+                    <View
+                      style={[
+                        styles.tileShadow,
+                        {
+                          backgroundColor:
+                            item.bg,
+                        },
                       ]}
                     >
-                      <View pointerEvents="none" style={styles.tileGlow} />
-
-                      {item.image ? (
-                        <Image
-                          source={item.image}
-                          style={[styles.iconImage, isCompact && styles.iconImageCompact]}
-                          resizeMode="contain"
+                      <Pressable
+                        onPress={() =>
+                          navigation.navigate(
+                            item.route,
+                          )
+                        }
+                        style={({
+                          pressed,
+                        }) => [
+                          styles.tile,
+                          {
+                            backgroundColor:
+                              item.bg,
+                          },
+                          pressed &&
+                            styles.tilePressed,
+                        ]}
+                      >
+                        <View
+                          pointerEvents="none"
+                          style={
+                            styles.tileGlow
+                          }
                         />
-                      ) : (
-                        <View style={[styles.iconPlate, isCompact && styles.iconPlateCompact]}>
-                          <Feather name={item.icon as any} size={isCompact ? 22 : 26} color={item.fg} />
-                        </View>
-                      )}
 
-                      <Text style={styles.tileText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-                        {item.title}
-                      </Text>
-                    </Pressable>
+                        {item.image ? (
+                          <Image
+                            source={
+                              item.image
+                            }
+                            style={[
+                              styles.iconImage,
+                              isCompact &&
+                                styles.iconImageCompact,
+                            ]}
+                            resizeMode="contain"
+                          />
+                        ) : (
+                          <View
+                            style={[
+                              styles.iconPlate,
+                              isCompact &&
+                                styles.iconPlateCompact,
+                            ]}
+                          >
+                            <Feather
+                              name={
+                                item.icon as any
+                              }
+                              size={
+                                isCompact
+                                  ? 22
+                                  : 26
+                              }
+                              color={
+                                item.fg
+                              }
+                            />
+                          </View>
+                        )}
+
+                        <Text
+                          style={
+                            styles.tileText
+                          }
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={
+                            0.8
+                          }
+                        >
+                          {item.title}
+                        </Text>
+                      </Pressable>
+                    </View>
                   </View>
-                </View>
-              ))}
+                ),
+              )}
             </View>
           )}
         </View>
       </ScrollView>
 
       {/* ------------------------- FLOATING HOME BUTTON ------------------------- */}
-     <View style={styles.bottomNavigation}>
-  <TouchableOpacity
-    style={styles.bottomNavItem}
-    activeOpacity={0.8}
-    onPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
-  >
-    <View style={styles.bottomNavIconActive}>
-      <Feather name="home" size={22} color={COLORS.primary} />
-    </View>
-    <Text style={styles.bottomNavLabelActive}>Home</Text>
-  </TouchableOpacity>
-</View>
+
+      <View
+        style={styles.bottomNavigation}
+      >
+        <TouchableOpacity
+          style={styles.bottomNavItem}
+          activeOpacity={0.8}
+          onPress={() =>
+            scrollRef.current?.scrollTo({
+              y: 0,
+              animated: true,
+            })
+          }
+        >
+          <View
+            style={
+              styles.bottomNavIconActive
+            }
+          >
+            <Feather
+              name="home"
+              size={22}
+              color={COLORS.primary}
+            />
+          </View>
+
+          <Text
+            style={
+              styles.bottomNavLabelActive
+            }
+          >
+            Home
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -359,98 +1021,96 @@ export default function HomeScreen() {
 // ---------------------------------------------------------------------------
 // STYLES
 // ---------------------------------------------------------------------------
+
 const styles = StyleSheet.create({
   bottomNavigation: {
-  position: 'absolute',
-  left: 0,
-  right: 0,
-  bottom: 0,
-  height: 72,
-  backgroundColor: COLORS.white,
-  borderTopWidth: 1,
-  borderTopColor: COLORS.borderFaint,
-  flexDirection: 'row',
-  justifyContent: 'center',
-  alignItems: 'center',
-  paddingBottom: Platform.OS === 'ios' ? 8 : 0,
-  elevation: 12,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: -2 },
-  shadowOpacity: 0.08,
-  shadowRadius: 8,
-},
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 72,
+    backgroundColor: COLORS.white,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderFaint,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom:
+      Platform.OS === 'ios' ? 8 : 0,
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
 
-bottomNavItem: {
-  alignItems: 'center',
-  justifyContent: 'center',
-  minWidth: 70,
-},
+  bottomNavItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 70,
+  },
 
-bottomNavIconActive: {
-  alignItems: 'center',
-  justifyContent: 'center',
-  marginBottom: 3,
-},
+  bottomNavIconActive: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 3,
+  },
 
-bottomNavLabelActive: {
-  fontSize: FONT.tiny,
-  fontWeight: '700',
-  color: COLORS.primary,
-},
+  bottomNavLabelActive: {
+    fontSize: FONT.tiny,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
+
   scrollContent: {
-  alignItems: 'center',
-  paddingBottom: 100,
-},
+    alignItems: 'center',
+    paddingBottom: 100,
+  },
+
   contentWidth: {
     width: '100%',
     maxWidth: MAX_CONTENT_WIDTH,
   },
+
   emptyGridContainer: {
     paddingVertical: SPACING.xl * 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   emptyGridText: {
     fontSize: FONT.small,
     color: ON_DARK.low,
     fontWeight: '600',
   },
-  // Floating Home Button
-  bottomHomeWrap: {
-    position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 34 : 24,
-    alignSelf: 'center',
-    zIndex: 100,
-  },
-  bottomHomeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.xl,
-    paddingVertical: SPACING.sm + 4,
-    borderRadius: RADIUS.pill,
-    ...SHADOW.raised,
-    shadowColor: COLORS.primaryDeep, 
-  },
-  bottomHomeBtnText: {
-    color: COLORS.white,
-    fontSize: FONT.small + 1,
-    fontWeight: '800',
-    marginLeft: SPACING.sm,
-  },
-  // Header
+
+  // -------------------------------------------------------------------------
+  // HEADER
+  // -------------------------------------------------------------------------
+
   headerGradient: {
     width: '100%',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
-    paddingBottom: BANNER_OVERLAP + SPACING.xl,
-    borderBottomLeftRadius: HEADER_RADIUS,
-    borderBottomRightRadius: HEADER_RADIUS,
+    paddingTop:
+      Platform.OS === 'android'
+        ? StatusBar.currentHeight
+        : 0,
+    paddingBottom:
+      BANNER_OVERLAP + SPACING.xl,
+    borderBottomLeftRadius:
+      HEADER_RADIUS,
+    borderBottomRightRadius:
+      HEADER_RADIUS,
     overflow: 'hidden',
   },
+
   headerCircleA: {
     position: 'absolute',
     top: -70,
@@ -458,8 +1118,10 @@ bottomNavLabelActive: {
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor:
+      'rgba(255,255,255,0.06)',
   },
+
   headerCircleB: {
     position: 'absolute',
     bottom: -80,
@@ -467,8 +1129,10 @@ bottomNavLabelActive: {
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: COLORS.primaryBright + '33',
+    backgroundColor:
+      COLORS.primaryBright + '33',
   },
+
   headerContent: {
     alignSelf: 'center',
     flexDirection: 'row',
@@ -477,11 +1141,17 @@ bottomNavLabelActive: {
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.lg,
   },
+
   profileSection: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
   },
+
+  // -------------------------------------------------------------------------
+  // AVATAR
+  // -------------------------------------------------------------------------
+
   avatarWrap: {
     width: 58,
     height: 58,
@@ -492,27 +1162,43 @@ bottomNavLabelActive: {
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: SPACING.lg,
+    overflow: 'hidden',
   },
+
   avatarWrapCompact: {
     width: 48,
     height: 48,
     borderRadius: 24,
     marginRight: SPACING.md,
   },
+
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 29,
+  },
+
+  avatarImageCompact: {
+    borderRadius: 24,
+  },
+
   avatarInitial: {
     fontSize: FONT.h1,
     fontWeight: '800',
     color: COLORS.white,
   },
+
   profileText: {
     flex: 1,
   },
+
   greetingText: {
     fontSize: FONT.small,
     color: ON_DARK.high,
     fontWeight: '500',
     marginBottom: 2,
   },
+
   nameText: {
     fontSize: FONT.h1,
     fontWeight: '800',
@@ -520,6 +1206,7 @@ bottomNavLabelActive: {
     marginBottom: SPACING.xs,
     letterSpacing: -0.3,
   },
+
   roleBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -528,29 +1215,39 @@ bottomNavLabelActive: {
     backgroundColor: ON_DARK.glass,
     borderWidth: 1,
     borderColor: ON_DARK.glassBorder,
-    paddingHorizontal: SPACING.sm + 2,
-    paddingVertical: SPACING.xs - 1,
+    paddingHorizontal:
+      SPACING.sm + 2,
+    paddingVertical:
+      SPACING.xs - 1,
     borderRadius: RADIUS.pill,
-    marginBottom: SPACING.sm - 2,
+    marginBottom:
+      SPACING.sm - 2,
   },
+
   roleText: {
     fontSize: FONT.tiny,
     fontWeight: '700',
     color: COLORS.white,
-    marginLeft: SPACING.xs + 2,
+    marginLeft:
+      SPACING.xs + 2,
     flexShrink: 1,
   },
+
   dateRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+
   dateText: {
-    fontSize: FONT.tiny + 1,
+    fontSize:
+      FONT.tiny + 1,
     color: ON_DARK.mid,
     fontWeight: '500',
-    marginLeft: SPACING.xs + 2,
+    marginLeft:
+      SPACING.xs + 2,
     flexShrink: 1,
   },
+
   menuIconBtn: {
     width: TOUCH_TARGET,
     height: TOUCH_TARGET,
@@ -563,16 +1260,22 @@ bottomNavLabelActive: {
     alignItems: 'center',
   },
 
-  // Hero card (overlaps the header)
+  // -------------------------------------------------------------------------
+  // HERO
+  // -------------------------------------------------------------------------
+
   heroWrap: {
     marginTop: -BANNER_OVERLAP,
     paddingHorizontal: SPACING.xl,
   },
+
   heroShadow: {
     borderRadius: RADIUS.xl,
-    backgroundColor: COLORS.primaryDeep,
+    backgroundColor:
+      COLORS.primaryDeep,
     ...SHADOW.raised,
   },
+
   heroCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -582,6 +1285,7 @@ bottomNavLabelActive: {
     minHeight: 148,
     overflow: 'hidden',
   },
+
   heroCircleA: {
     position: 'absolute',
     top: -60,
@@ -589,8 +1293,10 @@ bottomNavLabelActive: {
     width: 170,
     height: 170,
     borderRadius: 85,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor:
+      'rgba(255,255,255,0.08)',
   },
+
   heroCircleB: {
     position: 'absolute',
     bottom: -70,
@@ -598,12 +1304,15 @@ bottomNavLabelActive: {
     width: 150,
     height: 150,
     borderRadius: 75,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor:
+      'rgba(255,255,255,0.05)',
   },
+
   heroContent: {
     flex: 1,
     marginRight: SPACING.lg,
   },
+
   heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -611,42 +1320,55 @@ bottomNavLabelActive: {
     backgroundColor: ON_DARK.glass,
     borderWidth: 1,
     borderColor: ON_DARK.glassBorder,
-    paddingHorizontal: SPACING.sm + 2,
-    paddingVertical: SPACING.xs - 1,
+    paddingHorizontal:
+      SPACING.sm + 2,
+    paddingVertical:
+      SPACING.xs - 1,
     borderRadius: RADIUS.pill,
     marginBottom: SPACING.sm,
   },
+
   heroBadgeText: {
     fontSize: FONT.tiny,
     fontWeight: '700',
     color: COLORS.white,
-    marginLeft: SPACING.xs + 2,
+    marginLeft:
+      SPACING.xs + 2,
   },
+
   heroTitle: {
-    fontSize: FONT.h2 + 3,
+    fontSize:
+      FONT.h2 + 3,
     fontWeight: '800',
     color: COLORS.white,
     letterSpacing: -0.3,
     marginBottom: SPACING.xs,
   },
+
   heroSubtitle: {
     fontSize: FONT.small,
-    lineHeight: FONT.small + 6,
+    lineHeight:
+      FONT.small + 6,
     color: ON_DARK.high,
     fontWeight: '500',
   },
+
   heroMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: SPACING.sm,
   },
+
   heroMetaText: {
-    fontSize: FONT.tiny + 1,
+    fontSize:
+      FONT.tiny + 1,
     color: ON_DARK.mid,
     fontWeight: '600',
-    marginLeft: SPACING.xs + 2,
+    marginLeft:
+      SPACING.xs + 2,
     flexShrink: 1,
   },
+
   heroMedallion: {
     width: 92,
     height: 92,
@@ -658,15 +1380,20 @@ bottomNavLabelActive: {
     alignItems: 'center',
     overflow: 'hidden',
   },
+
   heroImage: {
     width: '100%',
     height: '100%',
   },
+
   heroEmoji: {
     fontSize: 44,
   },
 
-  // Coming-up strip
+  // -------------------------------------------------------------------------
+  // UPCOMING
+  // -------------------------------------------------------------------------
+
   upcomingRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -675,86 +1402,113 @@ bottomNavLabelActive: {
     borderRadius: RADIUS.lg,
     borderWidth: 1,
     borderColor: COLORS.borderFaint,
-    paddingVertical: SPACING.sm + 2,
+    paddingVertical:
+      SPACING.sm + 2,
     paddingHorizontal: SPACING.md,
   },
+
   upcomingEmoji: {
     fontSize: 22,
     marginRight: SPACING.md,
   },
+
   upcomingTextWrap: {
     flex: 1,
   },
+
   upcomingLabel: {
     fontSize: FONT.tiny,
     color: COLORS.faint,
     fontWeight: '600',
   },
+
   upcomingTitle: {
     fontSize: FONT.small,
     color: COLORS.ink,
     fontWeight: '700',
   },
+
   upcomingChip: {
-    backgroundColor: COLORS.primarySoft,
+    backgroundColor:
+      COLORS.primarySoft,
     borderWidth: 1,
-    borderColor: COLORS.primarySoftBorder,
+    borderColor:
+      COLORS.primarySoftBorder,
     borderRadius: RADIUS.pill,
-    paddingHorizontal: SPACING.sm + 2,
-    paddingVertical: SPACING.xs,
+    paddingHorizontal:
+      SPACING.sm + 2,
+    paddingVertical:
+      SPACING.xs,
     marginLeft: SPACING.md,
   },
+
   upcomingChipText: {
     fontSize: FONT.tiny,
     fontWeight: '700',
     color: COLORS.primary,
   },
 
-  // Quick access
+  // -------------------------------------------------------------------------
+  // QUICK ACCESS
+  // -------------------------------------------------------------------------
+
   body: {
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.xl,
   },
+
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
     marginBottom: SPACING.sm,
   },
+
   sectionTitle: {
     fontSize: FONT.h2,
     fontWeight: '800',
     color: COLORS.ink,
     letterSpacing: -0.2,
   },
+
   sectionMeta: {
     fontSize: FONT.small,
     fontWeight: '500',
     color: COLORS.faint,
   },
+
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: -(GRID_GAP / 2),
+    marginHorizontal:
+      -(GRID_GAP / 2),
   },
+
   tileShadow: {
     borderRadius: RADIUS.xl,
     ...SHADOW.card,
   },
+
   tile: {
     aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: RADIUS.xl,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.75)',
-    paddingHorizontal: SPACING.xs,
+    borderColor:
+      'rgba(255,255,255,0.75)',
+    paddingHorizontal:
+      SPACING.xs,
     overflow: 'hidden',
   },
+
   tilePressed: {
-    transform: [{ scale: 0.96 }],
+    transform: [
+      { scale: 0.96 },
+    ],
     opacity: 0.9,
   },
+
   tileGlow: {
     position: 'absolute',
     top: -34,
@@ -762,42 +1516,53 @@ bottomNavLabelActive: {
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: 'rgba(255,255,255,0.45)',
+    backgroundColor:
+      'rgba(255,255,255,0.45)',
   },
+
   iconPlate: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor:
+      'rgba(255,255,255,0.92)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.sm,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
     shadowOpacity: 0.1,
     shadowRadius: 6,
     elevation: 2,
   },
+
   iconPlateCompact: {
     width: 48,
     height: 48,
     borderRadius: 24,
   },
+
   iconImage: {
     width: 60,
     height: 60,
     marginBottom: SPACING.sm,
   },
+
   iconImageCompact: {
     width: 50,
     height: 50,
   },
+
   tileText: {
     width: '100%',
     fontSize: FONT.small,
     fontWeight: '700',
     color: COLORS.ink,
     textAlign: 'center',
-    paddingHorizontal: SPACING.xs,
+    paddingHorizontal:
+      SPACING.xs,
   },
 });

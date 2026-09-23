@@ -1219,9 +1219,6 @@ function DrawerMenuNode({ item, depth, path, currentRouteName, expandedGroups, t
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  CUSTOM DRAWER — floats below the header, sized to its own content  */
-/* ------------------------------------------------------------------ */
 
 function CustomDrawerPanel() {
   const { visible, close } = useDrawerVisibility();
@@ -1459,175 +1456,325 @@ export default function AppNavigator({ initialRoute }: { initialRoute: string })
 }
 
 const styles = StyleSheet.create({
+
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F4F7F9" },
 
   noAccessContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F4F7F9", paddingHorizontal: 32 },
+
   noAccessIconCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 20 },
+
   noAccessTitle: { fontSize: 20, fontWeight: "800", color: "#111827", marginBottom: 10, textAlign: "center" },
+
   noAccessMessage: { fontSize: 14, color: "#6B7280", textAlign: "center", lineHeight: 21, marginBottom: 28 },
+
   noAccessLogoutBtn: { flexDirection: "row", alignItems: "center", backgroundColor: C.primary, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 24 },
+
   noAccessLogoutText: { color: "#ffffff", fontWeight: "700", fontSize: 14 },
 
   placeholderContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F4F7F9", paddingHorizontal: 32 },
+
   placeholderIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: "#FEE2E2", justifyContent: "center", alignItems: "center", marginBottom: 18 },
+
   placeholderTitle: { fontSize: 18, fontWeight: "800", color: "#111827", marginBottom: 8, textAlign: "center" },
+
   placeholderMessage: { fontSize: 13, color: "#6B7280", textAlign: "center", lineHeight: 20 },
 
   appHeader: {
+
     backgroundColor: C.surface,
+
     borderBottomWidth: 1,
+
     borderBottomColor: C.border,
+
     shadowColor: '#0F172A',
+
     shadowOffset: { width: 0, height: 2 },
+
     shadowOpacity: 0.05,
+
     shadowRadius: 8,
+
     elevation: 3,
+
   },
+
   appHeaderRow: { flexDirection: 'row', alignItems: 'center', height: 56, paddingHorizontal: 12 },
+
   appHeaderMiddle: { flex: 1, flexShrink: 1, minWidth: 0, overflow: 'hidden', marginHorizontal: 8, justifyContent: 'center' },
+
   headerModuleTitle: {
+
     fontSize: 18,
+
     fontWeight: '800',
+
     color: C.text,
+
     letterSpacing: 0.2,
+
     marginLeft: 4,
+
   },
+
   headerIconBtn: {
+
     width: 38,
+
     height: 38,
+
     borderRadius: 12,
+
     justifyContent: 'center',
+
     alignItems: 'center',
+
     backgroundColor: C.primarySoft,
+
   },
 
   headerAvatarImage: {
+
     width: '100%',
+
     height: '100%',
+
     borderRadius: 18,
+
   },
 
   headerAvatar: {
-    width: 36,
-    height: 36,
+
+    width: 32 ,
+
+    height: 32,
+
     borderRadius: 18,
+
     backgroundColor: C.primary,
+
     justifyContent: 'center',
+
     alignItems: 'center',
+
     borderWidth: 2,
-    borderColor: C.primaryTint,
+
+    borderColor: '#FFFFFF',
+
     shadowColor: C.primary,
+
     shadowOpacity: 0.20,
+
     shadowRadius: 8,
+
     elevation: 3,
+
   },
+
   headerAvatarText: {
+
     color: '#FFFFFF',
+
     fontSize: 13,
+
     fontWeight: '800',
+
   },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)' },
+
   profileDropdown: { position: 'absolute', backgroundColor: '#ffffff', borderRadius: 16, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 10, borderWidth: 1, borderColor: '#F3F4F6' },
+
   profileDropdownHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+
   dropdownName: { fontSize: 16, fontWeight: '800', color: '#111827' },
+
   dropdownEmail: { fontSize: 12, color: '#6B7280', marginTop: 2, fontWeight: '600' },
+
   dropdownDivider: { height: 1, backgroundColor: '#E5E7EB', marginBottom: 8 },
+
   dropdownLogoutBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8, backgroundColor: '#FEF2F2', borderRadius: 10, marginTop: 8, justifyContent: 'center' },
+
   dropdownLogoutText: { color: C.primary, fontSize: 14, fontWeight: '800', marginLeft: 8 },
 
   headerPillsRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingRight: 8 },
+
   pillBase: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 32, borderRadius: 999, overflow: 'hidden' },
+
   sessionPill: { borderWidth: 1, borderColor: '#E5E7EB' },
+
   sessionPillText: { fontSize: 12, fontWeight: '700', color: '#374151' },
+
   schoolPill: {
+
     borderWidth: 1,
+
     borderColor: C.primaryTint,
+
     backgroundColor: C.primarySoft,
+
   },
+
   schoolPillIconWrap: {
+
     width: 18,
+
     height: 18,
+
     borderRadius: 9,
+
     backgroundColor: C.primary,
+
     justifyContent: 'center',
+
     alignItems: 'center',
+
   },
+
   schoolPillText: {
+
     fontSize: 12,
+
     fontWeight: '800',
+
     color: C.primary,
+
     flexShrink: 1,
+
   },
+
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(17,24,39,0.5)' },
+
   pickerContainer: { backgroundColor: '#ffffff', borderRadius: 16, padding: 14, elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 16, borderWidth: 1, borderColor: '#F3F4F6' },
+
   pickerHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 10, marginBottom: 6, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+
   pickerHeaderText: { fontSize: 13, fontWeight: '800', color: '#111827' },
+
   pickerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 6 },
+
   pickerItemBorder: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+
   pickerItemText: { fontSize: 14, fontWeight: '600', color: '#374151' },
+
   pickerItemTextActive: { color: C.primary, fontWeight: '800' },
+
   pickerItemSub: { fontSize: 11, color: '#9CA3AF', marginTop: 2, fontWeight: '600' },
+
   pickerEmptyText: { textAlign: 'center', padding: 20, color: '#9CA3AF', fontWeight: '500' },
 
   // --- Floating drawer panel ---
+
   backdrop: { backgroundColor: C.overlay },
+
   drawerPanel: {
+
     position: 'absolute',
+
     backgroundColor: '#ffffff',
+
     borderRadius: 22,
+
     overflow: 'hidden',
+
     shadowColor: '#000',
+
     shadowOffset: { width: 0, height: 18 },
+
     shadowOpacity: 0.28,
+
     shadowRadius: 30,
+
     elevation: 24,
+
     borderWidth: 1,
+
     borderColor: 'rgba(255,255,255,0.6)',
+
   },
+
   drawerBrandRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 16 },
+
   drawerLogoCard: {
+
     width: 46, height: 46, borderRadius: 13, backgroundColor: '#ffffff',
+
     justifyContent: 'center', alignItems: 'center', overflow: 'hidden',
+
     shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
+
   },
+
   drawerLogo: { width: 36, height: 36, borderRadius: 8 },
+
   drawerBrandTitle: { fontSize: 15, fontWeight: '800', color: '#ffffff', letterSpacing: 0.2 },
+
   drawerBrandSubtitle: { fontSize: 9, fontWeight: '800', color: 'rgba(255,255,255,0.88)', letterSpacing: 0.7, textTransform: 'uppercase', marginTop: 3 },
+
   drawerCloseBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center' },
 
   drawerMenuScrollContent: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 6 },
+
   sectionHeaderTitle: { fontSize: 10, fontWeight: '800', color: '#9CA3AF', letterSpacing: 1, marginTop: 8, marginBottom: 10, marginLeft: 12 },
+
   drawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, marginBottom: 4 },
+
   drawerItemActive: {
+
     backgroundColor: C.primarySoft,
+
   },
+
   drawerItemTextActive: {
+
     color: C.primary,
+
   },
+
   drawerIconBox: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#F9FAFB', justifyContent: 'center', alignItems: 'center', marginRight: 14, overflow: 'hidden' },
+
   drawerItemText: { fontSize: 14, fontWeight: '700', color: '#4B5563', flex: 1 },
 
   childrenContainer: { marginLeft: 28, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: '#F3F4F6', marginBottom: 8, marginTop: 4 },
+
   childDrawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10 },
+
   childDrawerItemActive: { backgroundColor: '#F9FAFB' },
+
   childDrawerItemText: { fontSize: 13, fontWeight: '600', color: '#6B7280', flex: 1 },
+
   childDrawerItemTextActive: {
+
     color: C.primary,
+
     fontWeight: '800',
+
   },
+
   childActiveDot: {
+
     width: 6,
+
     height: 6,
+
     borderRadius: 3,
+
     backgroundColor: C.primary,
+
   },
 
   drawerFooter: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#F3F4F6', backgroundColor: '#FBFBFD' },
+
   footerAvatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: C.primary, justifyContent: 'center', alignItems: 'center' },
+
   footerAvatarText: { color: '#ffffff', fontWeight: '800', fontSize: 13 },
+
   footerName: { fontSize: 14, fontWeight: '800', color: '#111827' },
+
   footerRoleBadge: { backgroundColor: '#E0F2FE', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 6 },
+
   footerRole: { fontSize: 10, fontWeight: '800', color: C.primary, textTransform: 'uppercase' },
+
   footerLogoutBtn: { padding: 10, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#FEE2E2', shadowColor: C.primary, shadowOpacity: 0.1, shadowRadius: 4, elevation: 1 },
+
 });
