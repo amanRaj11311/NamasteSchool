@@ -13,60 +13,72 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Dimensions,
+  useWindowDimensions,
   Animated,
   Easing,
   Image,
+  LayoutChangeEvent,
 } from "react-native";
 import Feather from "@react-native-vector-icons/feather";
 import { API_BASE } from "../network/api";
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
-const isSmallScreen = screenHeight < 700;
-
 const AnimatedTouchableOpacity =
   Animated.createAnimatedComponent(TouchableOpacity);
 
-// Saved login keys (for the "save password" autofill feature)
 const SAVED_LOGIN_ENABLED = "savedLoginEnabled";
 const SAVED_LOGIN_EMAIL = "savedLoginEmail";
 const SAVED_LOGIN_PASSWORD = "savedLoginPassword";
 const LOGIN_SAVE_ASKED_EMAIL = "loginSaveAskedEmail";
+
 const BRAND = {
-  primary: "#DC2626", // main red
+  primary: "#DC2626",
   primaryDark: "#B91C1C",
+  primaryDarker: "#7F1D1D",
   primaryLight: "#EF4444",
   bg: "#FFF1F0",
   blob1: "#FCA5A5",
   blob2: "#F87171",
 };
 
+const BUTTON_HEIGHT = 56;
+
 export default function LoginScreen({ navigation }: any) {
+  const { width, height } = useWindowDimensions();
+  const isWide = width >= 900; // tablets / landscape -> split layout
+  const isSmall = height < 700;
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [focused, setFocused] = useState<"email" | "password" | null>(null);
   const [loginStatus, setLoginStatus] = useState<"idle" | "loading" | "success">(
     "idle"
   );
   const [checkingSession, setCheckingSession] = useState(true);
+  const [btnMaxWidth, setBtnMaxWidth] = useState(280);
 
-  const buttonWidth = useRef(new Animated.Value(screenWidth - 60)).current;
+  // 0 = full width button, 1 = collapsed circle
+  const btnProgress = useRef(new Animated.Value(0)).current;
   const formTranslateX = useRef(new Animated.Value(0)).current;
-  const entranceAnims = useRef([...Array(5)].map(() => new Animated.Value(0)))
+  const entranceAnims = useRef([...Array(4)].map(() => new Animated.Value(0)))
     .current;
+
+  const buttonWidth = btnProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [btnMaxWidth, BUTTON_HEIGHT],
+  });
 
   useEffect(() => {
     initScreen();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const initScreen = async () => {
     try {
       const keepLoggedIn = await AsyncStorage.getItem("keepLoggedIn");
       const token = await AsyncStorage.getItem("userToken");
-
       if (keepLoggedIn === "true" && token) {
-        // Valid remembered session — skip the login form entirely.
         navigation.replace("DrawerRoot");
         return;
       }
@@ -77,34 +89,28 @@ export default function LoginScreen({ navigation }: any) {
     await loadSavedLoginDetails();
     setCheckingSession(false);
 
-    const animations = entranceAnims.map((anim) =>
-      Animated.timing(anim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.exp),
-      })
-    );
-    Animated.stagger(120, animations).start();
+    Animated.stagger(
+      120,
+      entranceAnims.map((anim) =>
+        Animated.timing(anim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.exp),
+        })
+      )
+    ).start();
   };
 
   const loadSavedLoginDetails = async () => {
     try {
       const savedEnabled = await AsyncStorage.getItem(SAVED_LOGIN_ENABLED);
-
       if (savedEnabled === "true") {
         const savedEmail = await AsyncStorage.getItem(SAVED_LOGIN_EMAIL);
         const savedPassword = await AsyncStorage.getItem(SAVED_LOGIN_PASSWORD);
-
-        if (savedEmail) {
-          setEmail(savedEmail);
-        }
-
-        if (savedPassword) {
-          setPassword(savedPassword);
-        }
+        if (savedEmail) setEmail(savedEmail);
+        if (savedPassword) setPassword(savedPassword);
       }
-
       const keepLoggedIn = await AsyncStorage.getItem("keepLoggedIn");
       setRemember(keepLoggedIn === "true");
     } catch (error) {
@@ -112,34 +118,26 @@ export default function LoginScreen({ navigation }: any) {
     }
   };
 
-  const saveLoginDetails = async (
-    loginEmail: string,
-    loginPassword: string
-  ) => {
+  const saveLoginDetails = async (e: string, p: string) => {
     await AsyncStorage.setItem(SAVED_LOGIN_ENABLED, "true");
-    await AsyncStorage.setItem(SAVED_LOGIN_EMAIL, loginEmail);
-    await AsyncStorage.setItem(SAVED_LOGIN_PASSWORD, loginPassword);
+    await AsyncStorage.setItem(SAVED_LOGIN_EMAIL, e);
+    await AsyncStorage.setItem(SAVED_LOGIN_PASSWORD, p);
   };
 
   const removeSavedLoginDetails = async () => {
     await Promise.all(
-      [SAVED_LOGIN_ENABLED, SAVED_LOGIN_EMAIL, SAVED_LOGIN_PASSWORD].map((key) =>
-        AsyncStorage.removeItem(key)
+      [SAVED_LOGIN_ENABLED, SAVED_LOGIN_EMAIL, SAVED_LOGIN_PASSWORD].map((k) =>
+        AsyncStorage.removeItem(k)
       )
     );
   };
 
   const goToDashboard = () => {
-    setTimeout(() => {
-      navigation.replace("DrawerRoot");
-    }, 500);
+    setTimeout(() => navigation.replace("DrawerRoot"), 500);
   };
 
-  const askSaveLoginDetails = (
-    loginEmail: string,
-    loginPassword: string
-  ): Promise<boolean> => {
-    return new Promise((resolve) => {
+  const askSaveLoginDetails = (e: string, p: string): Promise<boolean> =>
+    new Promise((resolve) => {
       Alert.alert(
         "Save Login Details?",
         "Do you want to save your email and password on this device for next login?",
@@ -153,7 +151,6 @@ export default function LoginScreen({ navigation }: any) {
               } catch (error) {
                 console.log("Remove saved login error:", error);
               }
-
               resolve(false);
             },
           },
@@ -161,7 +158,7 @@ export default function LoginScreen({ navigation }: any) {
             text: "Yes, Save",
             onPress: async () => {
               try {
-                await saveLoginDetails(loginEmail, loginPassword);
+                await saveLoginDetails(e, p);
                 resolve(true);
               } catch (error) {
                 console.log("Save login details error:", error);
@@ -170,33 +167,36 @@ export default function LoginScreen({ navigation }: any) {
             },
           },
         ],
-        {
-          cancelable: false,
-        }
+        { cancelable: false }
       );
     });
+
+  const collapseButton = () =>
+    Animated.timing(btnProgress, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+
+  const resetButton = () => {
+    setLoginStatus("idle");
+    Animated.timing(btnProgress, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
   };
+
+  const shakeForm = () =>
+    Animated.sequence([
+      Animated.timing(formTranslateX, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(formTranslateX, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(formTranslateX, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
-      Animated.sequence([
-        Animated.timing(formTranslateX, {
-          toValue: -10,
-          duration: 50,
-          useNativeDriver: true,
-        }),
-        Animated.timing(formTranslateX, {
-          toValue: 10,
-          duration: 50,
-          useNativeDriver: true,
-        }),
-        Animated.timing(formTranslateX, {
-          toValue: 0,
-          duration: 50,
-          useNativeDriver: true,
-        }),
-      ]).start();
-
+      shakeForm();
       return Alert.alert("Required", "Please enter Email and Password");
     }
 
@@ -204,12 +204,7 @@ export default function LoginScreen({ navigation }: any) {
     const loginPassword = password;
 
     setLoginStatus("loading");
-
-    Animated.timing(buttonWidth, {
-      toValue: 56,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
+    collapseButton();
 
     try {
       const response = await axios.post(`${API_BASE}/auth/login`, {
@@ -218,12 +213,7 @@ export default function LoginScreen({ navigation }: any) {
       });
 
       if (!response.data?.success) {
-        setLoginStatus("idle");
-        Animated.timing(buttonWidth, {
-          toValue: screenWidth - 60,
-          duration: 300,
-          useNativeDriver: false,
-        }).start();
+        resetButton();
         return Alert.alert(
           "Login Failed",
           response.data?.message || "Invalid email or password"
@@ -231,27 +221,19 @@ export default function LoginScreen({ navigation }: any) {
       }
 
       const user = response.data.user;
-
       if (!user) {
-        setLoginStatus("idle");
+        resetButton();
         return Alert.alert("Login Error", "User data not received from server");
       }
 
       const sessionMarker = String(user.id || user._id || "logged-in");
 
       let extractedRole = "EMPLOYEE";
-
-      if (user.roleName) {
-        extractedRole = user.roleName;
-      } else if (user.role) {
-        if (typeof user.role === "string") {
-          extractedRole = user.role;
-        } else if (user.role.name) {
-          extractedRole = user.role.name;
-        }
-      } else if (user.roleId?.name) {
-        extractedRole = user.roleId.name;
-      }
+      if (user.roleName) extractedRole = user.roleName;
+      else if (user.role) {
+        if (typeof user.role === "string") extractedRole = user.role;
+        else if (user.role.name) extractedRole = user.role.name;
+      } else if (user.roleId?.name) extractedRole = user.roleId.name;
 
       const permissions = user.permissions || user.roleId?.permissions || [];
 
@@ -266,33 +248,21 @@ export default function LoginScreen({ navigation }: any) {
         ? user.name
         : `${user.firstName || ""} ${user.lastName || ""}`.trim();
       await AsyncStorage.setItem("userName", displayName || "User");
-
       await AsyncStorage.setItem("userEmail", String(user.email || loginEmail));
-
-      // Save the correct role
       await AsyncStorage.setItem("userRole", extractedRole.toUpperCase());
-
       await AsyncStorage.setItem(
         "isSuperAdmin",
         user.isSuperAdmin ? "true" : "false"
       );
-      const schoolIdValue = user.schoolId?._id || user.school?._id || "";
-      const schoolNameValue = user.schoolId?.name || user.school?.name || "";
+
+      const schoolIdValue = String(user.schoolId?._id || user.school?._id || "");
+      const schoolNameValue = String(user.schoolId?.name || user.school?.name || "");
       await AsyncStorage.setItem("userSchoolId", schoolIdValue);
       await AsyncStorage.setItem("userSchoolName", schoolNameValue);
-
       await AsyncStorage.setItem("userPermissions", JSON.stringify(permissions));
-
       await AsyncStorage.setItem("keepLoggedIn", remember ? "true" : "false");
-
-      await AsyncStorage.setItem(
-        "userDesignation",
-        String(user.designation || "N/A")
-      );
-      await AsyncStorage.setItem(
-        "userDepartment",
-        String(user.department || "N/A")
-      );
+      await AsyncStorage.setItem("userDesignation", String(user.designation || "N/A"));
+      await AsyncStorage.setItem("userDepartment", String(user.department || "N/A"));
       await AsyncStorage.setItem("userDoj", String(user.dateOfJoining || ""));
 
       const bank = user.bankDetails || {};
@@ -300,14 +270,10 @@ export default function LoginScreen({ navigation }: any) {
       await AsyncStorage.setItem("userBankName", String(bank.bankName || "-"));
       await AsyncStorage.setItem("userBankIfsc", String(bank.ifscCode || "-"));
 
-      if (user.avatar) {
-        await AsyncStorage.setItem("userAvatar", user.avatar);
-      } else {
-        await AsyncStorage.removeItem("userAvatar");
-      }
+      if (user.avatar) await AsyncStorage.setItem("userAvatar", user.avatar);
+      else await AsyncStorage.removeItem("userAvatar");
 
       setLoginStatus("success");
-      console.log("LOGIN SUCCESS — navigating to dashboard");
 
       const savedEmailStored = await AsyncStorage.getItem(SAVED_LOGIN_EMAIL);
       const savedPasswordStored = await AsyncStorage.getItem(SAVED_LOGIN_PASSWORD);
@@ -324,19 +290,12 @@ export default function LoginScreen({ navigation }: any) {
 
       goToDashboard();
     } catch (error: any) {
-      setLoginStatus("idle");
-
-      Animated.timing(buttonWidth, {
-        toValue: screenWidth - 60,
-        duration: 300,
-        useNativeDriver: false,
-      }).start();
-
+      resetButton();
       Alert.alert(
         "Login Failed",
         error?.response?.data?.message ||
-        error?.message ||
-        "Something went wrong during login"
+          error?.message ||
+          "Something went wrong during login"
       );
     }
   };
@@ -347,145 +306,237 @@ export default function LoginScreen({ navigation }: any) {
       {
         translateY: entranceAnims[index].interpolate({
           inputRange: [0, 1],
-          outputRange: [40, 0],
+          outputRange: [30, 0],
         }),
       },
     ],
   });
 
+  const onBtnContainerLayout = (e: LayoutChangeEvent) => {
+    const w = Math.floor(e.nativeEvent.layout.width);
+    if (w > 0 && w !== btnMaxWidth) setBtnMaxWidth(w);
+  };
+
   if (checkingSession) {
     return (
       <View style={styles.sessionLoader}>
-        <StatusBar barStyle="dark-content" backgroundColor={BRAND.bg} translucent={false} />
+        <StatusBar barStyle="dark-content" backgroundColor={BRAND.bg} />
         <ActivityIndicator size="large" color={BRAND.primary} />
       </View>
     );
   }
 
+  const logoSize = isWide ? 120 : isSmall ? 84 : 96;
+
+  const Logo = (
+    <View
+      style={[
+        styles.logoCircle,
+        { width: logoSize, height: logoSize, borderRadius: logoSize * 0.28 },
+      ]}
+    >
+      <Image
+        source={require("../assets/logo.png")}
+        style={{ width: logoSize * 0.85, height: logoSize * 0.85 }}
+        resizeMode="contain"
+      />
+    </View>
+  );
+
+  const Form = (
+    <View style={styles.formInner}>
+      {!isWide && (
+        <Animated.View style={[styles.brandSection, getEntranceStyle(0)]}>
+          {Logo}
+          <Text style={styles.appTitle}>Namaste School</Text>
+          <Text style={styles.appSubtitle}>School Management System</Text>
+        </Animated.View>
+      )}
+
+      {isWide && (
+        <Animated.View style={[styles.welcomeWrap, getEntranceStyle(0)]}>
+          <Text style={styles.welcomeTitle}>Welcome back</Text>
+          <Text style={styles.welcomeSub}>Sign in to continue to your dashboard</Text>
+        </Animated.View>
+      )}
+
+      <Animated.View style={getEntranceStyle(1)}>
+        <Text style={styles.label}>Email Address</Text>
+        <View
+          style={[
+            styles.inputContainer,
+            focused === "email" && styles.inputFocused,
+          ]}
+        >
+          <Feather
+            name="mail"
+            size={20}
+            color={focused === "email" ? BRAND.primary : "#94A3B8"}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="name@company.com"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            placeholderTextColor="#94A3B8"
+            onFocus={() => setFocused("email")}
+            onBlur={() => setFocused(null)}
+          />
+        </View>
+      </Animated.View>
+
+      <Animated.View style={getEntranceStyle(2)}>
+        <Text style={styles.label}>Password</Text>
+        <View
+          style={[
+            styles.inputContainer,
+            focused === "password" && styles.inputFocused,
+          ]}
+        >
+          <Feather
+            name="lock"
+            size={20}
+            color={focused === "password" ? BRAND.primary : "#94A3B8"}
+          />
+          <TextInput
+            style={styles.input}
+            secureTextEntry={!showPassword}
+            placeholder="••••••••"
+            value={password}
+            onChangeText={setPassword}
+            autoCapitalize="none"
+            placeholderTextColor="#94A3B8"
+            onFocus={() => setFocused("password")}
+            onBlur={() => setFocused(null)}
+            onSubmitEditing={handleLogin}
+            returnKeyType="go"
+          />
+          <TouchableOpacity
+            onPress={() => setShowPassword(!showPassword)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Feather
+              name={showPassword ? "eye" : "eye-off"}
+              size={20}
+              color="#94A3B8"
+            />
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity
+          style={styles.rememberRow}
+          activeOpacity={0.7}
+          onPress={() => setRemember(!remember)}
+        >
+          <View style={[styles.checkbox, remember && styles.checked]}>
+            {remember && <Feather name="check" size={14} color="#fff" />}
+          </View>
+          <Text style={styles.rememberText}>Keep me logged in</Text>
+        </TouchableOpacity>
+      </Animated.View>
+
+      <Animated.View style={getEntranceStyle(3)}>
+        <View style={styles.btnContainer} onLayout={onBtnContainerLayout}>
+          <AnimatedTouchableOpacity
+            activeOpacity={0.85}
+            style={[
+              styles.loginBtn,
+              { width: buttonWidth },
+              {
+                experimental_backgroundImage:
+                  loginStatus === "success"
+                    ? "linear-gradient(135deg, #16A34A, #15803D)"
+                    : `linear-gradient(135deg, ${BRAND.primaryLight}, ${BRAND.primaryDark})`,
+              } as any,
+            ]}
+            onPress={handleLogin}
+            disabled={loginStatus !== "idle"}
+          >
+            {loginStatus === "idle" ? (
+              <>
+                <Feather name="log-in" size={18} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.loginText} numberOfLines={1}>
+                  Sign In
+                </Text>
+              </>
+            ) : loginStatus === "loading" ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Feather name="check" size={24} color="#fff" />
+            )}
+          </AnimatedTouchableOpacity>
+        </View>
+
+        <View style={styles.secureRow}>
+          <Feather name="shield" size={13} color="#94A3B8" />
+          <Text style={styles.secureText}>Secure, encrypted connection</Text>
+        </View>
+      </Animated.View>
+    </View>
+  );
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={BRAND.bg}
-        translucent={false}
-      />
+      <StatusBar barStyle="dark-content" backgroundColor={BRAND.bg} translucent={false} />
 
       <View pointerEvents="none" style={styles.blobTopLeft} />
       <View pointerEvents="none" style={styles.blobBottomRight} />
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingVertical: isSmall ? 20 : 40 },
+        ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         <Animated.View
           style={[
-            styles.formCard,
+            styles.card,
+            isWide ? styles.cardWide : styles.cardNarrow,
             { transform: [{ translateX: formTranslateX }] },
           ]}
         >
-          <Animated.View style={[styles.brandSection, getEntranceStyle(0)]}>
-            <View style={styles.logoCircle}>
-              <Image
-                source={require("../assets/logo.png")}
-                style={styles.appLogo}
-                resizeMode="contain"
-              />
-            </View>
-
-            <View style={styles.brandTextWrap}>
-              <Text style={styles.appTitle}>Namaste School</Text>
-              <Text style={styles.appSubtitle}>School Management System</Text>
-            </View>
-          </Animated.View>
-
-          <Animated.View style={getEntranceStyle(1)}>
-            <Text style={styles.label}>Email Address</Text>
-            <View style={styles.inputContainer}>
-              <Feather name="mail" size={20} color="#94A3B8" />
-              <TextInput
-                style={styles.input}
-                placeholder="name@company.com"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                placeholderTextColor="#94A3B8"
-              />
-            </View>
-          </Animated.View>
-
-          <Animated.View style={getEntranceStyle(2)}>
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.inputContainer}>
-              <Feather name="lock" size={20} color="#94A3B8" />
-              <TextInput
-                style={styles.input}
-                secureTextEntry={!showPassword}
-                placeholder="••••••••"
-                value={password}
-                onChangeText={setPassword}
-                placeholderTextColor="#94A3B8"
-              />
-
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Feather
-                  name={showPassword ? "eye" : "eye-off"}
-                  size={20}
-                  color="#94A3B8"
-                />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.rememberRow}>
-              <TouchableOpacity
-                style={[styles.checkbox, remember && styles.checked]}
-                onPress={() => setRemember(!remember)}
-              >
-                {remember && <Feather name="check" size={14} color="#fff" />}
-              </TouchableOpacity>
-
-              <Text style={styles.rememberText}>Keep me logged in</Text>
-            </View>
-          </Animated.View>
-
-          <Animated.View style={[styles.btnContainer, getEntranceStyle(3)]}>
-            <AnimatedTouchableOpacity
-              activeOpacity={0.85}
+          {isWide && (
+            <View
               style={[
-                styles.loginBtn,
-                { width: buttonWidth },
+                styles.brandPanel,
                 {
-                  experimental_backgroundImage:
-                    loginStatus === "success"
-                      ? "linear-gradient(135deg, #DC2626, #DC2626)"
-                      : `linear-gradient(135deg, ${BRAND.primaryLight}, ${BRAND.primaryDark})`,
-                },
+                  experimental_backgroundImage: `linear-gradient(160deg, ${BRAND.primaryLight}, ${BRAND.primaryDark} 55%, ${BRAND.primaryDarker})`,
+                } as any,
               ]}
-              onPress={handleLogin}
-              disabled={loginStatus !== "idle"}
             >
-              {loginStatus === "idle" ? (
-                <>
-                  <Feather
-                    name="log-in"
-                    size={18}
-                    color="#fff"
-                    style={{ marginRight: 8 }}
-                  />
-                  <Text style={styles.loginText}>Sign In</Text>
-                </>
-              ) : loginStatus === "loading" ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Feather name="check" size={24} color="#fff" />
-              )}
-            </AnimatedTouchableOpacity>
-          </Animated.View>
+              <View style={styles.panelCircle1} />
+              <View style={styles.panelCircle2} />
+              {Logo}
+              <Text style={styles.panelTitle}>Namaste School</Text>
+              <Text style={styles.panelSub}>
+                One place to manage students, staff, attendance and payroll.
+              </Text>
+              <View style={styles.panelFeatures}>
+                {["Attendance & leaves", "Payroll & documents", "Role based access"].map(
+                  (t) => (
+                    <View key={t} style={styles.panelFeatureRow}>
+                      <View style={styles.panelDot}>
+                        <Feather name="check" size={12} color={BRAND.primary} />
+                      </View>
+                      <Text style={styles.panelFeatureText}>{t}</Text>
+                    </View>
+                  )
+                )}
+              </View>
+            </View>
+          )}
 
+          <View style={isWide ? styles.formPanelWide : styles.formPanelNarrow}>
+            {Form}
+          </View>
         </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -493,11 +544,7 @@ export default function LoginScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: BRAND.bg,
-  },
-
+  container: { flex: 1, backgroundColor: BRAND.bg },
   sessionLoader: {
     flex: 1,
     backgroundColor: BRAND.bg,
@@ -515,7 +562,6 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.blob1,
     opacity: 0.35,
   },
-
   blobBottomRight: {
     position: "absolute",
     bottom: -130,
@@ -532,77 +578,124 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 40,
   },
 
-  formCard: {
+  card: {
     width: "100%",
-    maxWidth: 420,
     backgroundColor: "#ffffff",
     borderRadius: 32,
-    paddingHorizontal: 32,
-    paddingTop: isSmallScreen ? 30 : 38,
-    paddingBottom: 30,
+    overflow: "hidden",
     shadowColor: BRAND.primaryDark,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.16,
+    shadowRadius: 30,
     elevation: 12,
   },
+  cardNarrow: { maxWidth: 440 },
+  cardWide: { maxWidth: 980, flexDirection: "row", minHeight: 560 },
 
-  brandSection: {
-    alignItems: "center",
-    marginBottom: 28,
+  formPanelNarrow: { paddingHorizontal: 28, paddingVertical: 32 },
+  formPanelWide: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 48,
+    paddingVertical: 40,
   },
+  formInner: { width: "100%" },
 
+  // Brand panel (wide only)
+  brandPanel: {
+    flex: 1,
+    backgroundColor: BRAND.primaryDark,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 40,
+    overflow: "hidden",
+  },
+  panelCircle1: {
+    position: "absolute",
+    top: -80,
+    right: -80,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  panelCircle2: {
+    position: "absolute",
+    bottom: -100,
+    left: -60,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  panelTitle: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: "#fff",
+    marginTop: 22,
+    letterSpacing: -0.5,
+  },
+  panelSub: {
+    fontSize: 15,
+    color: "rgba(255,255,255,0.85)",
+    textAlign: "center",
+    marginTop: 10,
+    lineHeight: 22,
+    maxWidth: 300,
+  },
+  panelFeatures: { marginTop: 28, alignSelf: "center" },
+  panelFeatureRow: { flexDirection: "row", alignItems: "center", marginVertical: 6 },
+  panelDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  panelFeatureText: { color: "#fff", fontSize: 14, fontWeight: "600" },
+
+  // Brand (narrow)
+  brandSection: { alignItems: "center", marginBottom: 24 },
   logoCircle: {
-    width: 110,
-    height: 110,
-    borderRadius: 28,
     backgroundColor: "#ffffff",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 18,
+    marginBottom: 16,
     overflow: "hidden",
     shadowColor: BRAND.primary,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.18,
     shadowRadius: 12,
     elevation: 6,
   },
-
-  appLogo: {
-    width: 100,
-    height: 100,
-    resizeMode: "contain",
-  },
-
-  brandTextWrap: {
-    alignItems: "center",
-  },
-
   appTitle: {
     fontSize: 26,
     fontWeight: "900",
     color: "#1E293B",
     letterSpacing: -0.4,
   },
+  appSubtitle: { fontSize: 14, color: "#64748B", fontWeight: "600", marginTop: 4 },
 
-  appSubtitle: {
-    fontSize: 14,
-    color: "#64748B",
-    fontWeight: "600",
-    marginTop: 4,
+  welcomeWrap: { marginBottom: 20 },
+  welcomeTitle: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: "#1E293B",
+    letterSpacing: -0.5,
   },
+  welcomeSub: { fontSize: 15, color: "#64748B", marginTop: 6 },
 
   label: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
     color: "#475569",
     marginBottom: 8,
-    marginTop: 10,
+    marginTop: 12,
   },
-
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -611,22 +704,32 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: "#F8FAFC",
     paddingHorizontal: 15,
-    height: 55,
+    height: 54,
   },
-
+  inputFocused: {
+    borderColor: BRAND.primary,
+    backgroundColor: "#FFFFFF",
+    shadowColor: BRAND.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 2,
+  },
   input: {
     flex: 1,
     fontSize: 16,
     color: "#1E293B",
     marginLeft: 10,
+    height: "100%",
   },
 
   rememberRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 20,
+    marginTop: 18,
+    marginBottom: 22,
+    alignSelf: "flex-start",
   },
-
   checkbox: {
     width: 22,
     height: 22,
@@ -637,43 +740,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  checked: { backgroundColor: BRAND.primary, borderColor: BRAND.primary },
+  rememberText: { fontSize: 14, color: "#64748B", fontWeight: "500" },
 
-  checked: {
-    backgroundColor: BRAND.primary,
-    borderColor: BRAND.primary,
-  },
-
-  rememberText: {
-    fontSize: 14,
-    color: "#64748B",
-    fontWeight: "500",
-  },
-
+  // Button container fills the card's inner width and sizes itself
   btnContainer: {
+    width: "100%",
+    height: BUTTON_HEIGHT,
     alignItems: "center",
     justifyContent: "center",
-    height: 57,
-    marginTop: 10,
   },
-
   loginBtn: {
-    height: 56,
-    borderRadius: 28,
+    height: BUTTON_HEIGHT,
+    borderRadius: BUTTON_HEIGHT / 2,
     justifyContent: "center",
     alignItems: "center",
     flexDirection: "row",
-    backgroundColor: BRAND.primaryDark, 
+    backgroundColor: BRAND.primaryDark,
+    overflow: "hidden",
     shadowColor: BRAND.primary,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 6,
   },
-
   loginText: {
     color: "#fff",
     fontWeight: "bold",
     fontSize: 17,
     letterSpacing: 0.3,
   },
+
+  secureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 18,
+  },
+  secureText: { fontSize: 12, color: "#94A3B8", marginLeft: 6, fontWeight: "500" },
 });

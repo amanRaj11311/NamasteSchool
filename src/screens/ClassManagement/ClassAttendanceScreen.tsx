@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, SafeAreaView, FlatList, TextInput, Modal,
+  View, Text, StyleSheet, TouchableOpacity, Pressable, SafeAreaView, FlatList, TextInput, Modal,
   KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, RefreshControl,
-  useWindowDimensions, LayoutAnimation, UIManager, Animated,
+  useWindowDimensions, LayoutAnimation, UIManager, Animated, AppState, Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Feather from 'react-native-vector-icons/Feather';
@@ -19,8 +19,28 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const CLASS_ATTENDANCE_URL = `${API_BASE}/attendance/class`;
+/* ────────────────────────────── Config ────────────────────────────── */
+
+const CLASSES_URL = `${API_BASE}/classes`;
+const STUDENTS_URL = `${API_BASE}/students`;
+const CLASS_ATTENDANCE_URL = `${API_BASE}/attendance/class`; // same endpoint as the web page (GET + POST)
 const BULK_ATTENDANCE_URL = `${API_BASE}/attendance/class/bulk`;
+
+const DEFAULT_AVATAR = '/default-avatar.png';
+const CACHE_PREFIX = 'attendance_grid_v2_';
+const USER_DATA_KEY = 'userData'; // optional: JSON of the logged-in user (used for teacher class scoping)
+
+const ALLOW_FUTURE_DATES = false; // web allows it; mobile keeps it locked. Flip to true for strict parity.
+const FLUSH_DELAY_MS = 400; // write-behind debounce for cell taps
+const UPLOAD_BATCH_SIZE = 20;
+
+const ROW_HEIGHT = 64;
+const HEADER_HEIGHT = 56;
+const SUMMARY_COL_W = 36;
+const SUMMARY_PCT_W = 60;
+const SUMMARY_TOTAL_W = SUMMARY_COL_W * 4 + SUMMARY_PCT_W;
+
+/* ────────────────────────────── Theme ────────────────────────────── */
 
 const C = {
   bg: '#F6F6F9', surface: '#FFFFFF', surfaceSoft: '#FBFBFD', surfaceSunken: '#F1F2F6', border: '#E7E9F2',
@@ -30,85 +50,83 @@ const C = {
   green: '#059669', greenSoft: '#DCFCE9',
   amber: '#B45309', amberSoft: '#FEF3C7',
   slate: '#64748B', slateSoft: '#F1F5F9',
-  purple: '#8B5CF6', purpleSoft: '#EDE9FE',
-  todayTint: '#FFF7ED', todayBorder: '#FDBA74',
-  futureBg: '#F8F9FB',
+  todayTint: '#FFF7ED', futureBg: '#F8F9FB',
   overlay: 'rgba(13,15,22,0.48)',
 };
 
 const SHADOW = {
-  card: {
-    shadowColor: '#0F172A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2,
-  },
-  raised: {
-    shadowColor: '#0F172A', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 18, elevation: 6,
-  },
-  soft: {
-    shadowColor: '#0F172A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 1,
-  },
-  fab: {
-    shadowColor: '#0F172A', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 14, elevation: 8,
-  },
+  card: { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
+  raised: { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 18, elevation: 6 },
+  soft: { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 1 },
+  fab: { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 14, elevation: 8 },
 };
 
-const STATUS_META: Record<string, { label: string; color: string; bg: string; abbr: string; icon: string }> = {
+/* ────────────────────────────── Types ────────────────────────────── */
+
+type Status = 'Present' | 'Absent' | 'Leave' | 'Half-Day' | 'Holiday';
+type Row = { key: string; studentId?: string; rollNo: string; name: string; photo: string };
+type RowAttendance = Record<string, Status>; // dateStr -> status
+type AttendanceMap = Record<string, RowAttendance>; // rowKey -> RowAttendance
+type DayMeta = { day: number; dateStr: string; isSun: boolean; isToday: boolean; isFuture: boolean };
+type PendingEdit = {
+  cellKey: string; classId: string; schoolId?: string; rowKey: string; row: Row;
+  dateStr: string; status: Status; revertTo: Status | null; ownerKey: string;
+};
+type Notice = { type: 'success' | 'error' | 'info'; message: string } | null;
+
+const STATUS_META: Record<Status, { label: string; color: string; bg: string; abbr: string; icon: string }> = {
   Present: { label: 'Present', color: C.green, bg: C.greenSoft, abbr: 'P', icon: 'check-circle' },
   Absent: { label: 'Absent', color: C.primary, bg: C.primarySoft, abbr: 'A', icon: 'x-circle' },
   Leave: { label: 'Leave', color: C.amber, bg: C.amberSoft, abbr: 'L', icon: 'clock' },
   'Half-Day': { label: 'Half-Day', color: C.blue, bg: C.blueSoft, abbr: 'HD', icon: 'sunrise' },
   Holiday: { label: 'Holiday', color: C.slate, bg: C.slateSoft, abbr: 'H', icon: 'coffee' },
 };
-const STATUS_ORDER = ['Present', 'Absent', 'Leave', 'Half-Day', 'Holiday'];
+const STATUS_ORDER: Status[] = ['Present', 'Absent', 'Leave', 'Half-Day', 'Holiday'];
+const VALID_STATUSES: string[] = STATUS_ORDER;
+const EMPTY_ROW_ATT: RowAttendance = Object.freeze({}) as RowAttendance;
 
-// Fixed row height — required for FlatList.getItemLayout, which lets the list
-// skip measuring every row and jump-scroll instantly even with 500+ students.
-// Also used to keep the frozen name column's rows pixel-aligned with the
-// day-cells FlatList's rows, since both are now built from the same row height.
-const ROW_HEIGHT = 64;
-// Fixed header height so the sticky name-column header and the scrolling
-// date header line up pixel-for-pixel even though they now live in two
-// separate view trees.
-const HEADER_HEIGHT = 52;
-const EMPTY_ATTENDANCE: Record<string, string> = {};
+/* ────────────────────────────── Utilities ────────────────────────────── */
 
-// Valid attendance statuses — used to validate payloads before they're sent.
-const VALID_STATUSES = ['Present', 'Absent', 'Leave', 'Half-Day', 'Holiday'];
-
-type Option = { label: string; value: string };
-
-// --- Safe Date Utilities ---
-const formatToYMD = (d: Date): string => {
-  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-  return local.toISOString().split('T')[0];
-};
-const formatPretty = (dateStr: string): string => {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const dt = new Date(y, m - 1, d);
-  return dt.toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' });
-};
-const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+const pad = (n: number) => String(n).padStart(2, '0');
+const formatToYMD = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const getDaysInMonth = (year: number, monthIdx: number) => new Date(year, monthIdx + 1, 0).getDate();
 const getInitials = (name: string) => (name || '?').trim().charAt(0).toUpperCase();
-
-// Builds the nested { studentKey: { dateStr: status } } matrix from the flat
-// records array returned by the API / stored in cache. This is only called
-// on a full fetch (network or cache) — single-cell edits patch the map
-// directly instead of rebuilding it, which is what keeps taps fast.
-const buildAttendanceMap = (records: any[]): Record<string, Record<string, string>> => {
-  const map: Record<string, Record<string, string>> = {};
-  records.forEach(record => {
-    const d = record.date.split('T')[0];
-    const key = record.rollNo?.toString() || record.studentName;
-    if (key) {
-      if (!map[key]) map[key] = {};
-      map[key][d] = record.status;
-    }
-  });
-  return map;
+const formatPretty = (dateStr: string) => {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' });
 };
+const monthLabel = (month: string, style: 'long' | 'short' = 'long') => {
+  const [y, m] = month.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleString('default', { month: style, year: 'numeric' });
+};
+const shiftMonth = (month: string, delta: number) => {
+  const [y, m] = month.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+};
+const errMsg = (e: any, fallback: string) =>
+  e?.response?.data?.message || e?.response?.data?.error || (e?.message === 'Network Error' ? 'No internet connection.' : fallback);
 
-// Debounce hook — keeps search filtering from re-running on every keystroke
-// when the student list is large.
-function useDebouncedValue<T>(value: T, delay = 300): T {
+const naturalCompare = (a: string, b: string) => {
+  const re = /(\d+)|(\D+)/g;
+  const pa = a.match(re) || [];
+  const pb = b.match(re) || [];
+  for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
+    const x = pa[i], y = pb[i];
+    if (/^\d/.test(x) && /^\d/.test(y)) {
+      const d = parseInt(x, 10) - parseInt(y, 10);
+      if (d) return d;
+    } else {
+      const c = x.toLowerCase().localeCompare(y.toLowerCase());
+      if (c) return c;
+    }
+  }
+  return pa.length - pb.length;
+};
+const sortClassesNaturally = (list: any[]) =>
+  [...list].sort((a, b) => naturalCompare(String(a.className || ''), String(b.className || '')));
+
+function useDebouncedValue<T>(value: T, delay = 250): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
     const t = setTimeout(() => setDebounced(value), delay);
@@ -117,163 +135,250 @@ function useDebouncedValue<T>(value: T, delay = 300): T {
   return debounced;
 }
 
-const buildAttendanceItem = (student: any, status: string) => ({
-  rollNo: student.rollNo?.toString() || '',
-  studentName: student.name || '',
-  photo: student.photo || '/default-avatar.png',
-  status: status && VALID_STATUSES.includes(status) ? status : 'Absent',
+/* ── Network: shared instance + retry with exponential backoff ── */
+
+const http = axios.create({ timeout: 20000 });
+const isRetryable = (e: any) => !e?.response || e.response.status >= 500;
+async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (attempt >= retries || !isRetryable(e)) throw e;
+      attempt += 1;
+      await new Promise(r => setTimeout(r, 400 * 2 ** (attempt - 1)));
+    }
+  }
+}
+
+/* ── Grid building: mirrors the web `studentMap` merge exactly ── */
+
+const buildGrid = (students: any[], records: any[]): { rows: Row[]; map: AttendanceMap } => {
+  const rows: Row[] = [];
+  const byId = new Map<string, Row>();
+  const byRoll = new Map<string, Row>();
+  const byName = new Map<string, Row>();
+
+  const register = (row: Row) => {
+    rows.push(row);
+    byId.set(row.key, row);
+    if (row.studentId) byId.set(String(row.studentId), row);
+    if (row.rollNo && row.rollNo !== 'N/A' && !byRoll.has(row.rollNo)) byRoll.set(row.rollNo, row);
+    const n = row.name.trim().toLowerCase();
+    if (n && !byName.has(n)) byName.set(n, row);
+  };
+
+  students.forEach(st => {
+    const id = String(st._id);
+    register({
+      key: id,
+      studentId: id,
+      rollNo: String(st.rollNo || st.admissionNo || 'N/A'),
+      name: st.name || 'Student',
+      photo: st.photo || '',
+    });
+  });
+
+  const map: AttendanceMap = {};
+  records.forEach(rec => {
+    const sid = rec.studentId?._id || rec.studentId;
+    const sidStr = sid && typeof sid !== 'object' ? String(sid) : undefined;
+    const roll = rec.rollNo != null ? String(rec.rollNo) : '';
+    const nameKey = String(rec.studentName || '').trim().toLowerCase();
+
+    let row =
+      (sidStr && byId.get(sidStr)) ||
+      (roll && roll !== 'N/A' && byRoll.get(roll)) ||
+      (nameKey && byName.get(nameKey)) ||
+      undefined;
+
+    if (!row) {
+      row = {
+        key: `ext:${sidStr || roll || nameKey || rows.length}`,
+        studentId: sidStr,
+        rollNo: roll || 'N/A',
+        name: rec.studentName || 'Student',
+        photo: rec.photo || '',
+      };
+      register(row);
+    }
+
+    const dateStr = String(rec.date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || !VALID_STATUSES.includes(rec.status)) return;
+    if (!map[row.key]) map[row.key] = {};
+    map[row.key][dateStr] = rec.status as Status;
+  });
+
+  return { rows, map };
+};
+
+const applyCell = (map: AttendanceMap, rowKey: string, dateStr: string, status: Status | null): AttendanceMap => {
+  const nextRow = { ...(map[rowKey] || {}) };
+  if (status === null) delete nextRow[dateStr];
+  else nextRow[dateStr] = status;
+  return { ...map, [rowKey]: nextRow };
+};
+
+const computeStats = (att: RowAttendance, dayMetas: DayMeta[], workingDays: number) => {
+  let p = 0, a = 0, l = 0, h = 0;
+  for (const m of dayMetas) {
+    const st = att[m.dateStr];
+    if (st === 'Present') p += 1;
+    else if (st === 'Absent') a += 1;
+    else if (st === 'Leave') l += 1;
+    else if (st === 'Half-Day') p += 0.5;
+    else if (st === 'Holiday') h += 1;
+    else if (m.isSun) h += 1;
+  }
+  const pct = Math.min(100, Math.round((p / workingDays) * 100));
+  return { p, a, l, h, pct, hasData: Object.keys(att).length > 0 };
+};
+const fmtCount = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+
+const toAttendanceItem = (row: Row, status: Status) => ({
+  studentId: row.studentId,
+  rollNo: row.rollNo,
+  studentName: row.name,
+  photo: row.photo || DEFAULT_AVATAR,
+  status,
 });
 
-const validateAttendancePayload = (
-  classId: string,
-  schoolId: string,
-  dateStr: string,
-  attendanceList: any[]
-): string[] => {
-  const errors: string[] = [];
+/* ────────────────────────────── Small components ────────────────────────────── */
 
-  if (!classId) errors.push('Class is missing.');
-  if (!schoolId) errors.push('School could not be determined for this class.');
-  if (!dateStr) errors.push('Attendance date is missing.');
+const StudentAvatar = memo(({ photo, name, size = 34, tint = C.primary }: { photo?: string; name: string; size?: number; tint?: string }) => {
+  const [failed, setFailed] = useState(false);
+  const valid = !!photo && /^https?:\/\//i.test(photo) && !failed;
+  if (valid) {
+    return (
+      <Image
+        source={{ uri: photo }}
+        onError={() => setFailed(true)}
+        style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: C.surfaceSunken }}
+      />
+    );
+  }
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: tint + '22', justifyContent: 'center', alignItems: 'center' }}>
+      <Text style={{ fontSize: size * 0.38, fontWeight: '800', color: tint }}>{getInitials(name)}</Text>
+    </View>
+  );
+});
 
-  if (!attendanceList || attendanceList.length === 0) {
-    errors.push('No students to mark.');
+type DayCellProps = {
+  rowKey: string; meta: DayMeta; status: Status | undefined; width: number; canEdit: boolean;
+  onToggle: (rowKey: string, dateStr: string) => void;
+  onLongPress: (rowKey: string, dateStr: string) => void;
+};
+
+const DayCell = memo(({ rowKey, meta, status, width, canEdit, onToggle, onLongPress }: DayCellProps) => {
+  const locked = !ALLOW_FUTURE_DATES && meta.isFuture;
+  const interactive = canEdit && !locked;
+  const sMeta = status ? STATUS_META[status] : null;
+
+  let content: React.ReactNode;
+  if (locked) {
+    content = <Feather name="lock" size={11} color={C.textFaint} />;
+  } else if (status === 'Present') {
+    content = (
+      <View style={styles.cellBoxActive}>
+        <Feather name="check" size={14} color="#fff" />
+      </View>
+    );
+  } else if (sMeta && status !== 'Absent') {
+    content = (
+      <View style={[styles.statusPill, { backgroundColor: sMeta.bg, borderColor: sMeta.color + '33' }]}>
+        <Text style={[styles.statusPillText, { color: sMeta.color }]}>{sMeta.abbr}</Text>
+      </View>
+    );
+  } else if (meta.isSun && !status) {
+    content = (
+      <View style={styles.cellBoxSun}>
+        <Text style={styles.cellBoxSunText}>SUN</Text>
+      </View>
+    );
   } else {
-    attendanceList.forEach((item, idx) => {
-      if (!item.rollNo) errors.push(`Row ${idx + 1}: missing rollNo.`);
-      if (!item.studentName) errors.push(`Row ${idx + 1}: missing studentName.`);
-      if (!item.status || !VALID_STATUSES.includes(item.status)) {
-        errors.push(`Row ${idx + 1}: missing or invalid status.`);
-      }
-    });
+    content = <View style={[styles.cellBoxEmpty, status === 'Absent' && styles.cellBoxAbsent]} />;
   }
 
-  return errors;
-};
-
-// ---------------------------------------------------------------------
-// StudentNameCell — the LEFT, fixed sticky column. It's no longer rendered
-// by its own FlatList (see the architecture note near the matrix render
-// block below) — it's mapped directly inside an Animated.View that is
-// translated in lockstep with the day-cells FlatList's native scroll
-// offset, so it stays visually joined to each row without ever scrolling
-// sideways or needing a second scrollable list.
-// ---------------------------------------------------------------------
-type StudentNameCellProps = {
-  student: any;
-  pct: number | null;
-  stickyColWidth: number;
-};
-const StudentNameCell = memo(({ student, pct, stickyColWidth }: StudentNameCellProps) => {
-  const pctColor = pct === null ? C.textFaint : pct >= 85 ? C.green : pct >= 60 ? C.amber : C.primary;
   return (
-    <View
-      style={[
-        styles.matrixDataCell,
-        styles.matrixStickyCol,
-        { width: stickyColWidth, height: ROW_HEIGHT, borderLeftWidth: 3, borderLeftColor: pctColor },
+    <Pressable
+      disabled={!interactive}
+      onPress={() => onToggle(rowKey, meta.dateStr)}
+      onLongPress={() => onLongPress(rowKey, meta.dateStr)}
+      delayLongPress={350}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: status === 'Present', disabled: !interactive }}
+      style={({ pressed }) => [
+        styles.dayCell,
+        { width },
+        meta.isSun && !meta.isFuture && styles.sunBg,
+        meta.isToday && styles.todayBg,
+        locked && styles.futureBg,
+        pressed && interactive && { opacity: 0.55 },
       ]}
     >
-      <View style={styles.studentInfo}>
-        <View style={[styles.avatar, { backgroundColor: pctColor + '22' }]}>
-          <Text style={[styles.avatarText, { color: pctColor }]}>{getInitials(student.name)}</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.studentName} numberOfLines={1}>{student.name}</Text>
+      {content}
+    </Pressable>
+  );
+});
+
+type RowProps = {
+  row: Row; att: RowAttendance; dayMetas: DayMeta[]; workingDays: number;
+  dayCellWidth: number; stickyColWidth: number; scrollX: Animated.Value; canEdit: boolean;
+  onToggle: (rowKey: string, dateStr: string) => void;
+  onLongPress: (rowKey: string, dateStr: string) => void;
+};
+
+const AttendanceRow = memo(({ row, att, dayMetas, workingDays, dayCellWidth, stickyColWidth, scrollX, canEdit, onToggle, onLongPress }: RowProps) => {
+  const stats = useMemo(() => computeStats(att, dayMetas, workingDays), [att, dayMetas, workingDays]);
+  const pctColor = !stats.hasData ? C.textFaint : stats.pct >= 75 ? C.green : stats.pct >= 50 ? C.amber : C.primary;
+
+  return (
+    <View style={styles.dataRow}>
+      <Animated.View
+        style={[styles.stickyCell, { width: stickyColWidth, borderLeftColor: pctColor, transform: [{ translateX: scrollX }] }]}
+      >
+        <StudentAvatar photo={row.photo} name={row.name} size={34} tint={pctColor} />
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <Text style={styles.studentName} numberOfLines={1}>{row.name}</Text>
           <View style={styles.studentMetaRow}>
-            <Text style={styles.studentRoll}>Roll {student.rollNo || 'N/A'}</Text>
-            {pct !== null && (
-              <View style={[styles.pctBadge, { backgroundColor: pctColor + '18' }]}>
-                <Text style={[styles.studentPct, { color: pctColor }]}>{pct}%</Text>
-              </View>
-            )}
+            <Text style={styles.studentRoll} numberOfLines={1}>Roll {row.rollNo}</Text>
+            <View style={[styles.pctBadge, { backgroundColor: pctColor + '18' }]}>
+              <Text style={[styles.studentPct, { color: pctColor }]}>{stats.hasData ? `${stats.pct}%` : '—'}</Text>
+            </View>
           </View>
+        </View>
+      </Animated.View>
+
+      {dayMetas.map(m => (
+        <DayCell
+          key={m.day}
+          rowKey={row.key}
+          meta={m}
+          status={att[m.dateStr]}
+          width={dayCellWidth}
+          canEdit={canEdit}
+          onToggle={onToggle}
+          onLongPress={onLongPress}
+        />
+      ))}
+
+      <View style={[styles.sumCell, { width: SUMMARY_COL_W, backgroundColor: C.greenSoft + '80' }]}><Text style={[styles.sumText, { color: C.green }]}>{fmtCount(stats.p)}</Text></View>
+      <View style={[styles.sumCell, { width: SUMMARY_COL_W, backgroundColor: C.primarySoft + '80' }]}><Text style={[styles.sumText, { color: C.primary }]}>{stats.a}</Text></View>
+      <View style={[styles.sumCell, { width: SUMMARY_COL_W, backgroundColor: C.amberSoft + '80' }]}><Text style={[styles.sumText, { color: C.amber }]}>{stats.l}</Text></View>
+      <View style={[styles.sumCell, { width: SUMMARY_COL_W, backgroundColor: C.slateSoft }]}><Text style={[styles.sumText, { color: C.slate }]}>{stats.h}</Text></View>
+      <View style={[styles.sumCell, { width: SUMMARY_PCT_W }]}>
+        <View style={[styles.pctBadge, { backgroundColor: pctColor + '18' }]}>
+          <Text style={[styles.studentPct, { color: pctColor }]}>{stats.pct}%</Text>
         </View>
       </View>
     </View>
   );
 });
 
-// ---------------------------------------------------------------------
-// StudentDayCells — the RIGHT, horizontally-scrolling row of day checkboxes
-// for one student. Rendered by its own FlatList inside the horizontal
-// ScrollView. Contains no student-identifying info by design — that's the
-// whole point of splitting it from StudentNameCell.
-// ---------------------------------------------------------------------
-type StudentDayCellsProps = {
-  student: any;
-  year: number;
-  month: number;
-  daysArray: number[];
-  attendanceForStudent: Record<string, string>;
-  canEdit: boolean;
-  todayStr: string;
-  dayCellWidth: number;
-  onCellPress: (student: any, dateStr: string) => void;
-  onCellLongPress: (student: any, dateStr: string) => void;
-};
-
-const StudentDayCells = memo(
-  ({ student, year, month, daysArray, attendanceForStudent, canEdit, todayStr, dayCellWidth, onCellPress, onCellLongPress }: StudentDayCellsProps) => {
-    return (
-      <View style={styles.matrixDataRow}>
-        {daysArray.map(day => {
-          const dateStr = formatToYMD(new Date(year, month, day, 12, 0, 0));
-          const status = attendanceForStudent[dateStr] || null;
-          const isSun = new Date(year, month, day, 12, 0, 0).getDay() === 0;
-          const isToday = dateStr === todayStr;
-          const isFuture = dateStr > todayStr;
-          const canPress = canEdit && !isFuture;
-          const meta = status ? STATUS_META[status] : null;
-
-          return (
-            <TouchableOpacity
-              key={day}
-              style={[
-                styles.matrixDayDataCell,
-                { width: dayCellWidth },
-                isSun && !isFuture && styles.matrixSunBg,
-                isToday && styles.matrixTodayBg,
-                isFuture && styles.matrixFutureBg,
-              ]}
-              activeOpacity={canPress ? 0.6 : 1}
-              onPress={() => canPress && onCellPress(student, dateStr)}
-              onLongPress={() => canPress && onCellLongPress(student, dateStr)}
-              delayLongPress={350}
-              disabled={!canPress}
-            >
-              {isFuture ? (
-                <Feather name="lock" size={11} color={C.textFaint} />
-              ) : status === 'Present' ? (
-                // Present — filled checkbox (this is the normal tap target)
-                <View style={styles.cellCheckboxActive}>
-                  <Feather name="check" size={13} color="#fff" />
-                </View>
-              ) : meta && status !== 'Absent' ? (
-                // Leave / Half-Day / Holiday — set via long-press, shown as a
-                // small status pill so it stays visually distinct from a
-                // plain present/absent checkbox.
-                <View style={[styles.statusPill, { backgroundColor: meta.bg, borderColor: meta.color + '33' }]}>
-                  <Text style={[styles.statusPillText, { color: meta.color }]}>{meta.abbr}</Text>
-                </View>
-              ) : isSun ? (
-                <View style={[styles.statusPill, { backgroundColor: C.slateSoft }]}>
-                  <Text style={[styles.statusPillText, { color: C.slate }]}>H</Text>
-                </View>
-              ) : (
-                // Absent or not yet marked — empty checkbox (default state)
-                <View style={styles.cellCheckboxEmpty} />
-              )}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    );
-  }
-);
-
-const SkeletonRow = ({ delay = 0 }: { delay?: number }) => (
-  <View style={[styles.skeletonRow, { opacity: 1 - Math.min(delay * 0.06, 0.4) }]}>
+const SkeletonRow = ({ index }: { index: number }) => (
+  <View style={[styles.skeletonRow, { opacity: 1 - Math.min(index * 0.07, 0.45) }]}>
     <View style={styles.skeletonAvatar} />
     <View style={{ flex: 1, marginLeft: 12 }}>
       <View style={styles.skeletonLineWide} />
@@ -285,6 +390,8 @@ const SkeletonRow = ({ delay = 0 }: { delay?: number }) => (
   </View>
 );
 
+/* ────────────────────────────── Screen ────────────────────────────── */
+
 export default function ClassAttendanceScreen() {
   const insets = useSafeAreaInsets();
   const { width: winWidth } = useWindowDimensions();
@@ -293,305 +400,544 @@ export default function ClassAttendanceScreen() {
   const dayCellWidth = isTablet ? 54 : isCompactPhone ? 40 : 44;
   const stickyColWidth = isTablet ? 226 : isCompactPhone ? 154 : 172;
 
+  /* Session */
   const [permissions, setPermissions] = useState<any[]>([]);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [teacherClassIds, setTeacherClassIds] = useState<string[] | null>(null);
+  const authTokenRef = useRef<string | null>(null);
+  const authHeaders = useCallback(() => ({ headers: { Authorization: `Bearer ${authTokenRef.current}` } }), []);
 
-  // Data States
+  /* Data */
   const [classes, setClasses] = useState<any[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceMap>({});
+  const attendanceRef = useRef<AttendanceMap>({}); // always in sync (updated synchronously with state)
+  const rowIndexRef = useRef<Map<string, Row>>(new Map());
+  const gridOwnerRef = useRef<string>(''); // `${classId}|${month}` the current grid belongs to
+  const requestIdRef = useRef(0);
 
-  const [attendanceMap, setAttendanceMap] = useState<Record<string, Record<string, string>>>({});
-
-  // Kept in sync with attendanceMap/studentPctMap on every render, but read
-  // from inside stable callbacks (onCellPress, onCellLongPress, the row
-  // renderers) instead of the state itself. This is what lets those
-  // callbacks keep the SAME function identity across taps — previously they
-  // listed attendanceMap as a dependency, so every single tap produced a
-  // brand new onCellPress/renderItem, which forced the whole visible window
-  // to re-render on every checkbox tap.
-  const attendanceMapRef = useRef<Record<string, Record<string, string>>>({});
-  useEffect(() => { attendanceMapRef.current = attendanceMap; }, [attendanceMap]);
-
-  // Selection States
-  const [selectedClassId, setSelectedClassId] = useState<string>('');
-  const [selectedMonth, setSelectedMonth] = useState<Date>(new Date());
+  /* Selection */
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState(() => formatToYMD(new Date()).slice(0, 7));
+  const [todayStr, setTodayStr] = useState(() => formatToYMD(new Date()));
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebouncedValue(searchQuery, 250);
-
   const [selectedStatDate, setSelectedStatDate] = useState<string | null>(null);
 
-  const todayStr = useMemo(() => formatToYMD(new Date()), []);
-  const isFutureDateStr = useCallback((dateStr: string) => dateStr > todayStr, [todayStr]);
-
-  const selectedSchoolId = useMemo(() => {
-    const cls = classes.find((c: any) => c._id === selectedClassId);
-    const sid = cls?.schoolId;
-    if (!sid) return null;
-    return typeof sid === 'string' ? sid : sid?._id || null;
-  }, [classes, selectedClassId]);
-
-  const selectedClass = useMemo(
-    () => classes.find((c: any) => c._id === selectedClassId),
-    [classes, selectedClassId]
-  );
-
-  // UI States
+  /* UI state */
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number; failed: number } | null>(null);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'error'>('idle');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
+  const noticeTimerRef = useRef<any>(null);
 
-  // Modals
-  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [showClassSheet, setShowClassSheet] = useState(false);
   const [isDailyModalVisible, setDailyModalVisible] = useState(false);
   const [isSingleEditModalVisible, setSingleEditModalVisible] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showLegendModal, setShowLegendModal] = useState(false);
-
-  // Floating action button (Excel actions) — collapsed by default so the
-  // filter bar + student list stay the whole screen; teacher expands this
-  // only when they actually need to import/export.
   const [fabOpen, setFabOpen] = useState(false);
-  const toggleFab = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setFabOpen(o => !o);
-  }, []);
-  const closeFab = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setFabOpen(false);
-  }, []);
 
-  // Daily Attendance Form
   const [dailyDate, setDailyDate] = useState<Date>(new Date());
   const [showDailyDatePicker, setShowDailyDatePicker] = useState(false);
-  const [dailyDraft, setDailyDraft] = useState<Record<string, string>>({});
+  const [dailyDraft, setDailyDraft] = useState<Record<string, Status>>({});
   const [dailySearch, setDailySearch] = useState('');
+  const [singleEditData, setSingleEditData] = useState<{ row: Row; dateStr: string; status: Status } | null>(null);
 
-  // Single Edit Form
-  const [singleEditData, setSingleEditData] = useState<{ student: any; dateStr: string; status: string } | null>(null);
+  /* Derived */
+  const hasPermission = useCallback(
+    (action: string) => isSuperAdmin || permissions.some(p => p.module === 'attendance' && p.action === action),
+    [permissions, isSuperAdmin]
+  );
+  const canEditCells = hasPermission('update');
 
-  useEffect(() => { initialize(); }, []);
+  const availableClasses = useMemo(() => {
+    const sorted = sortClassesNaturally(classes);
+    return teacherClassIds && teacherClassIds.length > 0
+      ? sorted.filter(c => teacherClassIds.includes(String(c._id || c.id)))
+      : sorted;
+  }, [classes, teacherClassIds]);
 
-  const initialize = async () => {
-    // Read all three AsyncStorage keys in parallel instead of one at a time
-    // — shaves a little off the time before the first fetch can start.
-    const [token, permsRaw, superAdminRaw] = await Promise.all([
-      AsyncStorage.getItem('userToken'),
-      AsyncStorage.getItem('userPermissions'),
-      AsyncStorage.getItem('isSuperAdmin'),
-    ]);
+  const selectedClass = useMemo(() => classes.find(c => c._id === selectedClassId), [classes, selectedClassId]);
+  const selectedSchoolId: string | undefined = useMemo(() => {
+    const sid = selectedClass?.schoolId;
+    return (typeof sid === 'string' ? sid : sid?._id) || undefined;
+  }, [selectedClass]);
 
-    if (permsRaw) setPermissions(JSON.parse(permsRaw));
-    setIsSuperAdmin(superAdminRaw === 'true');
-    setAuthToken(token);
-    fetchDependencies(token);
-  };
+  const [yearNum, monthNum] = selectedMonth.split('-').map(Number);
+  const dayMetas: DayMeta[] = useMemo(() => {
+    const n = getDaysInMonth(yearNum, monthNum - 1);
+    return Array.from({ length: n }, (_, i) => {
+      const day = i + 1;
+      const dateStr = `${selectedMonth}-${pad(day)}`;
+      return {
+        day, dateStr,
+        isSun: new Date(yearNum, monthNum - 1, day, 12).getDay() === 0,
+        isToday: dateStr === todayStr,
+        isFuture: dateStr > todayStr,
+      };
+    });
+  }, [selectedMonth, yearNum, monthNum, todayStr]);
+  const workingDays = useMemo(() => Math.max(1, dayMetas.length - dayMetas.filter(m => m.isSun).length), [dayMetas]);
+  const totalWidth = stickyColWidth + dayMetas.length * dayCellWidth + SUMMARY_TOTAL_W;
 
-  const authHeaders = (token: string | null) => ({ headers: { Authorization: `Bearer ${token}` } });
+  const filteredRows = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(r => r.name.toLowerCase().includes(q) || r.rollNo.toLowerCase().includes(q));
+  }, [rows, debouncedSearch]);
 
-  const fetchDependencies = async (token: string | null) => {
-    setLoading(true);
-    try {
-      const clsRes = await axios.get(`${API_BASE}/classes`, authHeaders(token));
-      const fetchedClasses = clsRes.data?.data || [];
-      setClasses(fetchedClasses);
+  const dailyFilteredRows = useMemo(() => {
+    const q = dailySearch.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(r => r.name.toLowerCase().includes(q) || r.rollNo.toLowerCase().includes(q));
+  }, [rows, dailySearch]);
 
-      if (fetchedClasses.length > 0) {
-        setSelectedClassId(fetchedClasses[0]._id);
-        fetchGridData(token, fetchedClasses[0]._id, selectedMonth);
+  const scopedStats = useMemo(() => {
+    const counts: Record<Status, number> = { Present: 0, Absent: 0, Leave: 0, 'Half-Day': 0, Holiday: 0 };
+    if (!selectedStatDate) return counts;
+    rows.forEach(r => {
+      const st = attendance[r.key]?.[selectedStatDate];
+      if (st) counts[st] += 1;
+    });
+    return counts;
+  }, [rows, attendance, selectedStatDate]);
+  const totalMarkedInScope = scopedStats.Present + scopedStats.Absent + scopedStats.Leave + scopedStats['Half-Day'];
+  const scopedPct = totalMarkedInScope > 0
+    ? Math.round(((scopedStats.Present + scopedStats['Half-Day'] * 0.5) / totalMarkedInScope) * 100)
+    : null;
+
+  /* Context refs so handlers can stay referentially stable (critical for memo'd cells) */
+  const ctxRef = useRef({ classId: '', schoolId: undefined as string | undefined, month: selectedMonth, today: todayStr });
+  ctxRef.current = { classId: selectedClassId, schoolId: selectedSchoolId, month: selectedMonth, today: todayStr };
+
+  const showNotice = useCallback((type: 'success' | 'error' | 'info', message: string) => {
+    clearTimeout(noticeTimerRef.current);
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setNotice({ type, message });
+    noticeTimerRef.current = setTimeout(() => setNotice(null), type === 'error' ? 4500 : 2600);
+  }, []);
+
+  /* ────────── Grid state helpers ────────── */
+
+  const commitAttendance = useCallback((updater: (m: AttendanceMap) => AttendanceMap) => {
+    const next = updater(attendanceRef.current);
+    attendanceRef.current = next; // synchronous – never stale
+    setAttendance(next);
+  }, []);
+
+  const applyGrid = useCallback((ownerKey: string, nextRows: Row[], map: AttendanceMap) => {
+    gridOwnerRef.current = ownerKey;
+    rowIndexRef.current = new Map(nextRows.map(r => [r.key, r]));
+    attendanceRef.current = map;
+    setRows(nextRows);
+    setAttendance(map);
+  }, []);
+
+  /* ────────── Write-behind save queue ────────── */
+
+  const pendingRef = useRef<Map<string, PendingEdit>>(new Map());
+  const inFlightRef = useRef<Map<string, PendingEdit>>(new Map());
+  const flushPromiseRef = useRef<Promise<void> | null>(null);
+  const flushTimerRef = useRef<any>(null);
+
+  const sendBatch = useCallback(async (): Promise<number> => {
+    const batch = pendingRef.current;
+    pendingRef.current = new Map();
+    inFlightRef.current = batch;
+
+    const groups = new Map<string, { classId: string; schoolId?: string; dateStr: string; items: PendingEdit[] }>();
+    batch.forEach(e => {
+      const gk = `${e.classId}|${e.dateStr}`;
+      if (!groups.has(gk)) groups.set(gk, { classId: e.classId, schoolId: e.schoolId, dateStr: e.dateStr, items: [] });
+      groups.get(gk)!.items.push(e);
+    });
+
+    const results = await Promise.all(
+      Array.from(groups.values()).map(async g => {
+        try {
+          await withRetry(() =>
+            http.post(
+              CLASS_ATTENDANCE_URL,
+              {
+                classId: g.classId,
+                schoolId: g.schoolId,
+                date: g.dateStr,
+                attendanceList: g.items.map(e => toAttendanceItem(e.row, e.status)),
+              },
+              authHeaders()
+            )
+          );
+          return { g, ok: true as const, err: null };
+        } catch (err) {
+          return { g, ok: false as const, err };
+        }
+      })
+    );
+
+    inFlightRef.current = new Map();
+    let failed = 0;
+    let lastErr: any = null;
+
+    results.forEach(({ g, ok, err }) => {
+      g.items.forEach(e => {
+        const newer = pendingRef.current.get(e.cellKey); // user tapped again while we were saving
+        if (ok) {
+          if (newer) newer.revertTo = e.status; // this value is now confirmed on the server
+        } else {
+          failed += 1;
+          lastErr = err;
+          if (newer) newer.revertTo = e.revertTo;
+          else if (e.ownerKey === gridOwnerRef.current) {
+            commitAttendance(m => applyCell(m, e.rowKey, e.dateStr, e.revertTo)); // revert ONLY this cell
+          }
+        }
+      });
+    });
+
+    if (failed > 0) showNotice('error', `${failed} change${failed > 1 ? 's' : ''} could not be saved. ${errMsg(lastErr, 'Please try again.')}`);
+    return failed;
+  }, [authHeaders, commitAttendance, showNotice]);
+
+  const flush = useCallback((): Promise<void> => {
+    if (flushPromiseRef.current) return flushPromiseRef.current;
+    if (pendingRef.current.size === 0) return Promise.resolve();
+    const p = (async () => {
+      let failed = 0;
+      try {
+        while (pendingRef.current.size > 0) failed += await sendBatch();
+      } finally {
+        flushPromiseRef.current = null;
+        setSaveState(failed > 0 ? 'error' : 'idle');
+      }
+    })();
+    flushPromiseRef.current = p;
+    return p;
+  }, [sendBatch]);
+
+  const scheduleFlush = useCallback((delay = FLUSH_DELAY_MS) => {
+    clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = setTimeout(() => { flush(); }, delay);
+  }, [flush]);
+
+  const flushNow = useCallback(async () => {
+    clearTimeout(flushTimerRef.current);
+    while (flushPromiseRef.current || pendingRef.current.size > 0) {
+      await flush();
+    }
+  }, [flush]);
+
+  const queueCellChange = useCallback((rowKey: string, dateStr: string, status: Status) => {
+    const { classId, schoolId, today } = ctxRef.current;
+    const row = rowIndexRef.current.get(rowKey);
+    if (!row || !classId) return;
+    if (!ALLOW_FUTURE_DATES && dateStr > today) return;
+
+    const prev = attendanceRef.current[rowKey]?.[dateStr] ?? null;
+    if (prev === status) return;
+
+    commitAttendance(m => applyCell(m, rowKey, dateStr, status)); // instant UI
+
+    const cellKey = `${classId}|${rowKey}|${dateStr}`;
+    const existing = pendingRef.current.get(cellKey);
+    pendingRef.current.set(cellKey, {
+      cellKey, classId, schoolId, rowKey, row, dateStr, status,
+      revertTo: existing ? existing.revertTo : prev,
+      ownerKey: `${classId}|${dateStr.slice(0, 7)}`,
+    });
+    setSaveState('saving');
+    scheduleFlush();
+  }, [commitAttendance, scheduleFlush]);
+
+  const toggleCell = useCallback((rowKey: string, dateStr: string) => {
+    const cur = attendanceRef.current[rowKey]?.[dateStr] ?? null;
+    queueCellChange(rowKey, dateStr, cur === 'Present' ? 'Absent' : 'Present'); // same toggle rule as web
+  }, [queueCellChange]);
+
+  const openSingleEdit = useCallback((rowKey: string, dateStr: string) => {
+    const row = rowIndexRef.current.get(rowKey);
+    if (!row) return;
+    if (!ALLOW_FUTURE_DATES && dateStr > ctxRef.current.today) return;
+    setSingleEditData({ row, dateStr, status: attendanceRef.current[rowKey]?.[dateStr] || 'Present' });
+    setSingleEditModalVisible(true);
+  }, []);
+
+  /* ────────── Loading ────────── */
+
+  const overlayPending = useCallback((map: AttendanceMap, ownerKey: string): AttendanceMap => {
+    const out = { ...map };
+    const apply = (e: PendingEdit) => {
+      if (e.ownerKey !== ownerKey) return;
+      out[e.rowKey] = { ...(out[e.rowKey] || {}), [e.dateStr]: e.status };
+    };
+    inFlightRef.current.forEach(apply);
+    pendingRef.current.forEach(apply);
+    return out;
+  }, []);
+
+  const loadGrid = useCallback(async (classId: string, month: string, mode: 'initial' | 'refresh' | 'silent') => {
+    if (!classId) return;
+    const reqId = ++requestIdRef.current;
+    const ownerKey = `${classId}|${month}`;
+    let hydrated = false;
+    setLoadError(null);
+
+    if (mode === 'initial') {
+      try {
+        const raw = await AsyncStorage.getItem(CACHE_PREFIX + ownerKey);
+        if (reqId !== requestIdRef.current) return;
+        if (raw) {
+          const cached = JSON.parse(raw);
+          if (Array.isArray(cached.rows) && cached.map) {
+            applyGrid(ownerKey, cached.rows, cached.map);
+            hydrated = true;
+          }
+        }
+      } catch { /* corrupt cache → fall through to network */ }
+      if (!hydrated) {
+        applyGrid(ownerKey, [], {});
+        setLoading(true);
       } else {
         setLoading(false);
+        setSyncing(true);
       }
-    } catch (e) { console.error(e); setLoading(false); }
-  };
-
-  // Cache key per class + month, so switching back to a class/month you've
-  // already opened this session shows the matrix instantly.
-  const gridCacheKey = (classId: string, year: number, month: string) => `attendance_grid_cache_${classId}_${year}-${month}`;
-
-  const fetchGridData = async (token: string | null, classId: string, monthDate: Date, isRefresh = false) => {
-    setSelectedStatDate(null); // reset KPI drill-down whenever the underlying data changes
-    const year = monthDate.getFullYear();
-    const month = String(monthDate.getMonth() + 1).padStart(2, '0');
-    const cacheKey = gridCacheKey(classId, year, month);
-
-    // Cache-first: paint the last known matrix immediately (if any) so
-    // students never sit on a blank/spinner screen while we go fetch the
-    // latest data in the background. Pull-to-refresh always skips this.
-    // Because single-cell taps now patch this same cache entry immediately
-    // (see patchAttendanceCache below), whatever gets painted here already
-    // reflects the last checkbox the teacher tapped, even if the network
-    // hadn't confirmed it yet when they left the screen.
-    let paintedFromCache = false;
-    if (!isRefresh) {
-      try {
-        const cached = await AsyncStorage.getItem(cacheKey);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          setStudents(parsed.students || []);
-          setAttendanceMap(buildAttendanceMap(parsed.attendanceRecords || []));
-          setLoading(false);
-          paintedFromCache = true;
-        }
-      } catch (e) { /* ignore corrupt cache, fall through to network */ }
-    }
-
-    if (isRefresh) setRefreshing(true);
-    else if (!paintedFromCache) setLoading(true);
+    } else if (mode === 'refresh') setRefreshing(true);
     else setSyncing(true);
 
     try {
       const [stuRes, attRes] = await Promise.all([
-        axios.get(`${API_BASE}/students?classId=${classId}&limit=500`, authHeaders(token)),
-        axios.get(`${API_BASE}/attendance?classId=${classId}&month=${year}-${month}`, authHeaders(token)),
+        withRetry(() => http.get(STUDENTS_URL, { ...authHeaders(), params: { classId, limit: 500 } })),
+        withRetry(() => http.get(CLASS_ATTENDANCE_URL, { ...authHeaders(), params: { classId, month } })),
       ]);
+      if (reqId !== requestIdRef.current) return; // a newer request superseded this one
 
-      const freshStudents = stuRes.data?.data || [];
-      const freshAttendance = attRes.data?.data || [];
+      const { rows: nextRows, map } = buildGrid(stuRes.data?.data || [], attRes.data?.data || []);
+      applyGrid(ownerKey, nextRows, overlayPending(map, ownerKey));
+    } catch (e: any) {
+      if (reqId !== requestIdRef.current) return;
+      const msg = errMsg(e, 'Failed to load attendance.');
+      if (!hydrated && mode !== 'silent') setLoadError(msg);
+      else showNotice('error', msg);
+    } finally {
+      if (reqId === requestIdRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+        setSyncing(false);
+      }
+    }
+  }, [applyGrid, authHeaders, overlayPending, showNotice]);
 
-      setStudents(freshStudents);
-      setAttendanceMap(buildAttendanceMap(freshAttendance));
+  const bootstrap = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [token, permsRaw, superRaw, userRaw] = await Promise.all([
+        AsyncStorage.getItem('userToken'),
+        AsyncStorage.getItem('userPermissions'),
+        AsyncStorage.getItem('isSuperAdmin'),
+        AsyncStorage.getItem(USER_DATA_KEY),
+      ]);
+      authTokenRef.current = token;
+      try { if (permsRaw) setPermissions(JSON.parse(permsRaw)); } catch { /* ignore */ }
+      const superAdmin = superRaw === 'true';
+      setIsSuperAdmin(superAdmin);
 
-      AsyncStorage.setItem(cacheKey, JSON.stringify({ students: freshStudents, attendanceRecords: freshAttendance })).catch(() => { });
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); setRefreshing(false); setSyncing(false); }
+      // Teacher scoping — same rule as the web page
+      try {
+        const user = userRaw ? JSON.parse(userRaw) : null;
+        const assigned = user?.assignedClasses || user?.staff?.assignedClasses || [];
+        const isTeacher = !superAdmin && (
+          user?.roleId?.name === 'Teacher' || user?.staff?.staffType === 'Teacher' || assigned.length > 0
+        );
+        setTeacherClassIds(isTeacher && assigned.length > 0
+          ? assigned.map((c: any) => (typeof c === 'object' ? String(c._id || c.id) : String(c)))
+          : null);
+      } catch { setTeacherClassIds(null); }
+
+      const res = await withRetry(() => http.get(CLASSES_URL, authHeaders()));
+      const list = res.data?.data || [];
+      setClasses(list);
+      if (list.length === 0) setLoading(false);
+    } catch (e: any) {
+      setLoadError(errMsg(e, 'Failed to load school classes.'));
+      setLoading(false);
+    }
+  }, [authHeaders]);
+
+  useEffect(() => { bootstrap(); }, [bootstrap]);
+
+  // Choose a valid class once classes / scoping are known
+  useEffect(() => {
+    if (availableClasses.length === 0) return;
+    if (!availableClasses.some(c => c._id === selectedClassId)) setSelectedClassId(availableClasses[0]._id);
+  }, [availableClasses, selectedClassId]);
+
+  // Single source of truth for loading: class or month changes
+  useEffect(() => {
+    if (selectedClassId) loadGrid(selectedClassId, selectedMonth, 'initial');
+  }, [selectedClassId, selectedMonth, loadGrid]);
+
+  // Persist derived grid to cache (debounced, only when nothing is unsaved)
+  useEffect(() => {
+    if (loading || !gridOwnerRef.current) return;
+    const t = setTimeout(() => {
+      if (pendingRef.current.size > 0 || inFlightRef.current.size > 0) return;
+      AsyncStorage.setItem(
+        CACHE_PREFIX + gridOwnerRef.current,
+        JSON.stringify({ rows, map: attendance, ts: Date.now() })
+      ).catch(() => { });
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [rows, attendance, loading]);
+
+  // Foreground → silent refresh; background → flush any unsaved taps
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        setTodayStr(formatToYMD(new Date()));
+        const { classId, month } = ctxRef.current;
+        if (classId) loadGrid(classId, month, 'silent');
+      } else {
+        flush();
+      }
+    });
+    return () => sub.remove();
+  }, [loadGrid, flush]);
+
+  useEffect(() => () => {
+    clearTimeout(flushTimerRef.current);
+    clearTimeout(noticeTimerRef.current);
+    flush();
+  }, [flush]);
+
+  /* ────────── Actions ────────── */
+
+  const selectClass = (id: string) => {
+    setShowClassSheet(false);
+    if (id === selectedClassId) return;
+    flush(); // push unsaved taps of the previous class immediately
+    setSelectedStatDate(null);
+    setSelectedClassId(id);
   };
 
-  // ---------------------------------------------------------------------
-  // patchAttendanceCache — updates just ONE record inside the existing
-  // class+month cache entry, without waiting for (or requiring) a full
-  // network refetch. Called right after a single checkbox tap is confirmed
-  // saved on the server (see onCellPress below).
-  //
-  // Why this matters: before this, only a full fetchGridData() call wrote
-  // to AsyncStorage — so a burst of quick checkbox taps updated the on-screen
-  // state instantly but left the CACHE stale. If the teacher then left the
-  // screen and came back (or the app cold-started) before a full refetch
-  // happened, fetchGridData's cache-first paint would briefly show the OLD
-  // (pre-tap) checkbox state, then "snap" to correct once the network
-  // request finished — exactly the empty-then-correct flicker being
-  // reported. Patching the cache on every successful tap closes that gap.
-  // ---------------------------------------------------------------------
-  const patchAttendanceCache = useCallback(async (classId: string, monthDate: Date, studentKey: string, dateStr: string, status: string) => {
-    try {
-      const year = monthDate.getFullYear();
-      const month = String(monthDate.getMonth() + 1).padStart(2, '0');
-      const cacheKey = gridCacheKey(classId, year, month);
-      const cachedRaw = await AsyncStorage.getItem(cacheKey);
-      if (!cachedRaw) return; // nothing cached yet for this class/month — the next full fetch will seed it
-      const cached = JSON.parse(cachedRaw);
-      const records: any[] = Array.isArray(cached.attendanceRecords) ? cached.attendanceRecords : [];
-      const idx = records.findIndex((r: any) => (r.rollNo?.toString() || r.studentName) === studentKey && r.date?.split('T')[0] === dateStr);
-      if (idx >= 0) {
-        records[idx] = { ...records[idx], status };
-      } else {
-        records.push({ rollNo: studentKey, studentName: studentKey, date: dateStr, status });
-      }
-      await AsyncStorage.setItem(cacheKey, JSON.stringify({ ...cached, attendanceRecords: records }));
-    } catch (e) {
-      // Best-effort — a failed cache patch just means the next full fetch
-      // will resync it. Never let this block or fail the actual save.
-    }
+  const changeMonth = (delta: number) => {
+    const next = shiftMonth(selectedMonth, delta);
+    if (!ALLOW_FUTURE_DATES && next > todayStr.slice(0, 7)) return;
+    flush();
+    setSelectedStatDate(null);
+    setSelectedMonth(next);
+  };
+
+  const toggleFab = () => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setFabOpen(o => !o); };
+  const closeFab = () => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setFabOpen(false); };
+
+  /* Daily attendance (mirrors web: defaults to Present, keeps existing values) */
+  const buildDraft = useCallback((dateStr: string) => {
+    const draft: Record<string, Status> = {};
+    rows.forEach(r => {
+      const ex = attendanceRef.current[r.key]?.[dateStr];
+      draft[r.key] = ex || 'Present';
+    });
+    return draft;
+  }, [rows]);
+
+  const openDailyModal = () => {
+    const d = new Date();
+    setDailyDate(d);
+    setDailySearch('');
+    setDailyDraft(buildDraft(formatToYMD(d)));
+    setDailyModalVisible(true);
+  };
+
+  const toggleDailyPresent = useCallback((key: string) => {
+    setDailyDraft(prev => ({ ...prev, [key]: prev[key] === 'Present' ? 'Absent' : 'Present' }));
   }, []);
 
-  const hasPermission = useCallback((action: string) => {
-    if (isSuperAdmin) return true;
-    return permissions.some(p => p.module === 'attendance' && p.action === action);
-  }, [permissions, isSuperAdmin]);
-
-  const canEditCells = hasPermission('update');
-
-  // --- Matrix Data Processing ---
-  const filteredStudents = useMemo(() => {
-    const q = debouncedSearch.toLowerCase();
-    if (!q) return students;
-    return students.filter(s => s.name?.toLowerCase().includes(q) || s.rollNo?.toString().includes(q));
-  }, [students, debouncedSearch]);
-
-  const dailyFilteredStudents = useMemo(() => {
-    const q = dailySearch.toLowerCase();
-    if (!q) return students;
-    return students.filter(s => s.name?.toLowerCase().includes(q) || s.rollNo?.toString().includes(q));
-  }, [students, dailySearch]);
-
-  // Per-student monthly attendance percentage — shown as a small badge in
-  // the sticky column and used to color-code the row.
-  const studentPctMap = useMemo(() => {
-    const map: Record<string, number | null> = {};
-    students.forEach(s => {
-      const key = s.rollNo?.toString() || s.name;
-      const entries = Object.values(attendanceMap[key] || {});
-      const relevant = entries.filter(st => st !== 'Holiday');
-      if (relevant.length === 0) { map[key] = null; return; }
-      const presentLike = relevant.filter(st => st === 'Present' || st === 'Half-Day').length;
-      map[key] = Math.round((presentLike / relevant.length) * 100);
+  const markAllDaily = useCallback((status: Status) => {
+    setDailyDraft(() => {
+      const d: Record<string, Status> = {};
+      rows.forEach(r => { d[r.key] = status; });
+      return d;
     });
-    return map;
-  }, [students, attendanceMap]);
+  }, [rows]);
 
-  const scopedStats = useMemo(() => {
-    const counts: Record<string, number> = { Present: 0, Absent: 0, Leave: 0, 'Half-Day': 0, Holiday: 0 };
-    if (!selectedStatDate) return counts;
-    students.forEach(s => {
-      const key = s.rollNo?.toString() || s.name;
-      const status = attendanceMap[key]?.[selectedStatDate];
-      if (status && counts[status] !== undefined) counts[status] += 1;
-    });
-    return counts;
-  }, [students, attendanceMap, selectedStatDate]);
+  const handleSaveDaily = async () => {
+    if (!selectedClassId) return;
+    const dateStr = formatToYMD(dailyDate);
+    if (!ALLOW_FUTURE_DATES && dateStr > todayStr) {
+      Alert.alert('Invalid date', 'Attendance cannot be marked for a future date.');
+      return;
+    }
+    if (rows.length === 0) {
+      Alert.alert('No students', 'There are no students to mark.');
+      return;
+    }
 
-  const daysInMonth = getDaysInMonth(selectedMonth.getFullYear(), selectedMonth.getMonth());
-  const daysArray = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => i + 1), [daysInMonth]);
+    setSaving(true);
+    try {
+      await flushNow(); // never race a pending cell edit
+      const attendanceList = rows.map(r => toAttendanceItem(r, dailyDraft[r.key] || 'Present'));
+      await withRetry(() =>
+        http.post(CLASS_ATTENDANCE_URL, { classId: selectedClassId, schoolId: selectedSchoolId, date: dateStr, attendanceList }, authHeaders())
+      );
 
-  const isSunday = (year: number, month: number, day: number) => {
-    return new Date(year, month, day, 12, 0, 0).getDay() === 0;
+      if (dateStr.startsWith(selectedMonth)) {
+        commitAttendance(m => {
+          const next = { ...m };
+          rows.forEach(r => { next[r.key] = { ...(next[r.key] || {}), [dateStr]: dailyDraft[r.key] || 'Present' }; });
+          return next;
+        });
+      }
+      setDailyModalVisible(false);
+      showNotice('success', `Attendance for ${formatPretty(dateStr)} saved.`);
+      loadGrid(selectedClassId, selectedMonth, 'silent');
+    } catch (e: any) {
+      Alert.alert('Error', errMsg(e, 'Failed to save attendance.'));
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const getStudentDayStatus = useCallback((student: any, day: number): string | null => {
-    const key = student.rollNo?.toString() || student.name;
-    const dateStr = formatToYMD(new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), day, 12, 0, 0));
-    return attendanceMap[key]?.[dateStr] || null;
-  }, [attendanceMap, selectedMonth]);
+  const handleSaveSingleEdit = () => {
+    if (!singleEditData) return;
+    queueCellChange(singleEditData.row.key, singleEditData.dateStr, singleEditData.status);
+    setSingleEditModalVisible(false);
+  };
+
+  /* Excel ─ export / template / import */
+
+  const shareWorkbook = async (workbook: any, fileName: string) => {
+    const wbout = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
+    const filePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
+    await RNFS.writeFile(filePath, wbout, 'base64');
+    await Share.open({
+      url: `file://${filePath}`,
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      filename: fileName,
+      failOnCancel: false,
+    });
+  };
+
+  const dayHeaders = () => dayMetas.map(m => (m.isSun ? `Day ${m.day} (SUN)` : `Day ${m.day}`));
 
   const downloadSampleAttendanceTemplate = async () => {
     try {
-      const year = selectedMonth.getFullYear();
-      const month = selectedMonth.getMonth();
-
-      const headers = [
-        'S.No', 'Roll No', 'Student Name', 'Photo URL',
-        ...daysArray.map(d => (isSunday(year, month, d) ? `Day ${d} (SUN)` : `Day ${d}`)),
+      const rowsAoa = [
+        ['S.No', 'Roll No', 'Student Name', 'Photo URL', ...dayHeaders()],
+        [1, '101', 'Student 1', DEFAULT_AVATAR, ...dayMetas.map(m => (m.isSun ? 'H' : 'P'))],
+        [2, '102', 'Student 2', DEFAULT_AVATAR, ...dayMetas.map(m => (m.isSun ? 'H' : m.day % 7 === 0 ? 'A' : 'P'))],
       ];
-      const sampleRow1Days = daysArray.map(d => (isSunday(year, month, d) ? 'H' : 'P'));
-      const sampleRow2Days = daysArray.map(d => (isSunday(year, month, d) ? 'H' : d % 7 === 0 ? 'A' : 'P'));
-
-      const rows = [
-        headers,
-        [1, '101', 'Student 1', '', ...sampleRow1Days],
-        [2, '102', 'Student 2', '', ...sampleRow2Days],
-      ];
-
-      const worksheet = XLSX.utils.aoa_to_sheet(rows);
-      worksheet['!cols'] = [{ wch: 8 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, ...daysArray.map(() => ({ wch: 10 }))];
-
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Attendance Template');
-      const wbout = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
-
-      const fileName = `${selectedClass?.className || 'Class'}_Attendance_Sample_Template.xlsx`;
-      const filePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
-      await RNFS.writeFile(filePath, wbout, 'base64');
-
-      await Share.open({
-        url: `file://${filePath}`,
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        filename: fileName,
-        failOnCancel: false,
-      });
+      const ws = XLSX.utils.aoa_to_sheet(rowsAoa);
+      ws['!cols'] = [{ wch: 8 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, ...dayMetas.map(() => ({ wch: 10 }))];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Attendance Template');
+      await shareWorkbook(wb, `${selectedClass?.className || 'Class'}_Attendance_Sample_Template.xlsx`);
     } catch (e: any) {
       if (e?.message && !String(e.message).includes('User did not share')) {
         console.error('Template export failed:', e);
@@ -601,76 +947,42 @@ export default function ClassAttendanceScreen() {
   };
 
   const downloadFormattedMonthlyExcel = async () => {
-    if (!selectedClass) {
-      Alert.alert('No class selected', 'Please select a class first to export Excel.');
-      return;
-    }
-    if (students.length === 0) {
-      Alert.alert('Nothing to export', 'There are no students in this class.');
-      return;
-    }
+    if (!selectedClass) { Alert.alert('No class selected', 'Please select a class first to export Excel.'); return; }
+    if (rows.length === 0) { Alert.alert('Nothing to export', 'There are no students in this class.'); return; }
 
     setExporting(true);
     try {
-      const year = selectedMonth.getFullYear();
-      const month = selectedMonth.getMonth();
-      const workingDaysCount = Math.max(1, daysArray.length - daysArray.filter(d => isSunday(year, month, d)).length);
-
-      const headers = [
-        'S.No', 'Roll No', 'Student Name', 'Photo URL',
-        ...daysArray.map(d => (isSunday(year, month, d) ? `Day ${d} (SUN)` : `Day ${d}`)),
+      await flushNow();
+      const header = [
+        'S.No', 'Roll No', 'Student Name', 'Photo URL', ...dayHeaders(),
         'Present (P)', 'Absent (A)', 'Leave (L)', 'Holiday (H)', 'Attendance %',
       ];
-      const rows: any[][] = [headers];
+      const aoa: any[][] = [header];
 
-      students.forEach((s, idx) => {
-        let pCount = 0, aCount = 0, lCount = 0, hCount = 0;
-        const dayCells = daysArray.map(d => {
-          const isSun = isSunday(year, month, d);
-          const st = getStudentDayStatus(s, d) || (isSun ? 'Holiday' : null);
-          if (st === 'Present') { pCount++; return 'P'; }
-          if (st === 'Absent') { aCount++; return 'A'; }
-          if (st === 'Leave') { lCount++; return 'L'; }
-          if (st === 'Half-Day') { pCount += 0.5; return 'HD'; }
-          if (st === 'Holiday' || isSun) { hCount++; return 'H'; }
+      rows.forEach((r, idx) => {
+        const att = attendanceRef.current[r.key] || {};
+        const cells = dayMetas.map(m => {
+          const st = att[m.dateStr];
+          if (st === 'Present') return 'P';
+          if (st === 'Absent') return 'A';
+          if (st === 'Leave') return 'L';
+          if (st === 'Half-Day') return 'HD';
+          if (st === 'Holiday' || m.isSun) return 'H';
           return '-';
         });
-
-        const pct = ((pCount / workingDaysCount) * 100).toFixed(1);
-
-        rows.push([
-          idx + 1,
-          s.rollNo || 'N/A',
-          s.name,
-          s.photo || '',
-          ...dayCells,
-          pCount, aCount, lCount, hCount,
-          `${pct}%`,
-        ]);
+        const s = computeStats(att, dayMetas, workingDays);
+        aoa.push([idx + 1, r.rollNo, r.name, r.photo || '', ...cells, s.p, s.a, s.l, s.h, `${((s.p / workingDays) * 100).toFixed(1)}%`]);
       });
 
-      const worksheet = XLSX.utils.aoa_to_sheet(rows);
-      worksheet['!cols'] = [
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [
         { wch: 8 }, { wch: 12 }, { wch: 22 }, { wch: 20 },
-        ...daysArray.map(() => ({ wch: 10 })),
+        ...dayMetas.map(() => ({ wch: 10 })),
         { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 15 },
       ];
-
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Attendance Matrix');
-      const wbout = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
-
-      const monthLabel = `${year}-${String(month + 1).padStart(2, '0')}`;
-      const fileName = `${selectedClass?.className || 'Class'}_Monthly_Attendance_${monthLabel}.xlsx`;
-      const filePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
-      await RNFS.writeFile(filePath, wbout, 'base64');
-
-      await Share.open({
-        url: `file://${filePath}`,
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        filename: fileName,
-        failOnCancel: false,
-      });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Attendance Matrix');
+      await shareWorkbook(wb, `${selectedClass.className || 'Class'}_Monthly_Attendance_${selectedMonth}.xlsx`);
     } catch (e: any) {
       if (e?.message && !String(e.message).includes('User did not share')) {
         console.error('Monthly export failed:', e);
@@ -681,477 +993,207 @@ export default function ClassAttendanceScreen() {
     }
   };
 
-  // ---------------------------------------------------------------------
-  // EXCEL — Upload Excel (bulk import a filled monthly matrix)
-  // Mirrors the web page's handleFileUpload(): reads Roll No / Student Name
-  // / Photo URL / Day N columns per row and posts to the same bulk endpoint.
-  // ---------------------------------------------------------------------
+  const NAME_HEADERS = ['student name', 'studentname', 'name', 'student'];
+  const ROLL_HEADERS = ['roll no', 'rollno', 'roll', 'roll number'];
+
   const handleUploadExcel = async () => {
+    if (!selectedClassId) { Alert.alert('No class selected', 'Please select a class first.'); return; }
+
     let picked;
     try {
       [picked] = await pick({ type: [types.xlsx, types.xls, types.csv] });
     } catch (err) {
       if (isErrorWithCode(err) && err.code === errorCodes.OPERATION_CANCELED) return;
-      console.error('File pick failed:', err);
       Alert.alert('Could not open file picker', 'Please try again.');
       return;
     }
 
-    if (!selectedClassId) {
-      Alert.alert('No class selected', 'Please select a class first.');
-      return;
-    }
-
     setUploading(true);
+    setUploadProgress(null);
     try {
-      const base64 = await RNFS.readFile(picked.uri, 'base64');
+      await flushNow();
+      const uri = Platform.OS === 'ios' ? decodeURI(picked.uri) : picked.uri;
+      const base64 = await RNFS.readFile(uri, 'base64');
       const workbook = XLSX.read(base64, { type: 'base64' });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const jsonRows: any[] = XLSX.utils.sheet_to_json(sheet);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
 
-      const matrixData: any[] = [];
-      jsonRows.forEach(row => {
-        const rollNo = String(row['Roll No'] ?? row['rollNo'] ?? row['Roll'] ?? '').trim();
-        const studentName = String(row['Student Name'] ?? row['studentName'] ?? row['Name'] ?? '').trim();
-        const photo = String(row['Photo URL'] ?? row['photo'] ?? '').trim() || '/default-avatar.png';
-
-        if (!studentName && !rollNo) return;
-
-        const daysObj: Record<string, string> = {};
-        daysArray.forEach(d => {
-          const val = row[`Day ${d}`] ?? row[`Day${d}`] ?? row[d];
-          if (val) daysObj[d] = String(val).trim().toUpperCase();
-        });
-
-        matrixData.push({ rollNo, studentName, photo, days: daysObj });
-      });
-
-      if (matrixData.length === 0) {
-        Alert.alert('No data found', 'No valid attendance rows were found in the selected file.');
+      // Structure validation (parity with the web pre-check)
+      const headerRow = ((XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false }) as any[][])[0] || [])
+        .map(h => String(h ?? '').trim().toLowerCase());
+      if (!headerRow.some(h => NAME_HEADERS.includes(h)) && !headerRow.some(h => ROLL_HEADERS.includes(h))) {
+        Alert.alert(
+          'Invalid file format',
+          `Could not find "Student Name" or "Roll No" columns.\n\nDetected: ${headerRow.slice(0, 6).join(', ') || 'none'}\n\nUse "Download Format" for a valid template.`
+        );
         return;
       }
 
-      const year = selectedMonth.getFullYear();
-      const month = String(selectedMonth.getMonth() + 1).padStart(2, '0');
+      const jsonRows: any[] = XLSX.utils.sheet_to_json(sheet);
+      const matrixData: any[] = [];
+      jsonRows.forEach(raw => {
+        const row: Record<string, any> = Object.fromEntries(
+          Object.entries(raw).map(([k, v]) => [String(k).trim().toLowerCase(), v])
+        );
+        const rollNo = String(row['roll no'] ?? row['rollno'] ?? row['roll'] ?? row['roll number'] ?? '').trim();
+        const studentName = String(row['student name'] ?? row['studentname'] ?? row['name'] ?? row['student'] ?? '').trim();
+        const photo = String(row['photo url'] ?? row['photo'] ?? '').trim() || DEFAULT_AVATAR;
+        if (!studentName && !rollNo) return;
 
-      const res = await axios.post(
-        BULK_ATTENDANCE_URL,
-        { classId: selectedClassId, month: `${year}-${month}`, matrixData },
-        authHeaders(authToken)
-      );
+        const days: Record<string, string> = {};
+        dayMetas.forEach(m => {
+          const val = row[`day ${m.day}`] ?? row[`day${m.day}`] ?? row[`day ${m.day} (sun)`] ?? row[String(m.day)];
+          if (val !== undefined && val !== null && String(val).trim() !== '') days[m.day] = String(val).trim().toUpperCase();
+        });
+        matrixData.push({ rollNo, studentName, photo, days });
+      });
 
-      if (res.data?.success) {
-        Alert.alert('Success', 'Monthly attendance matrix imported successfully!');
-        setShowUploadModal(false);
-        fetchGridData(authToken, selectedClassId, selectedMonth, true);
+      if (matrixData.length === 0) {
+        Alert.alert('No data found', 'No valid rows were found. Each row needs a Student Name or Roll No.');
+        return;
       }
+
+      // Batched import with progress (parity with the web batch processor)
+      let success = 0, failed = 0, lastError: any = null;
+      setUploadProgress({ done: 0, total: matrixData.length, failed: 0 });
+      for (let i = 0; i < matrixData.length; i += UPLOAD_BATCH_SIZE) {
+        const batch = matrixData.slice(i, i + UPLOAD_BATCH_SIZE);
+        try {
+          await withRetry(() =>
+            http.post(BULK_ATTENDANCE_URL, { classId: selectedClassId, month: selectedMonth, matrixData: batch }, authHeaders())
+          );
+          success += batch.length;
+        } catch (e) {
+          failed += batch.length;
+          lastError = e;
+        }
+        setUploadProgress({ done: Math.min(i + batch.length, matrixData.length), total: matrixData.length, failed });
+      }
+
+      if (success > 0) showNotice('success', `Imported attendance for ${success} students.`);
+      if (failed > 0) Alert.alert('Some rows failed', `${failed} student(s) could not be imported. ${errMsg(lastError, '')}`);
+      setShowUploadModal(false);
+      loadGrid(selectedClassId, selectedMonth, 'silent');
     } catch (err: any) {
       console.error('Upload failed:', err?.response?.data || err?.message);
-      Alert.alert('Import failed', err?.response?.data?.message || err?.response?.data?.error || 'Failed to parse or import the attendance file.');
+      Alert.alert('Import failed', errMsg(err, 'Failed to parse or import the attendance file.'));
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   };
 
-  // --- Actions ---
-  const openDailyModal = () => {
-    setDailyDate(new Date());
-    setDailySearch('');
-    // Default everyone to Absent — the teacher ticks a student to mark them
-    // Present, which is faster than unticking a room full of present kids.
-    const draft: Record<string, string> = {};
-    students.forEach(s => { draft[s._id] = 'Absent'; });
-    setDailyDraft(draft);
-    setDailyModalVisible(true);
-  };
+  /* ────────── Grid rendering ────────── */
 
-  const toggleDailyPresent = useCallback((studentId: string) => {
-    setDailyDraft(prev => ({ ...prev, [studentId]: (prev[studentId] || 'Absent') === 'Present' ? 'Absent' : 'Present' }));
-  }, []);
-
-  const markAllDaily = useCallback((status: 'Present' | 'Absent') => {
-    setDailyDraft(() => {
-      const draft: Record<string, string> = {};
-      students.forEach(s => { draft[s._id] = status; });
-      return draft;
-    });
-  }, [students]);
-
-  const toggleStatDate = useCallback((dateStr: string) => {
-    setSelectedStatDate(prev => (prev === dateStr ? null : dateStr));
-  }, []);
-
-  // ---------------------------------------------------------------------
-  // Serialized save queue.
-  //
-  // The old code fired one axios.post per tapped cell, in parallel, with no
-  // coordination between them. Tapping several checkboxes quickly sent
-  // several concurrent writes for the same class/date — a classic
-  // read-modify-write race on the backend — and whenever one of those
-  // concurrent requests failed, the old error handler called a FULL grid
-  // refetch, which overwrote every other optimistic tap still in flight
-  // with stale server data. That's what made checkboxes appear to
-  // "un-check themselves" when tapped in a burst.
-  //
-  // Routing every write through this queue guarantees the backend only
-  // ever receives one attendance write at a time, in the order the user
-  // tapped them, which removes the race that was causing the failures in
-  // the first place.
-  // ---------------------------------------------------------------------
-  const saveQueueRef = useRef<Promise<any>>(Promise.resolve());
-  const enqueueSave = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
-    const run = saveQueueRef.current.then(task, task);
-    // Keep the chain alive after a failure so the next queued save still runs.
-    saveQueueRef.current = run.then(() => undefined, () => undefined);
-    return run;
-  }, []);
-
-  const handleSaveDaily = async () => {
-    if (!selectedClassId || !selectedSchoolId) {
-      Alert.alert('Missing info', 'Could not determine the school for this class. Try reselecting the class.');
-      return;
-    }
-
-    const dateStr = formatToYMD(dailyDate);
-
-    if (isFutureDateStr(dateStr)) {
-      Alert.alert('Invalid date', 'Attendance cannot be marked for a future date. Please pick today or an earlier date.');
-      return;
-    }
-
-    // Build attendanceList first, in its own variable.
-    const attendanceList = students.map(s => buildAttendanceItem(s, dailyDraft[s._id] || 'Absent'));
-
-    // Validate everything before calling the API.
-    const errors = validateAttendancePayload(selectedClassId, selectedSchoolId, dateStr, attendanceList);
-    if (errors.length > 0) {
-      Alert.alert('Cannot save attendance', errors.slice(0, 5).join('\n'));
-      return;
-    }
-
-    setSaving(true);
-    try {
-      // Only build the final payload once validation has passed.
-      const payload = {
-        classId: selectedClassId,
-        schoolId: selectedSchoolId,
-        date: dateStr,
-        attendanceList,
-      };
-
-      // Goes through the same serialized queue as single-cell taps so a
-      // bulk daily save never races an in-flight cell edit.
-      await enqueueSave(() => axios.post(CLASS_ATTENDANCE_URL, payload, authHeaders(authToken)));
-      Alert.alert('Success', 'Attendance marked successfully.');
-      setDailyModalVisible(false);
-      fetchGridData(authToken, selectedClassId, selectedMonth, true);
-    } catch (error: any) {
-      Alert.alert(
-        'Error',
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        'Failed to save attendance.'
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSaveSingleEdit = async () => {
-    if (!singleEditData) return;
-
-    if (!selectedClassId || !selectedSchoolId) {
-      Alert.alert('Missing info', 'Could not determine the school for this class. Try reselecting the class.');
-      return;
-    }
-
-    const dateStr = singleEditData.dateStr;
-
-    if (isFutureDateStr(dateStr)) {
-      Alert.alert('Invalid date', 'Attendance cannot be marked for a future date.');
-      return;
-    }
-
-    // Build attendanceList first, in its own variable.
-    const attendanceList = [buildAttendanceItem(singleEditData.student, singleEditData.status || 'Present')];
-
-    // Validate everything before calling the API.
-    const errors = validateAttendancePayload(selectedClassId, selectedSchoolId, dateStr, attendanceList);
-    if (errors.length > 0) {
-      Alert.alert('Cannot update status', errors.slice(0, 5).join('\n'));
-      return;
-    }
-
-    setSaving(true);
-    try {
-      // Only build the final payload once validation has passed.
-      const payload = {
-        classId: selectedClassId,
-        schoolId: selectedSchoolId,
-        date: dateStr,
-        attendanceList,
-      };
-
-      await enqueueSave(() => axios.post(CLASS_ATTENDANCE_URL, payload, authHeaders(authToken)));
-      setSingleEditModalVisible(false);
-      fetchGridData(authToken, selectedClassId, selectedMonth, true);
-    } catch (error: any) {
-      Alert.alert(
-        'Error',
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        'Failed to update status.'
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const pendingCellKeysRef = useRef<Set<string>>(new Set());
-
-  const onCellPress = useCallback((student: any, dateStr: string) => {
-    if (isFutureDateStr(dateStr)) return; // defensive — cell is already disabled for future dates
-    if (!selectedClassId || !selectedSchoolId) {
-      Alert.alert('Missing info', 'Could not determine the school for this class. Try reselecting the class.');
-      return;
-    }
-
-    const key = student.rollNo?.toString() || student.name;
-    const cellKey = `${key}__${dateStr}`;
-    if (pendingCellKeysRef.current.has(cellKey)) return; // ignore double taps while saving
-
-    const previousStatus = attendanceMapRef.current[key]?.[dateStr] ?? null;
-    const nextStatus = previousStatus === 'Present' ? 'Absent' : 'Present';
-    const attendanceList = [buildAttendanceItem(student, nextStatus)];
-
-    const errors = validateAttendancePayload(selectedClassId, selectedSchoolId, dateStr, attendanceList);
-    if (errors.length > 0) {
-      Alert.alert('Cannot update status', errors.slice(0, 5).join('\n'));
-      return;
-    }
-
-    // Optimistic update so the checkbox flips instantly — only this one
-    // student's inner object gets a new reference, everyone else's stays
-    // identical, so the rest of the visible rows don't re-render at all.
-    setAttendanceMap(prev => ({
-      ...prev,
-      [key]: { ...(prev[key] || {}), [dateStr]: nextStatus },
-    }));
-
-    pendingCellKeysRef.current.add(cellKey);
-
-    const classIdAtTap = selectedClassId;
-    const monthAtTap = selectedMonth;
-
-    // The network write is serialized behind every other pending write, and
-    // a failure here reverts ONLY this cell — never the whole grid — so a
-    // burst of taps on other cells is left completely untouched.
-    enqueueSave(async () => {
-      try {
-        const payload = { classId: selectedClassId, schoolId: selectedSchoolId, date: dateStr, attendanceList };
-        await axios.post(CLASS_ATTENDANCE_URL, payload, authHeaders(authToken));
-        // Save confirmed — patch the on-disk cache too, right away, so a
-        // reload/cold-start before the next full refetch still shows this
-        // tap instead of the older cached value.
-        patchAttendanceCache(classIdAtTap, monthAtTap, key, dateStr, nextStatus);
-      } catch (error: any) {
-        setAttendanceMap(prev => {
-          const nextForKey = { ...(prev[key] || {}) };
-          if (previousStatus === null) delete nextForKey[dateStr];
-          else nextForKey[dateStr] = previousStatus;
-          return { ...prev, [key]: nextForKey };
-        });
-        Alert.alert('Error', error.response?.data?.message || error.response?.data?.error || 'Failed to update status.');
-      } finally {
-        pendingCellKeysRef.current.delete(cellKey);
-      }
-    });
-  }, [isFutureDateStr, selectedClassId, selectedSchoolId, selectedMonth, authToken, enqueueSave, patchAttendanceCache]);
-
-  const onCellLongPress = useCallback((student: any, dateStr: string) => {
-    if (isFutureDateStr(dateStr)) return;
-    const key = student.rollNo?.toString() || student.name;
-    const existing = attendanceMapRef.current[key]?.[dateStr] || 'Present';
-    setSingleEditData({ student, dateStr, status: existing });
-    setSingleEditModalVisible(true);
-  }, [isFutureDateStr]);
-
-  const keyExtractor = useCallback((item: any) => item._id, []);
-
-  const getItemLayout = useCallback((_: any, index: number) => (
-    { length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index }
-  ), []);
-
-  // ---------------------------------------------------------------------
-  // ONE vertical scroller, native-driven frozen column.
-  //
-  // Previously the sticky name column and the day cells were rendered by
-  // TWO independent FlatLists, kept "in sync" by listening to each list's
-  // onScroll and imperatively calling scrollToOffset() on the other one:
-  //
-  //   nameListRef.current?.scrollToOffset({ offset, animated: false })
-  //   dataListRef.current?.scrollToOffset({ offset, animated: false })
-  //
-  // scrollToOffset is a JS-thread → native bridge call, not a continuous
-  // native animation. With the horizontal ScrollView gesture also running,
-  // the JS thread got congested handling both the pan responder and this
-  // round-trip sync, which is what produced the jittery "fast, then
-  // stop/restart" horizontal scrolling. On Android specifically it also
-  // caused the frozen column to visually disappear: removeClippedSubviews
-  // recomputes each FlatList's own clip rect from its own last scroll
-  // offset, and when the imperative sync calls lagged or arrived out of
-  // order, the name list's clip rect went stale and clipped rows that
-  // should have been visible.
-  //
-  // Fix: there is now only ONE real vertically-scrolling list — the
-  // day-cells FlatList below. Its scroll position is captured into a
-  // native-driver Animated.Value (`scrollY`), and the frozen name column
-  // (rendered further down, outside the horizontal ScrollView) mirrors that
-  // value via a `translateY` transform on an Animated.View. Because the
-  // transform runs entirely on the UI thread, there's no bridge traffic, no
-  // JS-thread contention, and no feedback loop between two lists.
-  // ---------------------------------------------------------------------
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const handleGridScroll = Animated.event(
-    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-    { useNativeDriver: true }
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const onHorizontalScroll = useMemo(
+    () => Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true }),
+    [scrollX]
   );
 
-  // Reads attendanceMap from a ref rather than listing it as a dependency,
-  // so this function's identity stays stable across taps. The FlatList is
-  // told about data changes via its own `extraData` (see below), which is
-  // the correct way to keep a virtualized list both fast and correct.
-  const renderDayCells = useCallback(({ item: student }: { item: any }) => {
-    const key = student.rollNo?.toString() || student.name;
-    return (
-      <StudentDayCells
-        student={student}
-        year={selectedMonth.getFullYear()}
-        month={selectedMonth.getMonth()}
-        daysArray={daysArray}
-        attendanceForStudent={attendanceMapRef.current[key] || EMPTY_ATTENDANCE}
-        canEdit={canEditCells}
-        todayStr={todayStr}
-        dayCellWidth={dayCellWidth}
-        onCellPress={onCellPress}
-        onCellLongPress={onCellLongPress}
-      />
-    );
-  }, [selectedMonth, daysArray, canEditCells, todayStr, dayCellWidth, onCellPress, onCellLongPress]);
+  const renderRow = useCallback(({ item }: { item: Row }) => (
+    <AttendanceRow
+      row={item}
+      att={attendance[item.key] || EMPTY_ROW_ATT}
+      dayMetas={dayMetas}
+      workingDays={workingDays}
+      dayCellWidth={dayCellWidth}
+      stickyColWidth={stickyColWidth}
+      scrollX={scrollX}
+      canEdit={canEditCells}
+      onToggle={toggleCell}
+      onLongPress={openSingleEdit}
+    />
+  ), [attendance, dayMetas, workingDays, dayCellWidth, stickyColWidth, scrollX, canEditCells, toggleCell, openSingleEdit]);
 
-  const renderInlineDropdown = (fieldKey: string, label: string, options: Option[], value: string, onSelect: (v: string) => void) => {
-    const isOpen = activeDropdown === fieldKey;
-    const selectedObj = options.find(o => o.value === value);
-    return (
-      <View style={[styles.inputWrapper, { zIndex: isOpen ? 50 : 1 }]}>
-        <Text style={styles.inputLabel}>{label}</Text>
-        <TouchableOpacity style={[styles.dropdownHeader, isOpen && styles.dropdownHeaderActive]} onPress={() => setActiveDropdown(isOpen ? null : fieldKey)} activeOpacity={0.85}>
-          <Text style={selectedObj ? styles.dropdownSelectedText : styles.dropdownPlaceholder} numberOfLines={1}>{selectedObj?.label || 'Select...'}</Text>
-          <Feather name={isOpen ? 'chevron-up' : 'chevron-down'} size={16} color={C.textMuted} />
-        </TouchableOpacity>
-     {isOpen && (
-  <View style={styles.dropdownListContainer}>
-    {options.map(opt => (
-      <TouchableOpacity
-        key={opt.value}
-        style={styles.dropdownItem}
-        onPress={() => {
-          onSelect(opt.value);
-          setActiveDropdown(null);
-        }}
-        activeOpacity={0.7}
-      >
-        <Text
-          style={[
-            styles.dropdownItemText,
-            value === opt.value && styles.textBrand,
-          ]}
-          numberOfLines={1}
-        >
-          {opt.label}
-        </Text>
+  const keyExtractor = useCallback((r: Row) => r.key, []);
+  const getItemLayout = useCallback((_: any, index: number) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index }), []);
 
-        {value === opt.value && (
-          <Feather name="check" size={15} color={C.primary} />
-        )}
-      </TouchableOpacity>
-    ))}
-  </View>
-)}
-      </View>
-    );
-  };
+  const onRefresh = useCallback(() => {
+    if (selectedClassId) loadGrid(selectedClassId, selectedMonth, 'refresh');
+  }, [selectedClassId, selectedMonth, loadGrid]);
 
-  const totalMarkedInScope = scopedStats.Present + scopedStats.Absent + scopedStats.Leave + scopedStats['Half-Day'];
-  const scopedPct = totalMarkedInScope > 0
-    ? Math.round(((scopedStats.Present + scopedStats['Half-Day']) / totalMarkedInScope) * 100)
-    : null;
+  const currentMonth = todayStr.slice(0, 7);
+  const canGoNext = ALLOW_FUTURE_DATES || selectedMonth < currentMonth;
+  const presentInDraft = Object.values(dailyDraft).filter(v => v === 'Present').length;
+
+  /* ────────────────────────────── JSX ────────────────────────────── */
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Compact header — brand + context only, no filters here so it stays short */}
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerIconBadge}><Feather name="check-square" size={18} color={C.primary} /></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Class Attendance</Text>
           <Text style={styles.subtitle} numberOfLines={1}>
-            {selectedClass?.className ? `${selectedClass.className} · ` : ''}
-            {selectedMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
+            {selectedClass?.className ? `${selectedClass.className}${selectedClass.division ? ` (Div ${selectedClass.division})` : ''} · ` : ''}
+            {monthLabel(selectedMonth)}
           </Text>
         </View>
-        {syncing && (
-          <View style={styles.syncPulse}>
-            <ActivityIndicator size="small" color={C.primary} />
-          </View>
+        {saveState === 'saving' && (
+          <View style={styles.savePill}><ActivityIndicator size="small" color={C.primary} /><Text style={styles.savePillText}>Saving</Text></View>
         )}
+        {saveState === 'error' && (
+          <TouchableOpacity style={[styles.savePill, { backgroundColor: C.primarySoft }]} onPress={() => flush()} activeOpacity={0.8}>
+            <Feather name="alert-circle" size={12} color={C.primary} /><Text style={styles.savePillText}>Retry</Text>
+          </TouchableOpacity>
+        )}
+        {saveState === 'idle' && syncing && <ActivityIndicator size="small" color={C.primary} />}
         <View style={styles.headerCountBadge}>
           <Feather name="users" size={12} color={C.primary} />
-          <Text style={styles.headerCountText}>{students.length}</Text>
+          <Text style={styles.headerCountText}>{rows.length}</Text>
         </View>
         <TouchableOpacity style={styles.headerInfoBtn} onPress={() => setShowLegendModal(true)} activeOpacity={0.7}>
           <Feather name="info" size={16} color={C.textMuted} />
         </TouchableOpacity>
       </View>
 
+      {/* Filters */}
       <View style={styles.filterSection}>
-        <View style={{ flexDirection: 'row', gap: 10, zIndex: 100 }}>
-          <View style={{ flex: 1.3, zIndex: 200 }}>
-            {renderInlineDropdown('classFilter', 'CLASS', classes.map(c => ({ label: c.className, value: c._id })), selectedClassId, (v) => { setSelectedClassId(v); fetchGridData(authToken, v, selectedMonth); })}
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <View style={{ flex: 1.25 }}>
+            <Text style={styles.inputLabel}>CLASS</Text>
+            <TouchableOpacity style={styles.selectBtn} onPress={() => setShowClassSheet(true)} activeOpacity={0.85}>
+              <Text style={styles.selectText} numberOfLines={1}>
+                {selectedClass ? `${selectedClass.className}${selectedClass.division ? ` (${selectedClass.division})` : ''}` : 'Select class'}
+              </Text>
+              <Feather name="chevron-down" size={16} color={C.textMuted} />
+            </TouchableOpacity>
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.inputLabel}>MONTH</Text>
-            <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowMonthPicker(true)} activeOpacity={0.85}>
-              <Text style={styles.datePickerText} numberOfLines={1}>{selectedMonth.toLocaleString('default', { month: 'short', year: 'numeric' })}</Text>
-              <Feather name="calendar" size={14} color={C.textMuted} />
-            </TouchableOpacity>
-            {showMonthPicker && (
-              <DateTimePicker
-                value={selectedMonth}
-                mode="date"
-                display="default"
-                maximumDate={new Date()}
-                onChange={(e, d) => {
-                  setShowMonthPicker(Platform.OS === 'ios');
-                  if (d) { setSelectedMonth(d); fetchGridData(authToken, selectedClassId, d); }
-                }}
-              />
-            )}
+            <View style={styles.monthStepper}>
+              <TouchableOpacity style={styles.stepBtn} onPress={() => changeMonth(-1)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}>
+                <Feather name="chevron-left" size={18} color={C.text} />
+              </TouchableOpacity>
+              <Text style={styles.monthText} numberOfLines={1}>{monthLabel(selectedMonth, 'short')}</Text>
+              <TouchableOpacity style={styles.stepBtn} onPress={() => changeMonth(1)} disabled={!canGoNext} hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}>
+                <Feather name="chevron-right" size={18} color={canGoNext ? C.text : C.textFaint} />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
         <View style={styles.searchRow}>
           <View style={styles.searchContainer}>
             <Feather name="search" size={16} color={C.textFaint} />
-            <TextInput style={styles.searchInput} placeholder="Search name or roll no..." placeholderTextColor={C.textFaint} value={searchQuery} onChangeText={setSearchQuery} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search name or roll no..."
+              placeholderTextColor={C.textFaint}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCorrect={false}
+              returnKeyType="search"
+            />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Feather name="x-circle" size={15} color={C.textFaint} />
               </TouchableOpacity>
             )}
           </View>
           {hasPermission('create') && (
-            <TouchableOpacity style={styles.markBtn} onPress={openDailyModal} activeOpacity={0.9}>
+            <TouchableOpacity style={styles.markBtn} onPress={openDailyModal} activeOpacity={0.9} disabled={rows.length === 0}>
               <Feather name="edit" size={14} color="#fff" />
               <Text style={styles.markBtnText}>Mark Daily</Text>
             </TouchableOpacity>
@@ -1159,161 +1201,142 @@ export default function ClassAttendanceScreen() {
         </View>
       </View>
 
-      {/* Matrix Data Area — opens immediately under the filter bar */}
+      {/* Inline notice banner */}
+      {notice && (
+        <View style={[styles.notice, notice.type === 'error' ? styles.noticeError : notice.type === 'success' ? styles.noticeSuccess : styles.noticeInfo]}>
+          <Feather
+            name={notice.type === 'error' ? 'alert-circle' : notice.type === 'success' ? 'check-circle' : 'info'}
+            size={15}
+            color={notice.type === 'error' ? C.primary : notice.type === 'success' ? C.green : C.blue}
+          />
+          <Text style={styles.noticeText} numberOfLines={3}>{notice.message}</Text>
+          <TouchableOpacity onPress={() => setNotice(null)}><Feather name="x" size={15} color={C.textMuted} /></TouchableOpacity>
+        </View>
+      )}
+
+      {/* Matrix */}
       {loading ? (
         <View style={styles.skeletonContainer}>
-          {Array.from({ length: 8 }).map((_, i) => <SkeletonRow key={i} delay={i} />)}
+          {Array.from({ length: 9 }).map((_, i) => <SkeletonRow key={i} index={i} />)}
         </View>
-      ) : filteredStudents.length === 0 ? (
+      ) : loadError ? (
+        <View style={styles.emptyState}>
+          <Feather name="wifi-off" size={40} color={C.textFaint} />
+          <Text style={styles.emptyTitle}>Couldn't load attendance</Text>
+          <Text style={styles.emptySubtitle}>{loadError}</Text>
+          <TouchableOpacity
+            style={[styles.saveBtnFull, { marginTop: 18, paddingHorizontal: 28 }]}
+            onPress={() => (classes.length === 0 ? bootstrap() : loadGrid(selectedClassId, selectedMonth, 'initial'))}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.saveBtnFullText}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      ) : rows.length === 0 ? (
         <View style={styles.emptyState}>
           <Feather name="users" size={40} color={C.textFaint} />
-          <Text style={styles.emptyTitle}>{searchQuery ? 'No matches found' : 'No Students Found'}</Text>
-          <Text style={styles.emptySubtitle}>
-            {searchQuery ? 'Try a different name or roll number.' : 'There are no students linked to this class.'}
-          </Text>
+          <Text style={styles.emptyTitle}>No students found</Text>
+          <Text style={styles.emptySubtitle}>There are no students linked to this class.</Text>
+        </View>
+      ) : filteredRows.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Feather name="user-x" size={40} color={C.textFaint} />
+          <Text style={styles.emptyTitle}>No matches found</Text>
+          <Text style={styles.emptySubtitle}>No student matches "{searchQuery}". Try a different name or roll number.</Text>
+          <TouchableOpacity style={[styles.uploadChooseBtn, { marginTop: 16 }]} onPress={() => setSearchQuery('')}>
+            <Text style={styles.uploadChooseBtnText}>Clear search</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <View style={styles.matrixContainer}>
-          <View style={{ flex: 1, flexDirection: 'row' }}>
-
-            {/* FIXED left column — a plain (non-scrolling) container. It never
-                receives touch/scroll gestures of its own; it's visually
-                translated in lockstep with the day-cells FlatList below via
-                `scrollY`, a native-driver Animated.Value, so it stays pinned
-                to each row without any JS-thread synchronization. */}
-            <View style={{ width: stickyColWidth, borderRightWidth: 1, borderColor: C.border, backgroundColor: C.surface }}>
-              <View style={[styles.matrixHeaderCell, { width: stickyColWidth, height: HEADER_HEIGHT }]}>
-                <Text style={styles.matrixHeaderTitle}>STUDENT PROFILE</Text>
-              </View>
-
-              <View style={{ flex: 1, overflow: 'hidden' }}>
-                <Animated.View style={{ transform: [{ translateY: Animated.multiply(scrollY, -1) }] }}>
-                  {filteredStudents.map(student => {
-                    const key = student.rollNo?.toString() || student.name;
-                    return (
-                      <StudentNameCell
-                        key={student._id}
-                        student={student}
-                        pct={studentPctMap[key] ?? null}
-                        stickyColWidth={stickyColWidth}
-                      />
-                    );
-                  })}
-                  {/* Mirrors the day-cells FlatList's bottom content padding so
-                      the frozen column keeps translating correctly all the way
-                      to the end of the list (including past the last row, up
-                      to the same rubber-band/overscroll extent). */}
-                  <View style={{ height: 110 + insets.bottom }} />
+          <Animated.ScrollView
+            horizontal
+            bounces={false}
+            showsHorizontalScrollIndicator
+            onScroll={onHorizontalScroll}
+            scrollEventThrottle={16}
+            contentContainerStyle={{ width: totalWidth }}
+            nestedScrollEnabled
+          >
+            <View style={{ width: totalWidth, flex: 1 }}>
+              {/* Header row (sticky corner follows horizontal scroll) */}
+              <View style={styles.headerRow}>
+                <Animated.View style={[styles.stickyHeaderCell, { width: stickyColWidth, transform: [{ translateX: scrollX }] }]}>
+                  <Text style={styles.matrixHeaderTitle}>STUDENT PROFILE</Text>
                 </Animated.View>
+
+                {dayMetas.map(m => {
+                  const selected = selectedStatDate === m.dateStr;
+                  return (
+                    <TouchableOpacity
+                      key={m.day}
+                      activeOpacity={0.7}
+                      onPress={() => setSelectedStatDate(prev => (prev === m.dateStr ? null : m.dateStr))}
+                      style={[
+                        styles.headerDayCell, { width: dayCellWidth },
+                        m.isSun && styles.sunBg,
+                        m.isToday && styles.todayBg,
+                        selected && { backgroundColor: C.primary },
+                      ]}
+                    >
+                      <Text style={[styles.headerDayText, selected && { color: '#fff' }]}>{m.day}</Text>
+                      {m.isSun && <Text style={[styles.headerSunText, selected && { color: '#fff' }]}>SUN</Text>}
+                      {m.isToday && !selected && <View style={styles.todayDot} />}
+                      {!ALLOW_FUTURE_DATES && m.isFuture && <Feather name="lock" size={8} color={C.textFaint} style={{ marginTop: 2 }} />}
+                    </TouchableOpacity>
+                  );
+                })}
+
+                {[
+                  { l: 'P', c: C.green, bg: C.greenSoft, w: SUMMARY_COL_W },
+                  { l: 'A', c: C.primary, bg: C.primarySoft, w: SUMMARY_COL_W },
+                  { l: 'L', c: C.amber, bg: C.amberSoft, w: SUMMARY_COL_W },
+                  { l: 'H', c: C.slate, bg: C.slateSoft, w: SUMMARY_COL_W },
+                  { l: '%', c: C.blue, bg: C.blueSoft, w: SUMMARY_PCT_W },
+                ].map(s => (
+                  <View key={s.l} style={[styles.headerDayCell, { width: s.w, backgroundColor: s.bg }]}>
+                    <Text style={[styles.headerDayText, { color: s.c }]}>{s.l}</Text>
+                  </View>
+                ))}
               </View>
+
+              {/* Single virtualized list → rows can never desync from the frozen column */}
+              <FlatList
+                data={filteredRows}
+                keyExtractor={keyExtractor}
+                renderItem={renderRow}
+                extraData={attendance}
+                getItemLayout={getItemLayout}
+                style={{ width: totalWidth, flex: 1 }}
+                contentContainerStyle={{ paddingBottom: 110 + insets.bottom }}
+                initialNumToRender={14}
+                maxToRenderPerBatch={12}
+                windowSize={9}
+                updateCellsBatchingPeriod={40}
+                removeClippedSubviews={false}
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[C.primary]} tintColor={C.primary} />}
+              />
             </View>
-
-            {/* SCROLLABLE right region — only the dates move sideways here.
-                flex:1 keeps the inner FlatList's height bounded so it can
-                virtualize properly instead of rendering every student row
-                at once — this is what keeps things fast with large classes. */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={true}
-              bounces={false}
-              style={{ flex: 1 }}
-              contentContainerStyle={{ flexGrow: 1 }}
-            >
-              <View style={{ width: daysArray.length * dayCellWidth }}>
-                {/* Matrix Header Row — each day cell doubles as a KPI filter:
-                    tap a day to open the stats sheet scoped to just that day. */}
-                <View style={[styles.matrixHeaderRow, { height: HEADER_HEIGHT }]}>
-                  {daysArray.map(day => {
-                    const dateStr = formatToYMD(new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), day, 12, 0, 0));
-                    const isToday = dateStr === todayStr;
-                    const isFuture = dateStr > todayStr;
-                    const isSelected = selectedStatDate === dateStr;
-                    return (
-                      <TouchableOpacity
-                        key={day}
-                        style={[
-                          styles.matrixHeaderDayCell,
-                          { width: dayCellWidth },
-                          isToday && styles.matrixHeaderTodayCell,
-                          isSelected && styles.matrixHeaderSelectedCell,
-                        ]}
-                        activeOpacity={0.7}
-                        onPress={() => toggleStatDate(dateStr)}
-                      >
-                        <Text style={[styles.matrixDayText, isSelected && styles.matrixDayTextSelected]}>{day}</Text>
-                        {isSunday(selectedMonth.getFullYear(), selectedMonth.getMonth(), day) && (
-                          <Text style={styles.matrixSunText}>SUN</Text>
-                        )}
-                        {isToday && <View style={styles.todayDot} />}
-                        {isFuture && <Feather name="lock" size={8} color={C.textFaint} style={{ marginTop: 2 }} />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {/* Matrix Body Rows — the ONE real vertically-scrolling,
-                    virtualized list in the matrix. The frozen name column
-                    (above) mirrors its scroll position via `scrollY`. */}
-                <Animated.FlatList
-                  data={filteredStudents}
-                  keyExtractor={keyExtractor}
-                  renderItem={renderDayCells}
-                  extraData={attendanceMap}
-                  getItemLayout={getItemLayout}
-                  showsVerticalScrollIndicator={true}
-                  onScroll={handleGridScroll}
-                  scrollEventThrottle={16}
-                  contentContainerStyle={{ paddingBottom: 110 + insets.bottom }}
-                  refreshControl={
-                    <RefreshControl
-                      refreshing={refreshing}
-                      onRefresh={() => {
-                        // Don't let an accidental pull-to-refresh mid-tap wipe
-                        // out cell saves that are still in flight.
-                        if (pendingCellKeysRef.current.size > 0) return;
-                        fetchGridData(authToken, selectedClassId, selectedMonth, true);
-                      }}
-                      colors={[C.primary]}
-                    />
-                  }
-                  initialNumToRender={16}
-                  maxToRenderPerBatch={16}
-                  windowSize={9}
-                  removeClippedSubviews={Platform.OS === 'android'}
-                  updateCellsBatchingPeriod={50}
-                  style={{ width: daysArray.length * dayCellWidth }}
-                />
-              </View>
-            </ScrollView>
-          </View>
+          </Animated.ScrollView>
         </View>
       )}
 
-      {/* Floating action button — Excel actions live here so they never take
-          up permanent header space. Tap to expand the speed-dial. */}
-      {!loading && fabOpen && (
-        <TouchableOpacity style={styles.fabBackdrop} activeOpacity={1} onPress={closeFab} />
-      )}
-
-      {!loading && (
+      {/* FAB (Excel actions) */}
+      {!loading && fabOpen && <TouchableOpacity style={styles.fabBackdrop} activeOpacity={1} onPress={closeFab} />}
+      {!loading && rows.length + classes.length > 0 && (
         <View style={[styles.fabWrap, { bottom: 22 + insets.bottom }]} pointerEvents="box-none">
           {fabOpen && (
             <View style={styles.fabActions}>
-              <TouchableOpacity
-                style={styles.fabActionRow}
-                activeOpacity={0.85}
-                onPress={() => { closeFab(); setShowUploadModal(true); }}
-              >
+              <TouchableOpacity style={styles.fabActionRow} activeOpacity={0.85} onPress={() => { closeFab(); setShowUploadModal(true); }}>
                 <View style={styles.fabLabelChip}><Text style={styles.fabLabelText}>Upload Excel</Text></View>
-                <View style={[styles.fabMini, { backgroundColor: C.primary }]}>
-                  <Feather name="upload" size={17} color="#fff" />
-                </View>
+                <View style={[styles.fabMini, { backgroundColor: C.primary }]}><Feather name="upload" size={17} color="#fff" /></View>
               </TouchableOpacity>
-
               <TouchableOpacity
-                style={styles.fabActionRow}
-                activeOpacity={0.85}
-                disabled={exporting || students.length === 0}
+                style={styles.fabActionRow} activeOpacity={0.85}
+                disabled={exporting || rows.length === 0}
                 onPress={() => { closeFab(); downloadFormattedMonthlyExcel(); }}
               >
                 <View style={styles.fabLabelChip}><Text style={styles.fabLabelText}>{exporting ? 'Exporting…' : 'Full Month Excel'}</Text></View>
@@ -1321,32 +1344,48 @@ export default function ClassAttendanceScreen() {
                   {exporting ? <ActivityIndicator size="small" color="#fff" /> : <Feather name="file-text" size={17} color="#fff" />}
                 </View>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.fabActionRow}
-                activeOpacity={0.85}
-                onPress={() => { closeFab(); downloadSampleAttendanceTemplate(); }}
-              >
+              <TouchableOpacity style={styles.fabActionRow} activeOpacity={0.85} onPress={() => { closeFab(); downloadSampleAttendanceTemplate(); }}>
                 <View style={styles.fabLabelChip}><Text style={styles.fabLabelText}>Download Format</Text></View>
-                <View style={[styles.fabMini, { backgroundColor: C.blue }]}>
-                  <Feather name="download" size={17} color="#fff" />
-                </View>
+                <View style={[styles.fabMini, { backgroundColor: C.blue }]}><Feather name="download" size={17} color="#fff" /></View>
               </TouchableOpacity>
             </View>
           )}
-
           <TouchableOpacity style={styles.fabMain} onPress={toggleFab} activeOpacity={0.9}>
-            {fabOpen ? (
-              <Text style={{ color: '#fff', fontSize: 28, fontWeight: '300', lineHeight: 28 }}>×</Text>
-            ) : (
-              <Feather name="grid" size={22} color="#fff" />
-            )}
+            {fabOpen ? <Text style={{ color: '#fff', fontSize: 28, fontWeight: '300', lineHeight: 30 }}>×</Text> : <Feather name="grid" size={22} color="#fff" />}
           </TouchableOpacity>
         </View>
       )}
 
-      {/* BOTTOM SHEET: Day stats — appears only when a day is tapped in the
-          matrix header, so it never eats permanent screen space. */}
+      {/* SHEET: Class picker */}
+      <Modal visible={showClassSheet} animationType="slide" transparent onRequestClose={() => setShowClassSheet(false)}>
+        <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setShowClassSheet(false)}>
+          <TouchableOpacity activeOpacity={1} style={[styles.sheetCard, { paddingBottom: 18 + insets.bottom, maxHeight: '70%' }]} onPress={() => { }}>
+            <View style={styles.sheetHandle} />
+            <Text style={[styles.editModalTitle, { marginBottom: 10 }]}>Select Class</Text>
+            <FlatList
+              data={availableClasses}
+              keyExtractor={c => c._id}
+              renderItem={({ item }) => {
+                const active = item._id === selectedClassId;
+                return (
+                  <TouchableOpacity style={[styles.classItem, active && styles.classItemActive]} onPress={() => selectClass(item._id)} activeOpacity={0.8}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.classItemTitle, active && { color: C.primary }]}>
+                        {item.className}{item.division ? ` (Div ${item.division})` : ''}
+                      </Text>
+                      <Text style={styles.classItemSub}>Teacher: {item.classTeacher?.name || 'Unassigned'}</Text>
+                    </View>
+                    {active && <Feather name="check" size={18} color={C.primary} />}
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={<Text style={styles.emptySubtitle}>No classes available.</Text>}
+            />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* SHEET: Day stats */}
       <Modal visible={!!selectedStatDate} animationType="slide" transparent onRequestClose={() => setSelectedStatDate(null)}>
         <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setSelectedStatDate(null)}>
           <TouchableOpacity activeOpacity={1} style={[styles.sheetCard, { paddingBottom: 26 + insets.bottom }]} onPress={() => { }}>
@@ -1360,7 +1399,6 @@ export default function ClassAttendanceScreen() {
                 <Feather name="x" size={16} color={C.textMuted} />
               </TouchableOpacity>
             </View>
-
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 4 }}>
               <View style={[styles.statCard, SHADOW.card, { borderColor: C.border }]}>
                 <Text style={styles.statValue}>{scopedPct !== null ? `${scopedPct}%` : '—'}</Text>
@@ -1383,7 +1421,7 @@ export default function ClassAttendanceScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* MODAL: Legend / help — colour codes + gestures, opened from the info icon */}
+      {/* MODAL: Legend */}
       <Modal visible={showLegendModal} animationType="fade" transparent onRequestClose={() => setShowLegendModal(false)}>
         <TouchableOpacity style={styles.modalOverlayCenter} activeOpacity={1} onPress={() => setShowLegendModal(false)}>
           <TouchableOpacity activeOpacity={1} style={[styles.editModalCard, SHADOW.raised]} onPress={() => { }}>
@@ -1391,61 +1429,59 @@ export default function ClassAttendanceScreen() {
               <Text style={styles.editModalTitle}>How marking works</Text>
               <TouchableOpacity onPress={() => setShowLegendModal(false)}><Feather name="x" size={18} color={C.textMuted} /></TouchableOpacity>
             </View>
-
-            <View style={styles.legendModalRow}>
-              <View style={styles.cellCheckboxActive}><Feather name="check" size={9} color="#fff" /></View>
-              <Text style={styles.legendModalText}>Present — tap once</Text>
-            </View>
-            <View style={styles.legendModalRow}>
-              <View style={styles.cellCheckboxEmpty} />
-              <Text style={styles.legendModalText}>Absent / not yet marked</Text>
-            </View>
-            {STATUS_ORDER.filter(st => st === 'Leave' || st === 'Half-Day').map(st => {
-              const meta = STATUS_META[st];
-              return (
-                <View key={st} style={styles.legendModalRow}>
-                  <View style={[styles.legendDot, { backgroundColor: meta.color }]} />
-                  <Text style={styles.legendModalText}>{meta.abbr} — {meta.label}</Text>
+            <View style={styles.legendRow}><View style={styles.cellBoxActive}><Feather name="check" size={12} color="#fff" /></View><Text style={styles.legendText}>Checked — Present</Text></View>
+            <View style={styles.legendRow}><View style={[styles.cellBoxEmpty, styles.cellBoxAbsent]} /><Text style={styles.legendText}>Red-tinted empty — Absent</Text></View>
+            <View style={styles.legendRow}><View style={styles.cellBoxEmpty} /><Text style={styles.legendText}>Empty — not marked yet</Text></View>
+            <View style={styles.legendRow}><View style={styles.cellBoxSun}><Text style={styles.cellBoxSunText}>SUN</Text></View><Text style={styles.legendText}>Sunday — tap to mark Present if working</Text></View>
+            {(['Leave', 'Half-Day', 'Holiday'] as Status[]).map(st => (
+              <View key={st} style={styles.legendRow}>
+                <View style={[styles.statusPill, { backgroundColor: STATUS_META[st].bg, borderColor: STATUS_META[st].color + '33' }]}>
+                  <Text style={[styles.statusPillText, { color: STATUS_META[st].color }]}>{STATUS_META[st].abbr}</Text>
                 </View>
-              );
-            })}
-            <Text style={styles.legendHintText}>Tap a day cell to toggle Present/Absent. Hold it down to set Leave, Half-Day or Holiday. Tap a date in the calendar header to see that day's totals.</Text>
+                <Text style={styles.legendText}>{STATUS_META[st].label}</Text>
+              </View>
+            ))}
+            <Text style={styles.legendHint}>
+              Tap a cell to toggle Present/Absent — taps save automatically, even if you tap quickly. Long-press to set Leave, Half-Day or Holiday. Tap a date in the header to see that day's totals.
+            </Text>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 
       {/* MODAL: Mark Daily Attendance */}
-      <Modal visible={isDailyModalVisible} animationType="slide" transparent>
+      <Modal visible={isDailyModalVisible} animationType="slide" transparent onRequestClose={() => setDailyModalVisible(false)}>
         <SafeAreaView style={styles.modalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.fullModalContainer}>
             <View style={styles.formHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Feather name="check-circle" size={18} color="#fff" /><Text style={styles.formTitle}>Mark Daily Attendance</Text></View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Feather name="check-circle" size={18} color="#fff" />
+                <Text style={styles.formTitle}>Mark Daily Attendance{selectedClass?.className ? ` (${selectedClass.className})` : ''}</Text>
+              </View>
               <TouchableOpacity onPress={() => setDailyModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Text style={{ fontSize: 22, color: '#fff', fontWeight: '600' }}>✕</Text>
-              </TouchableOpacity>            </View>
+                <Feather name="x" size={22} color="#fff" />
+              </TouchableOpacity>
+            </View>
 
             <View style={styles.dailyConfigBar}>
               <View style={{ flex: 1, marginRight: 16 }}>
                 <Text style={styles.inputLabel}>ATTENDANCE DATE *</Text>
-                <TouchableOpacity style={styles.datePickerBtnForm} onPress={() => setShowDailyDatePicker(true)}>
-                  <Text style={styles.datePickerText}>{formatToYMD(dailyDate)}</Text>
+                <TouchableOpacity style={styles.selectBtn} onPress={() => setShowDailyDatePicker(true)}>
+                  <Text style={styles.selectText}>{formatToYMD(dailyDate)}</Text>
                   <Feather name="calendar" size={14} color={C.textMuted} />
                 </TouchableOpacity>
-                <Text style={styles.helperText}>Future dates can't be selected</Text>
+                {!ALLOW_FUTURE_DATES && <Text style={styles.helperText}>Future dates can't be selected</Text>}
                 {showDailyDatePicker && (
                   <DateTimePicker
                     value={dailyDate}
                     mode="date"
                     display="default"
-                    maximumDate={new Date()}
-                    onChange={(e, d) => {
+                    maximumDate={ALLOW_FUTURE_DATES ? undefined : new Date()}
+                    onChange={(e: any, d?: Date) => {
                       setShowDailyDatePicker(Platform.OS === 'ios');
-                      if (d) {
-                        // Belt-and-braces: clamp to today even if a platform
-                        // picker somehow returns a later date.
-                        const clamped = formatToYMD(d) > todayStr ? new Date() : d;
-                        setDailyDate(clamped);
-                      }
+                      if (e?.type === 'dismissed' || !d) return;
+                      const clamped = !ALLOW_FUTURE_DATES && formatToYMD(d) > todayStr ? new Date() : d;
+                      setDailyDate(clamped);
+                      setDailyDraft(buildDraft(formatToYMD(clamped))); // reload existing statuses for that date
                     }}
                   />
                 )}
@@ -1453,21 +1489,11 @@ export default function ClassAttendanceScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.inputLabel}>QUICK ACTIONS</Text>
                 <View style={styles.quickActionsRow}>
-                  <TouchableOpacity
-                    style={[styles.quickActionBtn, { backgroundColor: C.greenSoft, borderColor: C.green + '40' }]}
-                    onPress={() => markAllDaily('Present')}
-                    activeOpacity={0.85}
-                  >
-                    <Feather name="check-circle" size={14} color={C.green} />
-                    <Text style={[styles.quickActionText, { color: C.green }]}>All Present</Text>
+                  <TouchableOpacity style={[styles.quickActionBtn, { backgroundColor: C.greenSoft, borderColor: C.green + '40' }]} onPress={() => markAllDaily('Present')} activeOpacity={0.85}>
+                    <Feather name="check-circle" size={14} color={C.green} /><Text style={[styles.quickActionText, { color: C.green }]}>All Present</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.quickActionBtn, { backgroundColor: C.primarySoft, borderColor: C.primary + '40' }]}
-                    onPress={() => markAllDaily('Absent')}
-                    activeOpacity={0.85}
-                  >
-                    <Feather name="x-circle" size={14} color={C.primary} />
-                    <Text style={[styles.quickActionText, { color: C.primary }]}>All Absent</Text>
+                  <TouchableOpacity style={[styles.quickActionBtn, { backgroundColor: C.primarySoft, borderColor: C.primary + '40' }]} onPress={() => markAllDaily('Absent')} activeOpacity={0.85}>
+                    <Feather name="x-circle" size={14} color={C.primary} /><Text style={[styles.quickActionText, { color: C.primary }]}>All Absent</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1476,39 +1502,34 @@ export default function ClassAttendanceScreen() {
             <View style={styles.dailySearchWrap}>
               <View style={styles.searchContainer}>
                 <Feather name="search" size={16} color={C.textFaint} />
-                <TextInput style={styles.searchInput} placeholder="Find a student to mark..." placeholderTextColor={C.textFaint} value={dailySearch} onChangeText={setDailySearch} />
+                <TextInput style={styles.searchInput} placeholder="Find a student to mark..." placeholderTextColor={C.textFaint} value={dailySearch} onChangeText={setDailySearch} autoCorrect={false} />
               </View>
-              <Text style={styles.dailyCountText}>
-                {Object.values(dailyDraft).filter(v => v === 'Present').length} / {students.length} marked Present
-              </Text>
+              <Text style={styles.dailyCountText}>{presentInDraft} Present · {rows.length - presentInDraft} Absent / other</Text>
             </View>
 
             <FlatList
-              data={dailyFilteredStudents}
-              keyExtractor={item => item._id}
+              data={dailyFilteredRows}
+              keyExtractor={r => r.key}
+              extraData={dailyDraft}
               contentContainerStyle={{ padding: 16, paddingTop: 4 }}
               initialNumToRender={16}
               maxToRenderPerBatch={16}
               windowSize={7}
-              removeClippedSubviews={Platform.OS === 'android'}
+              keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => {
-                const isPresent = (dailyDraft[item._id] || 'Absent') === 'Present';
+                const isPresent = dailyDraft[item.key] === 'Present';
+                const other = dailyDraft[item.key] && dailyDraft[item.key] !== 'Present' && dailyDraft[item.key] !== 'Absent'
+                  ? STATUS_META[dailyDraft[item.key]] : null;
                 return (
-                  <TouchableOpacity
-                    style={styles.dailyStudentRow}
-                    activeOpacity={0.7}
-                    onPress={() => toggleDailyPresent(item._id)}
-                  >
-                    <View style={[styles.dailyAvatar, { backgroundColor: isPresent ? C.greenSoft : C.surfaceSoft, borderColor: isPresent ? C.green + '55' : C.border }]}>
-                      <Text style={[styles.dailyAvatarText, { color: isPresent ? C.green : C.textFaint }]}>{getInitials(item.name)}</Text>
-                    </View>
+                  <TouchableOpacity style={styles.dailyStudentRow} activeOpacity={0.7} onPress={() => toggleDailyPresent(item.key)}>
+                    <StudentAvatar photo={item.photo} name={item.name} size={38} tint={isPresent ? C.green : C.textFaint} />
                     <View style={{ flex: 1, marginLeft: 12 }}>
                       <Text style={styles.marksStudentName} numberOfLines={1}>{item.name}</Text>
-                      <Text style={styles.marksStudentRoll}>Roll {item.rollNo || 'N/A'}</Text>
+                      <Text style={styles.marksStudentRoll}>Roll {item.rollNo}</Text>
                     </View>
                     <View style={styles.presentCheckboxWrap}>
-                      <Text style={[styles.presentCheckboxLabel, { color: isPresent ? C.green : C.textFaint }]}>
-                        {isPresent ? 'Present' : 'Absent'}
+                      <Text style={[styles.presentCheckboxLabel, { color: isPresent ? C.green : other ? other.color : C.textFaint }]}>
+                        {isPresent ? 'Present' : other ? other.label : 'Absent'}
                       </Text>
                       <View style={[styles.checkboxBox, isPresent && styles.checkboxBoxActive]}>
                         {isPresent && <Feather name="check" size={14} color="#fff" />}
@@ -1521,7 +1542,7 @@ export default function ClassAttendanceScreen() {
 
             <View style={[styles.modalFooter, { paddingBottom: 16 + insets.bottom }]}>
               <TouchableOpacity style={styles.ghostBtn} onPress={() => setDailyModalVisible(false)}><Text style={styles.ghostBtnText}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.saveBtnFull} onPress={handleSaveDaily} disabled={saving} activeOpacity={0.9}>
+              <TouchableOpacity style={[styles.saveBtnFull, { minWidth: 150 }]} onPress={handleSaveDaily} disabled={saving} activeOpacity={0.9}>
                 {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnFullText}>Save Attendance</Text>}
               </TouchableOpacity>
             </View>
@@ -1529,29 +1550,25 @@ export default function ClassAttendanceScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* MODAL: Edit Single Status */}
-      <Modal visible={isSingleEditModalVisible} animationType="fade" transparent>
+      {/* MODAL: Edit single status */}
+      <Modal visible={isSingleEditModalVisible} animationType="fade" transparent onRequestClose={() => setSingleEditModalVisible(false)}>
         <View style={styles.modalOverlayCenter}>
           <View style={[styles.editModalCard, SHADOW.raised]}>
             <View style={styles.editModalHeader}>
               <Text style={styles.editModalTitle}>Edit Attendance</Text>
               <TouchableOpacity onPress={() => setSingleEditModalVisible(false)}><Feather name="x" size={18} color={C.textMuted} /></TouchableOpacity>
             </View>
-
             {singleEditData && (
               <>
                 <View style={styles.editModalInfo}>
-                  <View style={[styles.avatar, { backgroundColor: C.primarySoft }]}>
-                    <Text style={[styles.avatarText, { color: C.primary }]}>{getInitials(singleEditData.student.name)}</Text>
-                  </View>
-                  <View style={{ marginLeft: 10 }}>
-                    <Text style={styles.editModalName}>{singleEditData.student.name}</Text>
-                    <Text style={styles.editModalDate}>{formatPretty(singleEditData.dateStr)} · Roll {singleEditData.student.rollNo || 'N/A'}</Text>
+                  <StudentAvatar photo={singleEditData.row.photo} name={singleEditData.row.name} size={34} />
+                  <View style={{ marginLeft: 10, flex: 1 }}>
+                    <Text style={styles.editModalName} numberOfLines={1}>{singleEditData.row.name}</Text>
+                    <Text style={styles.editModalDate}>{formatPretty(singleEditData.dateStr)} · Roll {singleEditData.row.rollNo}</Text>
                   </View>
                 </View>
-
                 <View style={styles.editStatusGrid}>
-                  {Object.keys(STATUS_META).map(st => {
+                  {STATUS_ORDER.map(st => {
                     const meta = STATUS_META[st];
                     const isActive = singleEditData.status === st;
                     return (
@@ -1567,9 +1584,8 @@ export default function ClassAttendanceScreen() {
                     );
                   })}
                 </View>
-
-                <TouchableOpacity style={styles.saveBtnFull} onPress={handleSaveSingleEdit} disabled={saving} activeOpacity={0.9}>
-                  {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnFullText}>Update Status</Text>}
+                <TouchableOpacity style={styles.saveBtnFull} onPress={handleSaveSingleEdit} activeOpacity={0.9}>
+                  <Text style={styles.saveBtnFullText}>Update Status</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -1577,19 +1593,18 @@ export default function ClassAttendanceScreen() {
         </View>
       </Modal>
 
-      {/* MODAL: Upload Monthly Excel — parity with the web page's upload modal */}
-      <Modal visible={showUploadModal} animationType="fade" transparent>
+      {/* MODAL: Upload monthly Excel */}
+      <Modal visible={showUploadModal} animationType="fade" transparent onRequestClose={() => !uploading && setShowUploadModal(false)}>
         <View style={styles.modalOverlayCenter}>
           <View style={[styles.editModalCard, SHADOW.raised]}>
             <View style={styles.editModalHeader}>
               <Text style={styles.editModalTitle}>Upload Monthly Attendance</Text>
-              <TouchableOpacity onPress={() => setShowUploadModal(false)}><Feather name="x" size={18} color={C.textMuted} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => !uploading && setShowUploadModal(false)}><Feather name="x" size={18} color={C.textMuted} /></TouchableOpacity>
             </View>
-
             <Text style={styles.uploadInfoText}>
               Upload an Excel file with the monthly attendance for{' '}
               <Text style={{ fontWeight: '800', color: C.text }}>{selectedClass?.className || 'this class'}</Text>
-              {' '}({selectedMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}). Use "Download Format" first if you need a blank template.
+              {' '}({monthLabel(selectedMonth)}). Use "Download blank format" if you need a template.
             </Text>
 
             <View style={styles.uploadDropZone}>
@@ -1601,33 +1616,38 @@ export default function ClassAttendanceScreen() {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-              style={[styles.excelActionBtn, styles.excelActionBtnOutline, { borderColor: C.green, alignSelf: 'center', marginBottom: 10 }]}
-              onPress={downloadSampleAttendanceTemplate}
-              activeOpacity={0.85}
-            >
+            {uploadProgress && (
+              <View style={{ marginBottom: 14 }}>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${Math.round((uploadProgress.done / uploadProgress.total) * 100)}%` }]} />
+                </View>
+                <Text style={styles.progressText}>
+                  {uploadProgress.done} / {uploadProgress.total} students{uploadProgress.failed > 0 ? ` · ${uploadProgress.failed} failed` : ''}
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity style={[styles.excelActionBtn, { borderColor: C.green, alignSelf: 'center', marginBottom: 10 }]} onPress={downloadSampleAttendanceTemplate} activeOpacity={0.85} disabled={uploading}>
               <Feather name="download" size={13} color={C.green} />
               <Text style={[styles.excelActionText, { color: C.green }]}>Download blank format</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.ghostBtn} onPress={() => setShowUploadModal(false)}>
+            <TouchableOpacity style={styles.ghostBtn} onPress={() => setShowUploadModal(false)} disabled={uploading}>
               <Text style={styles.ghostBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-
     </SafeAreaView>
   );
 }
 
+/* ────────────────────────────── Styles ────────────────────────────── */
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 10, fontSize: 12.5, color: C.textMuted, fontWeight: '600' },
 
   header: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 16, paddingVertical: 12,
     backgroundColor: C.surface, borderBottomWidth: 1, borderColor: C.border, ...SHADOW.soft,
   },
@@ -1637,34 +1657,77 @@ const styles = StyleSheet.create({
   headerCountBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.primarySoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: C.primary + '22' },
   headerCountText: { fontSize: 12, fontWeight: '800', color: C.primary },
   headerInfoBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: C.border },
-  syncPulse: { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  savePill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.surfaceSunken, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 16 },
+  savePillText: { fontSize: 11, fontWeight: '800', color: C.primary },
 
-  // Skeleton loading state — shown briefly on a first-ever visit while
-  // cached data (see gridCacheKey) isn't yet available, so the screen never
-  // sits on a blank spinner.
-  skeletonContainer: { flex: 1, backgroundColor: C.surface, paddingHorizontal: 16, paddingTop: 14 },
-  skeletonRow: { flexDirection: 'row', alignItems: 'center', height: ROW_HEIGHT, borderBottomWidth: 1, borderColor: C.border },
-  skeletonAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: C.surfaceSoft },
-  skeletonLineWide: { width: '55%', height: 10, borderRadius: 5, backgroundColor: C.surfaceSoft, marginBottom: 8 },
-  skeletonLineNarrow: { width: '30%', height: 8, borderRadius: 4, backgroundColor: C.surfaceSoft },
-  skeletonPillGroup: { flexDirection: 'row', gap: 6 },
-  skeletonPill: { width: 20, height: 20, borderRadius: 6, backgroundColor: C.surfaceSoft },
-
-  filterSection: {
-    backgroundColor: C.surface, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14,
-    borderBottomWidth: 1, borderColor: C.border, ...SHADOW.soft, zIndex: 50,
-  },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, zIndex: 1 },
+  filterSection: { backgroundColor: C.surface, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderColor: C.border, ...SHADOW.soft },
+  inputLabel: { fontSize: 10, fontWeight: '800', color: C.textMuted, marginBottom: 6, letterSpacing: 0.5 },
+  selectBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, height: 46, backgroundColor: C.surfaceSoft },
+  selectText: { fontSize: 13, color: C.text, fontWeight: '600', flexShrink: 1 },
+  monthStepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: C.border, borderRadius: 12, height: 46, backgroundColor: C.surfaceSoft, paddingHorizontal: 4 },
+  stepBtn: { width: 32, height: 38, justifyContent: 'center', alignItems: 'center' },
+  monthText: { fontSize: 13, color: C.text, fontWeight: '700', flexShrink: 1 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
   searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceSoft, borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, height: 46 },
-  searchInput: { flex: 1, marginLeft: 8, fontSize: 13, color: C.text },
+  searchInput: { flex: 1, marginLeft: 8, fontSize: 13, color: C.text, paddingVertical: 0 },
   markBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.primary, paddingHorizontal: 16, height: 46, borderRadius: 12, gap: 6, ...SHADOW.card },
   markBtnText: { color: '#fff', fontSize: 12.5, fontWeight: '700' },
 
-  excelActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 38, borderRadius: 20, ...SHADOW.soft },
-  excelActionBtnOutline: { backgroundColor: C.surface, borderWidth: 1.4 },
-  excelActionText: { fontSize: 11.5, fontWeight: '800' },
+  notice: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 16, marginTop: 10, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
+  noticeError: { backgroundColor: C.primarySoft, borderColor: C.primary + '33' },
+  noticeSuccess: { backgroundColor: C.greenSoft, borderColor: C.green + '33' },
+  noticeInfo: { backgroundColor: C.blueSoft, borderColor: C.blue + '33' },
+  noticeText: { flex: 1, fontSize: 12, color: C.text, fontWeight: '600' },
 
-  // Floating action button (speed dial) for Excel actions
+  skeletonContainer: { flex: 1, backgroundColor: C.surface, paddingHorizontal: 16, paddingTop: 14 },
+  skeletonRow: { flexDirection: 'row', alignItems: 'center', height: ROW_HEIGHT, borderBottomWidth: 1, borderColor: C.border },
+  skeletonAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: C.surfaceSunken },
+  skeletonLineWide: { width: '55%', height: 10, borderRadius: 5, backgroundColor: C.surfaceSunken, marginBottom: 8 },
+  skeletonLineNarrow: { width: '30%', height: 8, borderRadius: 4, backgroundColor: C.surfaceSunken },
+  skeletonPillGroup: { flexDirection: 'row', gap: 6 },
+  skeletonPill: { width: 20, height: 20, borderRadius: 6, backgroundColor: C.surfaceSunken },
+
+  emptyState: { alignItems: 'center', padding: 40, marginTop: 20 },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: C.text, marginTop: 12 },
+  emptySubtitle: { fontSize: 12.5, color: C.textMuted, marginTop: 4, textAlign: 'center', lineHeight: 18 },
+
+  /* Matrix */
+  matrixContainer: { flex: 1, backgroundColor: C.surface },
+  headerRow: { flexDirection: 'row', height: HEADER_HEIGHT, borderBottomWidth: 1, borderColor: C.border, backgroundColor: C.surfaceSoft },
+  stickyHeaderCell: { zIndex: 20, height: HEADER_HEIGHT, justifyContent: 'center', paddingHorizontal: 12, backgroundColor: C.surfaceSoft, borderRightWidth: 1, borderColor: C.border },
+  matrixHeaderTitle: { fontSize: 10, fontWeight: '800', color: C.textMuted, letterSpacing: 0.5 },
+  headerDayCell: { height: HEADER_HEIGHT, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderColor: C.border },
+  headerDayText: { fontSize: 12, fontWeight: '800', color: C.text },
+  headerSunText: { fontSize: 8, fontWeight: '800', color: C.primary, marginTop: 2 },
+  todayDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: C.primary, marginTop: 3 },
+
+  dataRow: { flexDirection: 'row', height: ROW_HEIGHT, borderBottomWidth: 1, borderColor: C.border, backgroundColor: C.surface },
+  stickyCell: {
+    zIndex: 10, height: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10,
+    backgroundColor: C.surface, borderRightWidth: 1, borderColor: C.border, borderLeftWidth: 3,
+    shadowColor: '#0F172A', shadowOffset: { width: 3, height: 0 }, shadowOpacity: 0.06, shadowRadius: 5,
+  },
+  studentName: { fontSize: 12.5, fontWeight: '700', color: C.text },
+  studentMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
+  studentRoll: { fontSize: 10, color: C.textMuted, flexShrink: 1 },
+  pctBadge: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6 },
+  studentPct: { fontSize: 10, fontWeight: '800' },
+
+  dayCell: { height: ROW_HEIGHT, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderColor: C.border, backgroundColor: C.surface },
+  sunBg: { backgroundColor: C.slateSoft },
+  todayBg: { backgroundColor: C.todayTint },
+  futureBg: { backgroundColor: C.futureBg },
+  cellBoxActive: { width: 24, height: 24, borderRadius: 7, backgroundColor: C.green, justifyContent: 'center', alignItems: 'center', ...SHADOW.soft },
+  cellBoxEmpty: { width: 24, height: 24, borderRadius: 7, borderWidth: 1.6, borderColor: C.border, backgroundColor: C.surfaceSoft },
+  cellBoxAbsent: { borderColor: C.primary + '55', backgroundColor: C.primarySoft },
+  cellBoxSun: { width: 26, height: 24, borderRadius: 7, borderWidth: 1.4, borderStyle: 'dashed', borderColor: '#FCA5A5', backgroundColor: 'rgba(239,68,68,0.05)', justifyContent: 'center', alignItems: 'center' },
+  cellBoxSunText: { fontSize: 8, fontWeight: '800', color: '#EF4444' },
+  statusPill: { width: 26, height: 26, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+  statusPillText: { fontSize: 10, fontWeight: '800' },
+  sumCell: { height: ROW_HEIGHT, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderColor: C.border },
+  sumText: { fontSize: 12, fontWeight: '800' },
+
+  /* FAB */
   fabBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(13,15,22,0.28)' },
   fabWrap: { position: 'absolute', right: 18, alignItems: 'flex-end' },
   fabMain: { width: 56, height: 56, borderRadius: 28, backgroundColor: C.primary, justifyContent: 'center', alignItems: 'center', ...SHADOW.fab },
@@ -1674,92 +1737,50 @@ const styles = StyleSheet.create({
   fabLabelText: { color: '#fff', fontSize: 11.5, fontWeight: '700' },
   fabMini: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', ...SHADOW.card },
 
-  // Bottom sheet (day stats)
+  /* Sheets */
   sheetOverlay: { flex: 1, backgroundColor: C.overlay, justifyContent: 'flex-end' },
-  sheetCard: { backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, paddingBottom: 26, ...SHADOW.raised },
+  sheetCard: { backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 18, ...SHADOW.raised },
   sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: C.border, alignSelf: 'center', marginBottom: 14 },
   sheetHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   statsScopeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.primarySoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
   statsScopeText: { fontSize: 12, fontWeight: '800', color: C.primaryDark },
   statsClearBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center' },
-
-  statCard: { minWidth: 92, backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, paddingVertical: 10, paddingHorizontal: 14, alignItems: 'flex-start' },
+  statCard: { minWidth: 92, backgroundColor: C.surface, borderRadius: 14, borderWidth: 1, borderColor: C.border, paddingVertical: 10, paddingHorizontal: 14, alignItems: 'flex-start' },
   statCardTop: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   statValue: { fontSize: 17, fontWeight: '800', color: C.text },
   statLabel: { fontSize: 10.5, color: C.textMuted, fontWeight: '700', marginTop: 3, letterSpacing: 0.2 },
 
-  legendModalRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
-  legendModalText: { fontSize: 13, color: C.text, fontWeight: '600' },
-  legendDot: { width: 12, height: 12, borderRadius: 6 },
-  legendHintText: { fontSize: 11.5, color: C.textMuted, lineHeight: 17, marginTop: 6, fontWeight: '500' },
+  classItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, paddingHorizontal: 12, borderRadius: 12, marginBottom: 4 },
+  classItemActive: { backgroundColor: C.primarySoft },
+  classItemTitle: { fontSize: 14, fontWeight: '700', color: C.text },
+  classItemSub: { fontSize: 11.5, color: C.textMuted, marginTop: 2 },
 
-  emptyState: { alignItems: 'center', padding: 40, marginTop: 20 },
-  emptyTitle: { fontSize: 16, fontWeight: '800', color: C.text, marginTop: 12 },
-  emptySubtitle: { fontSize: 12.5, color: C.textMuted, marginTop: 4, textAlign: 'center' },
+  /* Legend */
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  legendText: { fontSize: 13, color: C.text, fontWeight: '600', flex: 1 },
+  legendHint: { fontSize: 11.5, color: C.textMuted, lineHeight: 17, marginTop: 6, fontWeight: '500' },
 
-  // Matrix Styles
-  matrixContainer: { flex: 1, backgroundColor: C.surface },
-  matrixHeaderRow: { flexDirection: 'row', borderBottomWidth: 1, borderColor: C.border, backgroundColor: C.surfaceSoft },
-  matrixHeaderCell: { padding: 12, justifyContent: 'center', borderRightWidth: 1, borderColor: C.border, borderBottomWidth: 1, backgroundColor: C.surfaceSoft },
-  matrixStickyCol: {},
-  matrixHeaderTitle: { fontSize: 10, fontWeight: '800', color: C.textMuted, letterSpacing: 0.5 },
-  matrixHeaderDayCell: { padding: 8, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderColor: C.border },
-  matrixHeaderTodayCell: { backgroundColor: C.todayTint },
-  matrixHeaderSelectedCell: { backgroundColor: C.primary },
-  matrixDayText: { fontSize: 12, fontWeight: '800', color: C.text },
-  matrixDayTextSelected: { color: '#fff' },
-  matrixSunText: { fontSize: 8, fontWeight: '800', color: C.primary, marginTop: 2 },
-  todayDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: C.primary, marginTop: 3 },
-
-  matrixDataRow: { flexDirection: 'row', height: ROW_HEIGHT, borderBottomWidth: 1, borderColor: C.border },
-  matrixDataCell: { paddingHorizontal: 12, justifyContent: 'center', borderRightWidth: 1, borderColor: C.border, backgroundColor: C.surface },
-  studentInfo: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  avatar: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
-  avatarText: { fontSize: 13, fontWeight: '800' },
-  studentName: { fontSize: 12.5, fontWeight: '700', color: C.text },
-  studentMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 },
-  studentRoll: { fontSize: 10, color: C.textMuted },
-  pctBadge: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6 },
-  studentPct: { fontSize: 10, fontWeight: '800' },
-
-  matrixDayDataCell: { alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, borderColor: C.border, backgroundColor: C.surface },
-  matrixSunBg: { backgroundColor: C.slateSoft },
-  matrixTodayBg: { backgroundColor: C.todayTint },
-  matrixFutureBg: { backgroundColor: C.futureBg },
-  statusPill: { width: 26, height: 26, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
-  statusPillText: { fontSize: 10, fontWeight: '800' },
-  cellCheckboxActive: { width: 22, height: 22, borderRadius: 7, backgroundColor: C.green, justifyContent: 'center', alignItems: 'center' },
-  cellCheckboxEmpty: { width: 22, height: 22, borderRadius: 7, borderWidth: 1.6, borderColor: C.border, backgroundColor: C.surfaceSoft },
-
-  // Modals & Forms
+  /* Modals & forms */
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.6)' },
   fullModalContainer: { flex: 1, backgroundColor: C.surface, marginTop: 40, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden', ...SHADOW.raised },
   formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: C.primary },
   formTitle: { fontSize: 16, fontWeight: '800', color: '#fff' },
-  closeBtnIcon: { padding: 4 },
-
   dailyConfigBar: { flexDirection: 'row', padding: 16, backgroundColor: C.surfaceSoft, borderBottomWidth: 1, borderColor: C.border },
-  quickActionsRow: { flexDirection: 'row', gap: 8, height: 44 },
+  quickActionsRow: { flexDirection: 'row', gap: 8, height: 46 },
   quickActionBtn: { flex: 1, flexDirection: 'row', gap: 6, borderRadius: 11, borderWidth: 1.2, justifyContent: 'center', alignItems: 'center' },
   quickActionText: { fontSize: 11.5, fontWeight: '800' },
   helperText: { fontSize: 10, color: C.textFaint, marginTop: 5, fontWeight: '600' },
-
   dailySearchWrap: { paddingHorizontal: 16, paddingTop: 14, gap: 8 },
   dailyCountText: { fontSize: 11.5, color: C.textMuted, fontWeight: '700' },
-
   dailyStudentRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 4, borderBottomWidth: 1, borderColor: C.border },
-  dailyAvatar: { width: 38, height: 38, borderRadius: 19, borderWidth: 1.4, justifyContent: 'center', alignItems: 'center' },
-  dailyAvatarText: { fontSize: 13.5, fontWeight: '800' },
-  marksStudentName: { fontSize: 14, fontWeight: '700', color: C.text, maxWidth: 160 },
+  marksStudentName: { fontSize: 14, fontWeight: '700', color: C.text },
   marksStudentRoll: { fontSize: 11.5, color: C.textMuted, marginTop: 2 },
   presentCheckboxWrap: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  presentCheckboxLabel: { fontSize: 11.5, fontWeight: '800', minWidth: 48, textAlign: 'right' },
-  checkboxBox: { width: 25, height: 25, borderRadius: 8, borderWidth: 1.6, borderColor: C.border, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center' },
+  presentCheckboxLabel: { fontSize: 11.5, fontWeight: '800', minWidth: 52, textAlign: 'right' },
+  checkboxBox: { width: 26, height: 26, borderRadius: 8, borderWidth: 1.6, borderColor: C.border, backgroundColor: C.surfaceSoft, justifyContent: 'center', alignItems: 'center' },
   checkboxBoxActive: { backgroundColor: C.green, borderColor: C.green },
+  modalFooter: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 10, padding: 16, borderTopWidth: 1, borderColor: C.border, backgroundColor: C.surface },
 
-  modalFooter: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, padding: 16, borderTopWidth: 1, borderColor: C.border, backgroundColor: C.surface },
-
-  // Single Edit Modal
   modalOverlayCenter: { flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'center', padding: 20 },
   editModalCard: { backgroundColor: C.surface, borderRadius: 22, padding: 20 },
   editModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
@@ -1772,47 +1793,20 @@ const styles = StyleSheet.create({
   editStatusDot: { width: 10, height: 10, borderRadius: 5 },
   editStatusText: { fontSize: 13, fontWeight: '600', color: C.textMuted },
 
-  // Upload Modal
   uploadInfoText: { fontSize: 11.5, color: C.textMuted, lineHeight: 18, marginBottom: 16 },
   uploadDropZone: { alignItems: 'center', borderWidth: 1.4, borderStyle: 'dashed', borderColor: C.border, borderRadius: 16, paddingVertical: 26, backgroundColor: C.surfaceSoft, marginBottom: 16 },
   uploadDropTitle: { fontSize: 13.5, fontWeight: '800', color: C.text, marginTop: 8 },
   uploadDropSubtitle: { fontSize: 11, color: C.textFaint, marginTop: 3, marginBottom: 14 },
   uploadChooseBtn: { borderWidth: 1.4, borderColor: C.primary, borderRadius: 20, paddingHorizontal: 20, paddingVertical: 9, minWidth: 120, alignItems: 'center' },
   uploadChooseBtnText: { fontSize: 12.5, fontWeight: '800', color: C.primary },
+  progressTrack: { height: 8, borderRadius: 4, backgroundColor: C.surfaceSunken, overflow: 'hidden' },
+  progressFill: { height: 8, borderRadius: 4, backgroundColor: C.primary },
+  progressText: { fontSize: 11.5, color: C.textMuted, fontWeight: '700', marginTop: 6, textAlign: 'center' },
+  excelActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 38, borderRadius: 20, backgroundColor: C.surface, borderWidth: 1.4, ...SHADOW.soft },
+  excelActionText: { fontSize: 11.5, fontWeight: '800' },
 
-
-  inputWrapper: { marginBottom: 0 },
-  inputLabel: { fontSize: 10, fontWeight: '800', color: C.textMuted, marginBottom: 6, letterSpacing: 0.5 },
-  dropdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, height: 46, backgroundColor: C.surfaceSoft },
-  dropdownHeaderActive: { borderColor: C.primary },
-  dropdownSelectedText: { fontSize: 13, color: C.text, fontWeight: '600' },
-  dropdownPlaceholder: { fontSize: 13, color: C.textFaint },
-dropdownListContainer: {
-  position: 'absolute',
-  top: 70,
-  left: 0,
-  right: 0,
-  backgroundColor: C.surface,
-  borderWidth: 1,
-  borderColor: C.border,
-  borderRadius: 12,
-  elevation: 10,
-  shadowColor: '#000',
-  shadowOpacity: 0.15,
-  shadowRadius: 12,
-  shadowOffset: { width: 0, height: 5 },
-  zIndex: 999,
-  overflow: 'hidden',
-},  dropdownItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 13, borderBottomWidth: 1, borderBottomColor: C.border },
-  dropdownItemText: { fontSize: 13, color: '#374151', fontWeight: '500' },
-  textBrand: { color: C.primary, fontWeight: '700' },
-
-  datePickerBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, height: 46, backgroundColor: C.surfaceSoft },
-  datePickerBtnForm: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: C.border, borderRadius: 12, paddingHorizontal: 12, height: 46, backgroundColor: C.surface },
-  datePickerText: { fontSize: 13, color: C.text, fontWeight: '600' },
-
-  ghostBtn: { paddingVertical: 10, paddingHorizontal: 16, justifyContent: 'center' },
+  ghostBtn: { paddingVertical: 10, paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center' },
   ghostBtnText: { color: C.textMuted, fontSize: 14, fontWeight: '700' },
   saveBtnFull: { backgroundColor: C.primary, paddingHorizontal: 20, paddingVertical: 13, borderRadius: 12, justifyContent: 'center', alignItems: 'center', ...SHADOW.card },
-  saveBtnFullText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  saveBtnFullText: { color: '#fff', fontSize: 12.5, fontWeight: '800' },
 });
