@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
+import React, {
+  useState, useEffect, useCallback, useMemo, useRef, memo, useSyncExternalStore,
+} from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Pressable, SafeAreaView, FlatList, TextInput, Modal,
   KeyboardAvoidingView, Platform, ScrollView, Alert, ActivityIndicator, RefreshControl,
@@ -23,15 +25,19 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const CLASSES_URL = `${API_BASE}/classes`;
 const STUDENTS_URL = `${API_BASE}/students`;
-const CLASS_ATTENDANCE_URL = `${API_BASE}/attendance/class`; // same endpoint as the web page (GET + POST)
+const CLASS_ATTENDANCE_URL = `${API_BASE}/attendance/class`; // GET (scoped) + POST, same endpoint as web
 const BULK_ATTENDANCE_URL = `${API_BASE}/attendance/class/bulk`;
 
 const DEFAULT_AVATAR = '/default-avatar.png';
-const CACHE_PREFIX = 'attendance_grid_v2_';
-const USER_DATA_KEY = 'userData'; // optional: JSON of the logged-in user (used for teacher class scoping)
 
-const ALLOW_FUTURE_DATES = false; // web allows it; mobile keeps it locked. Flip to true for strict parity.
-const FLUSH_DELAY_MS = 400; // write-behind debounce for cell taps
+// v3: page-scoped cache. v2 (whole-grid) keys are left untouched on disk and simply
+// never read again — AsyncStorage entries expire naturally / can be swept by a
+// maintenance task; we don't need to migrate them since v3 fully supersedes them.
+const CACHE_PREFIX = 'attendance_grid_v3_';
+const USER_DATA_KEY = 'userData';
+
+const ALLOW_FUTURE_DATES = false;
+const FLUSH_DELAY_MS = 400;
 const UPLOAD_BATCH_SIZE = 20;
 
 const ROW_HEIGHT = 64;
@@ -39,6 +45,14 @@ const HEADER_HEIGHT = 56;
 const SUMMARY_COL_W = 36;
 const SUMMARY_PCT_W = 60;
 const SUMMARY_TOTAL_W = SUMMARY_COL_W * 4 + SUMMARY_PCT_W;
+
+const PAGE_SIZE = 30; // students per page — see Section E for the backend contract
+
+// Dev-only render profiling switch. Leave false for any real build — flip to
+// true locally with React DevTools / a physical device to confirm AttendanceRow
+// only re-renders for the row that actually changed. `__DEV__` makes this a
+// no-op (dead code eliminated) in production bundles either way.
+const DEBUG_LOG_ROW_RENDERS = false;
 
 /* ────────────────────────────── Theme ────────────────────────────── */
 
@@ -213,11 +227,11 @@ const buildGrid = (students: any[], records: any[]): { rows: Row[]; map: Attenda
   return { rows, map };
 };
 
-const applyCell = (map: AttendanceMap, rowKey: string, dateStr: string, status: Status | null): AttendanceMap => {
-  const nextRow = { ...(map[rowKey] || {}) };
-  if (status === null) delete nextRow[dateStr];
-  else nextRow[dateStr] = status;
-  return { ...map, [rowKey]: nextRow };
+const applyCellToRow = (row: RowAttendance | undefined, dateStr: string, status: Status | null): RowAttendance => {
+  const next = { ...(row || {}) };
+  if (status === null) delete next[dateStr];
+  else next[dateStr] = status;
+  return next;
 };
 
 const computeStats = (att: RowAttendance, dayMetas: DayMeta[], workingDays: number) => {
@@ -244,6 +258,92 @@ const toAttendanceItem = (row: Row, status: Status) => ({
   status,
 });
 
+
+type Listener = () => void;
+
+function createAttendanceStore(initial: AttendanceMap = {}) {
+  let data: AttendanceMap = initial;
+  const rowListeners = new Map<string, Set<Listener>>();
+  const globalListeners = new Set<Listener>();
+
+  const statsCache = new Map<string, StatsResult>();
+
+  const notifyRow = (key: string) => { statsCache.delete(key); rowListeners.get(key)?.forEach(l => l()); };
+  const notifyGlobal = () => globalListeners.forEach(l => l());
+
+  return {
+    getRow: (key: string): RowAttendance => data[key] || EMPTY_ROW_ATT,
+    getAll: (): AttendanceMap => data,
+
+    /** Cached computeStats() — recomputed only when this row's attendance
+     *  actually changed since the last call (see notifyRow above). */
+    getStats(key: string, dayMetas: DayMeta[], workingDays: number): StatsResult {
+      const hit = statsCache.get(key);
+      if (hit) return hit;
+      const computed = computeStats(data[key] || EMPTY_ROW_ATT, dayMetas, workingDays);
+      statsCache.set(key, computed);
+      return computed;
+    },
+
+    /** Replace the whole map (initial load / refresh / silent resync). */
+    reset(next: AttendanceMap) {
+      const prev = data;
+      data = next;
+      statsCache.clear(); // month/grid identity changed — nothing is still valid
+      const keys = new Set([...Object.keys(prev), ...Object.keys(next)]);
+      keys.forEach(notifyRow);
+      notifyGlobal();
+    },
+
+    /** Add rows for a newly-loaded page without touching existing rows. */
+    mergeRows(partial: AttendanceMap) {
+      if (Object.keys(partial).length === 0) return;
+      data = { ...data, ...partial };
+      Object.keys(partial).forEach(notifyRow); // new keys only — existing cache entries untouched
+      notifyGlobal();
+    },
+
+    /** Instant single-cell update (checkbox tap / single edit). */
+    applyCell(rowKey: string, dateStr: string, status: Status | null) {
+      data = { ...data, [rowKey]: applyCellToRow(data[rowKey], dateStr, status) };
+      notifyRow(rowKey);
+      notifyGlobal();
+    },
+
+    /** Merge several fully-resolved rows at once (daily-mark bulk save). */
+    setRows(entries: AttendanceMap) {
+      data = { ...data, ...entries };
+      Object.keys(entries).forEach(notifyRow);
+      notifyGlobal();
+    },
+
+    subscribeRow(key: string, cb: Listener) {
+      let set = rowListeners.get(key);
+      if (!set) { set = new Set(); rowListeners.set(key, set); }
+      set.add(cb);
+      return () => { set!.delete(cb); if (set!.size === 0) rowListeners.delete(key); };
+    },
+    subscribeGlobal(cb: Listener) {
+      globalListeners.add(cb);
+      return () => globalListeners.delete(cb);
+    },
+  };
+}
+type AttendanceStore = ReturnType<typeof createAttendanceStore>;
+type StatsResult = ReturnType<typeof computeStats>;
+
+function useRowAttendance(store: AttendanceStore, rowKey: string): RowAttendance {
+  const subscribe = useCallback((cb: Listener) => store.subscribeRow(rowKey, cb), [store, rowKey]);
+  const getSnapshot = useCallback(() => store.getRow(rowKey), [store, rowKey]);
+  return useSyncExternalStore(subscribe, getSnapshot);
+}
+
+function useAttendanceSnapshot(store: AttendanceStore): AttendanceMap {
+  const subscribe = useCallback((cb: Listener) => store.subscribeGlobal(cb), [store]);
+  const getSnapshot = useCallback(() => store.getAll(), [store]);
+  return useSyncExternalStore(subscribe, getSnapshot);
+}
+
 /* ────────────────────────────── Small components ────────────────────────────── */
 
 const StudentAvatar = memo(({ photo, name, size = 34, tint = C.primary }: { photo?: string; name: string; size?: number; tint?: string }) => {
@@ -254,6 +354,7 @@ const StudentAvatar = memo(({ photo, name, size = 34, tint = C.primary }: { phot
       <Image
         source={{ uri: photo }}
         onError={() => setFailed(true)}
+        // Fixed dimensions declared up front so layout never shifts after load.
         style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: C.surfaceSunken }}
       />
     );
@@ -275,6 +376,18 @@ const DayCell = memo(({ rowKey, meta, status, width, canEdit, onToggle, onLongPr
   const locked = !ALLOW_FUTURE_DATES && meta.isFuture;
   const interactive = canEdit && !locked;
   const sMeta = status ? STATUS_META[status] : null;
+
+  // This only re-runs when the memoized component actually re-renders (i.e. when
+  // one of these specific values changes for THIS cell) — DayCell is already
+  // memo'd, so we're not fighting unnecessary renders here, just avoiding a
+  // fresh style array being built each time this one cell legitimately updates.
+  const cellStyle = useMemo(() => [
+    styles.dayCell,
+    { width },
+    meta.isSun && !meta.isFuture && styles.sunBg,
+    meta.isToday && styles.todayBg,
+    locked && styles.futureBg,
+  ], [width, meta.isSun, meta.isFuture, meta.isToday, locked]);
 
   let content: React.ReactNode;
   if (locked) {
@@ -309,14 +422,7 @@ const DayCell = memo(({ rowKey, meta, status, width, canEdit, onToggle, onLongPr
       delayLongPress={350}
       accessibilityRole="checkbox"
       accessibilityState={{ checked: status === 'Present', disabled: !interactive }}
-      style={({ pressed }) => [
-        styles.dayCell,
-        { width },
-        meta.isSun && !meta.isFuture && styles.sunBg,
-        meta.isToday && styles.todayBg,
-        locked && styles.futureBg,
-        pressed && interactive && { opacity: 0.55 },
-      ]}
+      style={({ pressed }) => [...cellStyle, pressed && interactive && { opacity: 0.55 }]}
     >
       {content}
     </Pressable>
@@ -324,14 +430,20 @@ const DayCell = memo(({ rowKey, meta, status, width, canEdit, onToggle, onLongPr
 });
 
 type RowProps = {
-  row: Row; att: RowAttendance; dayMetas: DayMeta[]; workingDays: number;
+  row: Row; store: AttendanceStore; dayMetas: DayMeta[]; workingDays: number;
   dayCellWidth: number; stickyColWidth: number; scrollX: Animated.Value; canEdit: boolean;
   onToggle: (rowKey: string, dateStr: string) => void;
   onLongPress: (rowKey: string, dateStr: string) => void;
 };
 
-const AttendanceRow = memo(({ row, att, dayMetas, workingDays, dayCellWidth, stickyColWidth, scrollX, canEdit, onToggle, onLongPress }: RowProps) => {
-  const stats = useMemo(() => computeStats(att, dayMetas, workingDays), [att, dayMetas, workingDays]);
+const AttendanceRow = memo(({ row, store, dayMetas, workingDays, dayCellWidth, stickyColWidth, scrollX, canEdit, onToggle, onLongPress }: RowProps) => {
+  if (__DEV__ && DEBUG_LOG_ROW_RENDERS) console.log(`[render] AttendanceRow ${row.rollNo}`);
+
+  // Subscribes ONLY to this row's key. A tap on another student never runs this
+  // hook's callback and never re-renders this component.
+  const att = useRowAttendance(store, row.key);
+  // Cached in the store, not recomputed on every mount — see createAttendanceStore.
+  const stats = store.getStats(row.key, dayMetas, workingDays);
   const pctColor = !stats.hasData ? C.textFaint : stats.pct >= 75 ? C.green : stats.pct >= 50 ? C.amber : C.primary;
 
   return (
@@ -390,6 +502,13 @@ const SkeletonRow = ({ index }: { index: number }) => (
   </View>
 );
 
+const FooterLoader = () => (
+  <View style={styles.footerLoader}>
+    <ActivityIndicator size="small" color={C.primary} />
+    <Text style={styles.footerLoaderText}>Loading more students…</Text>
+  </View>
+);
+
 /* ────────────────────────────── Screen ────────────────────────────── */
 
 export default function ClassAttendanceScreen() {
@@ -410,11 +529,19 @@ export default function ClassAttendanceScreen() {
   /* Data */
   const [classes, setClasses] = useState<any[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
-  const [attendance, setAttendance] = useState<AttendanceMap>({});
-  const attendanceRef = useRef<AttendanceMap>({}); // always in sync (updated synchronously with state)
+  const attendanceStoreRef = useRef<AttendanceStore>(createAttendanceStore());
+  const attendanceStore = attendanceStoreRef.current;
   const rowIndexRef = useRef<Map<string, Row>>(new Map());
   const gridOwnerRef = useRef<string>(''); // `${classId}|${month}` the current grid belongs to
   const requestIdRef = useRef(0);
+
+  /* Pagination */
+  const [page, setPage] = useState(1);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const fetchedPagesRef = useRef<Set<number>>(new Set());
+  const fetchingPageRef = useRef<number | null>(null);
 
   /* Selection */
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -493,21 +620,24 @@ export default function ClassAttendanceScreen() {
     return rows.filter(r => r.name.toLowerCase().includes(q) || r.rollNo.toLowerCase().includes(q));
   }, [rows, debouncedSearch]);
 
+
   const dailyFilteredRows = useMemo(() => {
     const q = dailySearch.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter(r => r.name.toLowerCase().includes(q) || r.rollNo.toLowerCase().includes(q));
   }, [rows, dailySearch]);
 
+  const attendanceSnapshot = useAttendanceSnapshot(attendanceStore);
+
   const scopedStats = useMemo(() => {
     const counts: Record<Status, number> = { Present: 0, Absent: 0, Leave: 0, 'Half-Day': 0, Holiday: 0 };
     if (!selectedStatDate) return counts;
     rows.forEach(r => {
-      const st = attendance[r.key]?.[selectedStatDate];
+      const st = attendanceSnapshot[r.key]?.[selectedStatDate];
       if (st) counts[st] += 1;
     });
     return counts;
-  }, [rows, attendance, selectedStatDate]);
+  }, [rows, attendanceSnapshot, selectedStatDate]);
   const totalMarkedInScope = scopedStats.Present + scopedStats.Absent + scopedStats.Leave + scopedStats['Half-Day'];
   const scopedPct = totalMarkedInScope > 0
     ? Math.round(((scopedStats.Present + scopedStats['Half-Day'] * 0.5) / totalMarkedInScope) * 100)
@@ -524,23 +654,7 @@ export default function ClassAttendanceScreen() {
     noticeTimerRef.current = setTimeout(() => setNotice(null), type === 'error' ? 4500 : 2600);
   }, []);
 
-  /* ────────── Grid state helpers ────────── */
-
-  const commitAttendance = useCallback((updater: (m: AttendanceMap) => AttendanceMap) => {
-    const next = updater(attendanceRef.current);
-    attendanceRef.current = next; // synchronous – never stale
-    setAttendance(next);
-  }, []);
-
-  const applyGrid = useCallback((ownerKey: string, nextRows: Row[], map: AttendanceMap) => {
-    gridOwnerRef.current = ownerKey;
-    rowIndexRef.current = new Map(nextRows.map(r => [r.key, r]));
-    attendanceRef.current = map;
-    setRows(nextRows);
-    setAttendance(map);
-  }, []);
-
-  /* ────────── Write-behind save queue ────────── */
+  /* ────────── Write-behind save queue (unchanged behavior; reads/writes the store) ────────── */
 
   const pendingRef = useRef<Map<string, PendingEdit>>(new Map());
   const inFlightRef = useRef<Map<string, PendingEdit>>(new Map());
@@ -595,7 +709,7 @@ export default function ClassAttendanceScreen() {
           lastErr = err;
           if (newer) newer.revertTo = e.revertTo;
           else if (e.ownerKey === gridOwnerRef.current) {
-            commitAttendance(m => applyCell(m, e.rowKey, e.dateStr, e.revertTo)); // revert ONLY this cell
+            attendanceStore.applyCell(e.rowKey, e.dateStr, e.revertTo); // revert ONLY this cell
           }
         }
       });
@@ -603,7 +717,7 @@ export default function ClassAttendanceScreen() {
 
     if (failed > 0) showNotice('error', `${failed} change${failed > 1 ? 's' : ''} could not be saved. ${errMsg(lastErr, 'Please try again.')}`);
     return failed;
-  }, [authHeaders, commitAttendance, showNotice]);
+  }, [authHeaders, attendanceStore, showNotice]);
 
   const flush = useCallback((): Promise<void> => {
     if (flushPromiseRef.current) return flushPromiseRef.current;
@@ -639,10 +753,10 @@ export default function ClassAttendanceScreen() {
     if (!row || !classId) return;
     if (!ALLOW_FUTURE_DATES && dateStr > today) return;
 
-    const prev = attendanceRef.current[rowKey]?.[dateStr] ?? null;
+    const prev = attendanceStore.getRow(rowKey)[dateStr] ?? null;
     if (prev === status) return;
 
-    commitAttendance(m => applyCell(m, rowKey, dateStr, status)); // instant UI
+    attendanceStore.applyCell(rowKey, dateStr, status); // instant UI — only this row re-renders
 
     const cellKey = `${classId}|${rowKey}|${dateStr}`;
     const existing = pendingRef.current.get(cellKey);
@@ -653,22 +767,22 @@ export default function ClassAttendanceScreen() {
     });
     setSaveState('saving');
     scheduleFlush();
-  }, [commitAttendance, scheduleFlush]);
+  }, [attendanceStore, scheduleFlush]);
 
   const toggleCell = useCallback((rowKey: string, dateStr: string) => {
-    const cur = attendanceRef.current[rowKey]?.[dateStr] ?? null;
+    const cur = attendanceStore.getRow(rowKey)[dateStr] ?? null;
     queueCellChange(rowKey, dateStr, cur === 'Present' ? 'Absent' : 'Present'); // same toggle rule as web
-  }, [queueCellChange]);
+  }, [attendanceStore, queueCellChange]);
 
   const openSingleEdit = useCallback((rowKey: string, dateStr: string) => {
     const row = rowIndexRef.current.get(rowKey);
     if (!row) return;
     if (!ALLOW_FUTURE_DATES && dateStr > ctxRef.current.today) return;
-    setSingleEditData({ row, dateStr, status: attendanceRef.current[rowKey]?.[dateStr] || 'Present' });
+    setSingleEditData({ row, dateStr, status: attendanceStore.getRow(rowKey)[dateStr] || 'Present' });
     setSingleEditModalVisible(true);
-  }, []);
+  }, [attendanceStore]);
 
-  /* ────────── Loading ────────── */
+  /* ────────── Pagination-aware loading ────────── */
 
   const overlayPending = useCallback((map: AttendanceMap, ownerKey: string): AttendanceMap => {
     const out = { ...map };
@@ -681,44 +795,98 @@ export default function ClassAttendanceScreen() {
     return out;
   }, []);
 
+  const applyFirstPage = useCallback((ownerKey: string, nextRows: Row[], map: AttendanceMap, meta: { hasNextPage: boolean; totalCount: number }) => {
+    gridOwnerRef.current = ownerKey;
+    rowIndexRef.current = new Map(nextRows.map(r => [r.key, r]));
+    fetchedPagesRef.current = new Set([1]);
+    setRows(nextRows);
+    attendanceStore.reset(map);
+    setPage(1);
+    setHasNextPage(meta.hasNextPage);
+    setTotalCount(meta.totalCount);
+  }, [attendanceStore]);
+
+  /** Reads cached pages 1..N sequentially for `ownerKey`, stopping at the first miss. */
+  const hydrateFromCache = useCallback(async (ownerKey: string): Promise<boolean> => {
+    try {
+      const metaRaw = await AsyncStorage.getItem(`${CACHE_PREFIX}meta|${ownerKey}`);
+      if (!metaRaw) return false;
+      const meta = JSON.parse(metaRaw);
+      const lastPage: number = meta.lastPage || 1;
+
+      const allRows: Row[] = [];
+      const allMap: AttendanceMap = {};
+      for (let p = 1; p <= lastPage; p++) {
+        const raw = await AsyncStorage.getItem(`${CACHE_PREFIX}${ownerKey}|page${p}`);
+        if (!raw) return false; // gap in cache — treat as a full cache miss, fetch from network
+        const cached = JSON.parse(raw);
+        if (!Array.isArray(cached.rows) || !cached.map) return false;
+        allRows.push(...cached.rows);
+        Object.assign(allMap, cached.map);
+        fetchedPagesRef.current.add(p);
+      }
+
+      gridOwnerRef.current = ownerKey;
+      rowIndexRef.current = new Map(allRows.map(r => [r.key, r]));
+      setRows(allRows);
+      attendanceStore.reset(allMap);
+      setPage(lastPage);
+      setHasNextPage(Boolean(meta.hasNextPage));
+      setTotalCount(meta.totalCount || allRows.length);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [attendanceStore]);
+
   const loadGrid = useCallback(async (classId: string, month: string, mode: 'initial' | 'refresh' | 'silent') => {
     if (!classId) return;
     const reqId = ++requestIdRef.current;
     const ownerKey = `${classId}|${month}`;
     let hydrated = false;
     setLoadError(null);
+    fetchedPagesRef.current = new Set();
 
     if (mode === 'initial') {
-      try {
-        const raw = await AsyncStorage.getItem(CACHE_PREFIX + ownerKey);
-        if (reqId !== requestIdRef.current) return;
-        if (raw) {
-          const cached = JSON.parse(raw);
-          if (Array.isArray(cached.rows) && cached.map) {
-            applyGrid(ownerKey, cached.rows, cached.map);
-            hydrated = true;
-          }
-        }
-      } catch { /* corrupt cache → fall through to network */ }
-      if (!hydrated) {
-        applyGrid(ownerKey, [], {});
-        setLoading(true);
-      } else {
+      hydrated = await hydrateFromCache(ownerKey);
+      if (reqId !== requestIdRef.current) return;
+      if (hydrated) {
         setLoading(false);
         setSyncing(true);
+      } else {
+        setRows([]);
+        attendanceStore.reset({});
+        setLoading(true);
       }
     } else if (mode === 'refresh') setRefreshing(true);
     else setSyncing(true);
 
     try {
-      const [stuRes, attRes] = await Promise.all([
-        withRetry(() => http.get(STUDENTS_URL, { ...authHeaders(), params: { classId, limit: 500 } })),
-        withRetry(() => http.get(CLASS_ATTENDANCE_URL, { ...authHeaders(), params: { classId, month } })),
-      ]);
-      if (reqId !== requestIdRef.current) return; // a newer request superseded this one
+      // Page 1 of students, then attendance scoped to exactly those students —
+      // see Section E for the endpoint contract this assumes.
+      const stuRes = await withRetry(() => http.get(STUDENTS_URL, { ...authHeaders(), params: { classId, page: 1, limit: PAGE_SIZE } }));
+      if (reqId !== requestIdRef.current) return;
 
-      const { rows: nextRows, map } = buildGrid(stuRes.data?.data || [], attRes.data?.data || []);
-      applyGrid(ownerKey, nextRows, overlayPending(map, ownerKey));
+      const students = stuRes.data?.data || [];
+      const studentIds = students.map((s: any) => String(s._id));
+      const respMeta = stuRes.data || {};
+
+      const attRes = studentIds.length
+        ? await withRetry(() => http.get(CLASS_ATTENDANCE_URL, { ...authHeaders(), params: { classId, month, studentIds: studentIds.join(',') } }))
+        : { data: { data: [] } };
+      if (reqId !== requestIdRef.current) return;
+
+      const { rows: nextRows, map } = buildGrid(students, attRes.data?.data || []);
+      const hasNext = typeof respMeta.hasNextPage === 'boolean'
+        ? respMeta.hasNextPage
+        : respMeta.totalPages
+          ? 1 < respMeta.totalPages
+          : students.length === PAGE_SIZE; // conservative fallback if backend omits paging meta
+
+      applyFirstPage(ownerKey, nextRows, overlayPending(map, ownerKey), {
+        hasNextPage: hasNext,
+        totalCount: respMeta.totalCount ?? students.length,
+      });
     } catch (e: any) {
       if (reqId !== requestIdRef.current) return;
       const msg = errMsg(e, 'Failed to load attendance.');
@@ -731,7 +899,71 @@ export default function ClassAttendanceScreen() {
         setSyncing(false);
       }
     }
-  }, [applyGrid, authHeaders, overlayPending, showNotice]);
+  }, [applyFirstPage, authHeaders, attendanceStore, hydrateFromCache, overlayPending, showNotice]);
+
+  /** Prefetches the next page a little before the user hits the bottom. Guarded
+   *  against duplicate/overlapping requests via `fetchingPageRef`. */
+  const loadNextPage = useCallback(async () => {
+    const { classId, month } = ctxRef.current;
+    if (!classId || !hasNextPage || fetchingPageRef.current !== null) return;
+    const nextPage = page + 1;
+    if (fetchedPagesRef.current.has(nextPage)) return;
+
+    fetchingPageRef.current = nextPage;
+    setLoadingMore(true);
+    try {
+      const stuRes = await withRetry(() => http.get(STUDENTS_URL, { ...authHeaders(), params: { classId, page: nextPage, limit: PAGE_SIZE } }));
+      const students = stuRes.data?.data || [];
+      const respMeta = stuRes.data || {};
+      const studentIds = students.map((s: any) => String(s._id));
+
+      const attRes = studentIds.length
+        ? await withRetry(() => http.get(CLASS_ATTENDANCE_URL, { ...authHeaders(), params: { classId, month, studentIds: studentIds.join(',') } }))
+        : { data: { data: [] } };
+
+      const { rows: newRows, map: newMap } = buildGrid(students, attRes.data?.data || []);
+      fetchedPagesRef.current.add(nextPage);
+
+      // Append-only, de-duplicated by student key; existing rows are never replaced.
+      setRows(prev => {
+        const seen = new Set(prev.map(r => r.key));
+        const merged = prev.slice();
+        newRows.forEach(r => {
+          if (!seen.has(r.key)) {
+            merged.push(r);
+            rowIndexRef.current.set(r.key, r);
+            seen.add(r.key);
+          }
+        });
+        return merged;
+      });
+      attendanceStore.mergeRows(overlayPending(newMap, gridOwnerRef.current));
+
+      const hasNext = typeof respMeta.hasNextPage === 'boolean'
+        ? respMeta.hasNextPage
+        : respMeta.totalPages
+          ? nextPage < respMeta.totalPages
+          : students.length === PAGE_SIZE;
+
+      setPage(nextPage);
+      setHasNextPage(hasNext);
+      if (respMeta.totalCount != null) setTotalCount(respMeta.totalCount);
+
+      AsyncStorage.setItem(
+        `${CACHE_PREFIX}${gridOwnerRef.current}|page${nextPage}`,
+        JSON.stringify({ rows: newRows, map: newMap, ts: Date.now() })
+      ).catch(() => {});
+      AsyncStorage.setItem(
+        `${CACHE_PREFIX}meta|${gridOwnerRef.current}`,
+        JSON.stringify({ lastPage: nextPage, hasNextPage: hasNext, totalCount: respMeta.totalCount ?? totalCount, ts: Date.now() })
+      ).catch(() => {});
+    } catch (e: any) {
+      showNotice('error', errMsg(e, 'Could not load more students.'));
+    } finally {
+      fetchingPageRef.current = null;
+      setLoadingMore(false);
+    }
+  }, [attendanceStore, authHeaders, hasNextPage, overlayPending, page, showNotice, totalCount]);
 
   const bootstrap = useCallback(async () => {
     setLoading(true);
@@ -748,7 +980,6 @@ export default function ClassAttendanceScreen() {
       const superAdmin = superRaw === 'true';
       setIsSuperAdmin(superAdmin);
 
-      // Teacher scoping — same rule as the web page
       try {
         const user = userRaw ? JSON.parse(userRaw) : null;
         const assigned = user?.assignedClasses || user?.staff?.assignedClasses || [];
@@ -772,31 +1003,35 @@ export default function ClassAttendanceScreen() {
 
   useEffect(() => { bootstrap(); }, [bootstrap]);
 
-  // Choose a valid class once classes / scoping are known
   useEffect(() => {
     if (availableClasses.length === 0) return;
     if (!availableClasses.some(c => c._id === selectedClassId)) setSelectedClassId(availableClasses[0]._id);
   }, [availableClasses, selectedClassId]);
 
-  // Single source of truth for loading: class or month changes
   useEffect(() => {
     if (selectedClassId) loadGrid(selectedClassId, selectedMonth, 'initial');
   }, [selectedClassId, selectedMonth, loadGrid]);
 
-  // Persist derived grid to cache (debounced, only when nothing is unsaved)
+  // Persist derived grid to cache (debounced, page-scoped, only when nothing unsaved).
   useEffect(() => {
     if (loading || !gridOwnerRef.current) return;
     const t = setTimeout(() => {
       if (pendingRef.current.size > 0 || inFlightRef.current.size > 0) return;
-      AsyncStorage.setItem(
-        CACHE_PREFIX + gridOwnerRef.current,
-        JSON.stringify({ rows, map: attendance, ts: Date.now() })
-      ).catch(() => { });
+      const ownerKey = gridOwnerRef.current;
+      const snapshot = attendanceStore.getAll();
+      for (let p = 1; p <= page; p++) {
+        const slice = rows.slice((p - 1) * PAGE_SIZE, p * PAGE_SIZE);
+        if (slice.length === 0) continue;
+        const map: AttendanceMap = {};
+        slice.forEach(r => { map[r.key] = snapshot[r.key] || {}; });
+        AsyncStorage.setItem(`${CACHE_PREFIX}${ownerKey}|page${p}`, JSON.stringify({ rows: slice, map, ts: Date.now() })).catch(() => {});
+      }
+      AsyncStorage.setItem(`${CACHE_PREFIX}meta|${ownerKey}`, JSON.stringify({ lastPage: page, hasNextPage, totalCount, ts: Date.now() })).catch(() => {});
     }, 1000);
     return () => clearTimeout(t);
-  }, [rows, attendance, loading]);
+  }, [rows, page, hasNextPage, totalCount, loading, attendanceStore, attendanceSnapshot]);
 
-  // Foreground → silent refresh; background → flush any unsaved taps
+  // Foreground → silent refresh (page 1 only, cheap); background → flush unsaved taps.
   useEffect(() => {
     const sub = AppState.addEventListener('change', state => {
       if (state === 'active') {
@@ -821,7 +1056,7 @@ export default function ClassAttendanceScreen() {
   const selectClass = (id: string) => {
     setShowClassSheet(false);
     if (id === selectedClassId) return;
-    flush(); // push unsaved taps of the previous class immediately
+    flush();
     setSelectedStatDate(null);
     setSelectedClassId(id);
   };
@@ -837,15 +1072,16 @@ export default function ClassAttendanceScreen() {
   const toggleFab = () => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setFabOpen(o => !o); };
   const closeFab = () => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setFabOpen(false); };
 
-  /* Daily attendance (mirrors web: defaults to Present, keeps existing values) */
+  /* Daily attendance — reads/writes the store's snapshot directly (event-driven, no subscription needed) */
   const buildDraft = useCallback((dateStr: string) => {
+    const snapshot = attendanceStore.getAll();
     const draft: Record<string, Status> = {};
     rows.forEach(r => {
-      const ex = attendanceRef.current[r.key]?.[dateStr];
+      const ex = snapshot[r.key]?.[dateStr];
       draft[r.key] = ex || 'Present';
     });
     return draft;
-  }, [rows]);
+  }, [rows, attendanceStore]);
 
   const openDailyModal = () => {
     const d = new Date();
@@ -888,11 +1124,11 @@ export default function ClassAttendanceScreen() {
       );
 
       if (dateStr.startsWith(selectedMonth)) {
-        commitAttendance(m => {
-          const next = { ...m };
-          rows.forEach(r => { next[r.key] = { ...(next[r.key] || {}), [dateStr]: dailyDraft[r.key] || 'Present' }; });
-          return next;
+        const entries: AttendanceMap = {};
+        rows.forEach(r => {
+          entries[r.key] = { ...attendanceStore.getRow(r.key), [dateStr]: dailyDraft[r.key] || 'Present' };
         });
+        attendanceStore.setRows(entries);
       }
       setDailyModalVisible(false);
       showNotice('success', `Attendance for ${formatPretty(dateStr)} saved.`);
@@ -946,6 +1182,13 @@ export default function ClassAttendanceScreen() {
     }
   };
 
+  const ensureAllPagesLoaded = useCallback(async () => {
+    while (hasNextPage && fetchingPageRef.current === null) {
+      // eslint-disable-next-line no-await-in-loop
+      await loadNextPage();
+    }
+  }, [hasNextPage, loadNextPage]);
+
   const downloadFormattedMonthlyExcel = async () => {
     if (!selectedClass) { Alert.alert('No class selected', 'Please select a class first to export Excel.'); return; }
     if (rows.length === 0) { Alert.alert('Nothing to export', 'There are no students in this class.'); return; }
@@ -953,6 +1196,8 @@ export default function ClassAttendanceScreen() {
     setExporting(true);
     try {
       await flushNow();
+      await ensureAllPagesLoaded();
+      const snapshot = attendanceStore.getAll();
       const header = [
         'S.No', 'Roll No', 'Student Name', 'Photo URL', ...dayHeaders(),
         'Present (P)', 'Absent (A)', 'Leave (L)', 'Holiday (H)', 'Attendance %',
@@ -960,7 +1205,7 @@ export default function ClassAttendanceScreen() {
       const aoa: any[][] = [header];
 
       rows.forEach((r, idx) => {
-        const att = attendanceRef.current[r.key] || {};
+        const att = snapshot[r.key] || {};
         const cells = dayMetas.map(m => {
           const st = att[m.dateStr];
           if (st === 'Present') return 'P';
@@ -1017,7 +1262,6 @@ export default function ClassAttendanceScreen() {
       const workbook = XLSX.read(base64, { type: 'base64' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
 
-      // Structure validation (parity with the web pre-check)
       const headerRow = ((XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false }) as any[][])[0] || [])
         .map(h => String(h ?? '').trim().toLowerCase());
       if (!headerRow.some(h => NAME_HEADERS.includes(h)) && !headerRow.some(h => ROLL_HEADERS.includes(h))) {
@@ -1052,7 +1296,6 @@ export default function ClassAttendanceScreen() {
         return;
       }
 
-      // Batched import with progress (parity with the web batch processor)
       let success = 0, failed = 0, lastError: any = null;
       setUploadProgress({ done: 0, total: matrixData.length, failed: 0 });
       for (let i = 0; i < matrixData.length; i += UPLOAD_BATCH_SIZE) {
@@ -1090,10 +1333,13 @@ export default function ClassAttendanceScreen() {
     [scrollX]
   );
 
+  // No `attendance` in this dependency list anymore — a cell tap can never make
+  // this (or extraData, which is gone) change identity, so FlatList never
+  // re-evaluates other rows because of it.
   const renderRow = useCallback(({ item }: { item: Row }) => (
     <AttendanceRow
       row={item}
-      att={attendance[item.key] || EMPTY_ROW_ATT}
+      store={attendanceStore}
       dayMetas={dayMetas}
       workingDays={workingDays}
       dayCellWidth={dayCellWidth}
@@ -1103,7 +1349,7 @@ export default function ClassAttendanceScreen() {
       onToggle={toggleCell}
       onLongPress={openSingleEdit}
     />
-  ), [attendance, dayMetas, workingDays, dayCellWidth, stickyColWidth, scrollX, canEditCells, toggleCell, openSingleEdit]);
+  ), [attendanceStore, dayMetas, workingDays, dayCellWidth, stickyColWidth, scrollX, canEditCells, toggleCell, openSingleEdit]);
 
   const keyExtractor = useCallback((r: Row) => r.key, []);
   const getItemLayout = useCallback((_: any, index: number) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index }), []);
@@ -1111,6 +1357,10 @@ export default function ClassAttendanceScreen() {
   const onRefresh = useCallback(() => {
     if (selectedClassId) loadGrid(selectedClassId, selectedMonth, 'refresh');
   }, [selectedClassId, selectedMonth, loadGrid]);
+
+  const onEndReached = useCallback(() => { loadNextPage(); }, [loadNextPage]);
+
+  const ListFooter = useMemo(() => (loadingMore ? <FooterLoader /> : null), [loadingMore]);
 
   const currentMonth = todayStr.slice(0, 7);
   const canGoNext = ALLOW_FUTURE_DATES || selectedMonth < currentMonth;
@@ -1141,7 +1391,7 @@ export default function ClassAttendanceScreen() {
         {saveState === 'idle' && syncing && <ActivityIndicator size="small" color={C.primary} />}
         <View style={styles.headerCountBadge}>
           <Feather name="users" size={12} color={C.primary} />
-          <Text style={styles.headerCountText}>{rows.length}</Text>
+          <Text style={styles.headerCountText}>{totalCount > rows.length ? `${rows.length}/${totalCount}` : rows.length}</Text>
         </View>
         <TouchableOpacity style={styles.headerInfoBtn} onPress={() => setShowLegendModal(true)} activeOpacity={0.7}>
           <Feather name="info" size={16} color={C.textMuted} />
@@ -1300,20 +1550,23 @@ export default function ClassAttendanceScreen() {
                 ))}
               </View>
 
-              {/* Single virtualized list → rows can never desync from the frozen column */}
               <FlatList
                 data={filteredRows}
                 keyExtractor={keyExtractor}
                 renderItem={renderRow}
-                extraData={attendance}
                 getItemLayout={getItemLayout}
                 style={{ width: totalWidth, flex: 1 }}
                 contentContainerStyle={{ paddingBottom: 110 + insets.bottom }}
-                initialNumToRender={14}
-                maxToRenderPerBatch={12}
-                windowSize={9}
-                updateCellsBatchingPeriod={40}
-                removeClippedSubviews={false}
+               
+                initialNumToRender={8}
+                maxToRenderPerBatch={7}
+                windowSize={5}
+                updateCellsBatchingPeriod={16}
+          
+                removeClippedSubviews={Platform.OS === 'android'}
+                onEndReached={onEndReached}
+                onEndReachedThreshold={0.4}
+                ListFooterComponent={ListFooter}
                 nestedScrollEnabled
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator
@@ -1481,7 +1734,7 @@ export default function ClassAttendanceScreen() {
                       if (e?.type === 'dismissed' || !d) return;
                       const clamped = !ALLOW_FUTURE_DATES && formatToYMD(d) > todayStr ? new Date() : d;
                       setDailyDate(clamped);
-                      setDailyDraft(buildDraft(formatToYMD(clamped))); // reload existing statuses for that date
+                      setDailyDraft(buildDraft(formatToYMD(clamped)));
                     }}
                   />
                 )}
@@ -1691,6 +1944,9 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: '800', color: C.text, marginTop: 12 },
   emptySubtitle: { fontSize: 12.5, color: C.textMuted, marginTop: 4, textAlign: 'center', lineHeight: 18 },
 
+  footerLoader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14 },
+  footerLoaderText: { fontSize: 11.5, color: C.textMuted, fontWeight: '600' },
+
   /* Matrix */
   matrixContainer: { flex: 1, backgroundColor: C.surface },
   headerRow: { flexDirection: 'row', height: HEADER_HEIGHT, borderBottomWidth: 1, borderColor: C.border, backgroundColor: C.surfaceSoft },
@@ -1717,7 +1973,7 @@ const styles = StyleSheet.create({
   sunBg: { backgroundColor: C.slateSoft },
   todayBg: { backgroundColor: C.todayTint },
   futureBg: { backgroundColor: C.futureBg },
-  cellBoxActive: { width: 24, height: 24, borderRadius: 7, backgroundColor: C.green, justifyContent: 'center', alignItems: 'center', ...SHADOW.soft },
+  cellBoxActive: { width: 24, height: 24, borderRadius: 7, backgroundColor: C.green, justifyContent: 'center', alignItems: 'center' },
   cellBoxEmpty: { width: 24, height: 24, borderRadius: 7, borderWidth: 1.6, borderColor: C.border, backgroundColor: C.surfaceSoft },
   cellBoxAbsent: { borderColor: C.primary + '55', backgroundColor: C.primarySoft },
   cellBoxSun: { width: 26, height: 24, borderRadius: 7, borderWidth: 1.4, borderStyle: 'dashed', borderColor: '#FCA5A5', backgroundColor: 'rgba(239,68,68,0.05)', justifyContent: 'center', alignItems: 'center' },

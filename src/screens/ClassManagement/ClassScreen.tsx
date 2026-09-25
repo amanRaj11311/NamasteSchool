@@ -703,7 +703,7 @@ export default function ClassesScreen() {
               <TouchableOpacity
                 style={[styles.gridBtn, styles.gridBtnSuccess]}
                 activeOpacity={0.9}
-                onPress={() => navigation.navigate('ClassAttendance', { classId })}
+                onPress={() => navigation.navigate('Class Attendance', { classId })}
               >
                 <Feather name="clipboard" size={13} color="#fff" />
                 <Text style={styles.gridBtnTextLight} numberOfLines={1}>Attendance</Text>
@@ -714,7 +714,7 @@ export default function ClassesScreen() {
               <TouchableOpacity
                 style={styles.resultsIconBtn}
                 activeOpacity={0.9}
-                onPress={() => navigation.navigate('ClassResults', { classId })}
+                onPress={() => navigation.navigate('Class Results', { classId })}
               >
                 <Feather name="bar-chart-2" size={15} color={COLORS.primary} />
               </TouchableOpacity>
@@ -722,7 +722,7 @@ export default function ClassesScreen() {
               <TouchableOpacity
                 style={[styles.gridBtn, styles.gridBtnOutline, { flex: 1 }]}
                 activeOpacity={0.9}
-                onPress={() => navigation.navigate('ClassTimetable', { classId })}
+                onPress={() => navigation.navigate('Class Timetable', { classId })}
               >
                 <Feather name="calendar" size={13} color={COLORS.secondary} />
                 <Text style={styles.gridBtnTextDark} numberOfLines={1}>Class Timetable</Text>
